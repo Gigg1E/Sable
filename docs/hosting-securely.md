@@ -115,6 +115,16 @@ Both apps can be installed to the home screen and receive push notifications, be
 2. Go to **Settings → Security** and turn on **two-factor authentication**. Scan the QR code with an authenticator app and **save the recovery codes** somewhere safe.
 3. In **Settings → Webhooks**, the webhook URLs already start with `https://front.example.com/<your-slug>/hooks/…`. (This comes from `SABLE_PUBLIC_URL` in the compose file.)
 
+### Signing in to accounts (Google, Notion, your own Shop app…)
+
+The "return address" (redirect URI) that Google and others send you back to after sign-in is a **browser redirect**. Their servers never contact it, so it does **not** go on the public front. It's the private address you open Sable at, for example:
+
+```
+https://<server>.<tailnet>.ts.net/api/mcp/oauth/callback
+```
+
+Settings → Connectors shows the exact one. Paste it into your Google OAuth client's **Authorized redirect URIs**, and always sign in from that same address. Google only accepts `https` with a real domain name (Tailscale's `ts.net` works) or `http://localhost`. Plain IPs such as `http://192.168.1.20:8787` or `100.x.x.x` are refused. Each person registers their own address (person B's ends in `:8443`).
+
 ---
 
 ## More than one person, one subdomain

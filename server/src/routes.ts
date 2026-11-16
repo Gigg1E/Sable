@@ -63,6 +63,11 @@ function sameOriginOnly(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+/** The address the user's browser reached this app at (honours X-Forwarded-* from a trusted proxy such as Tailscale). */
+function appOrigin(req: Request) {
+  return `${req.protocol}://${req.host}`;
+}
+
 export function apiRouter() {
   const r = express.Router();
   r.use(sameOriginOnly);
@@ -162,8 +167,9 @@ export function apiRouter() {
     '/bootstrap',
     h((req) => {
       // Remember how the user reaches this server, to build webhook and notification links.
-      const origin = `${req.protocol}://${req.get('host')}`;
+      const origin = appOrigin(req);
       if (req.get('host') && !/^(localhost|127\.|\[::1\])/.test(req.get('host')!)) kvSet('lastOrigin', origin);
+      kvSet('appOrigin', origin);
       return {
       settings: publicSettings(),
       approvals: pendingApprovals(),
@@ -618,10 +624,10 @@ export function apiRouter() {
   );
   r.post(
     '/shop/link',
-    h(async () => {
+    h(async (req) => {
       try {
         // Own app client → redirect flow; otherwise Shop's device flow (open a link, approve a code).
-        if (getSettings().shopping.clientId?.trim()) return { ok: true, url: beginAppLink() };
+        if (getSettings().shopping.clientId?.trim()) return { ok: true, url: beginAppLink(appOrigin(req)) };
         return { ok: true, pending: await beginDeviceLink() };
       } catch (err) {
         return { ok: false, error: errorMessage(err) };
@@ -642,12 +648,12 @@ export function apiRouter() {
 
   r.get('/mcp', h(() => mcpStatus()));
   r.post('/mcp/reload', h(async () => (await reloadMcp(), mcpStatus())));
-  r.get('/mcp/oauth/info', h(() => ({ callbackUrl: oauthCallbackUrl() })));
+  r.get('/mcp/oauth/info', h((req) => ({ callbackUrl: oauthCallbackUrl(appOrigin(req)) })));
   r.post(
     '/mcp/:id/connect',
     h(async (req) => {
       try {
-        const url = await beginOAuth(param(req, 'id'));
+        const url = await beginOAuth(param(req, 'id'), oauthCallbackUrl(appOrigin(req)));
         return { ok: true, authUrl: url ?? null };
       } catch (err) {
         return { ok: false, error: errorMessage(err) };

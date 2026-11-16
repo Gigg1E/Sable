@@ -151,7 +151,7 @@ export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }
                 <p className="text-[12.5px] leading-relaxed text-fg-2">
                   By default Sable links with Shop's public client, which Shop provides for a shopper's own agent. To use your own instead, create a Shop app in Shopify's Dev Dashboard, make sure it's enabled for the{' '}
                   <code className="font-mono">personal_agent</code> scope and the <code className="font-mono">https://mcp.shop.com</code> resource, and add the redirect URI{' '}
-                  <code className="break-all font-mono">{(draft.publicUrl || location.origin) + '/api/shop/oauth/callback'}</code>. This needs a public HTTPS Public URL.
+                  <code className="break-all font-mono">{location.origin + '/api/shop/oauth/callback'}</code>. Open Sable over HTTPS (for example your Tailscale address) when you link.
                 </p>
                 <div className={cx('grid gap-3 sm:grid-cols-2')}>
                   <Field label="Client ID">

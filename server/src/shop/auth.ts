@@ -43,7 +43,7 @@ function ownClient() {
   return s.clientId?.trim() ? { id: s.clientId.trim(), secret: s.clientSecret?.trim() || undefined } : null;
 }
 
-export const shopCallbackUrl = () => `${publicBase()}/api/shop/oauth/callback`;
+export const shopCallbackUrl = (origin?: string) => `${(origin || kvGet<string>('appOrigin') || publicBase()).replace(/\/+$/, '')}/api/shop/oauth/callback`;
 
 async function tokenRequest(params: Record<string, string>, client?: { id: string; secret?: string }) {
   const body = new URLSearchParams({ ...params, client_id: client?.id ?? PUBLIC_CLIENT });
@@ -151,13 +151,13 @@ export function resumeShopLink() {
 
 // ───────────────────────── Own app client (optional) ─────────────────────────
 
-export function beginAppLink(): string {
+export function beginAppLink(origin: string): string {
   const client = ownClient();
   if (!client) throw new Error('No Shop app client configured.');
-  if (!/^https:\/\//.test(publicBase())) throw new Error('Your own Shop app client needs Sable on a public HTTPS address for the redirect. Set Settings → Network → Public URL.');
+  if (!/^https:\/\//.test(origin) && !/^http:\/\/localhost[:/]/.test(origin + '/')) throw new Error('Your own Shop app client needs Sable opened over HTTPS (for example your Tailscale address) for the sign-in redirect.');
   const verifier = crypto.randomBytes(48).toString('base64url');
   const state = crypto.randomBytes(24).toString('base64url');
-  const redirectUri = shopCallbackUrl();
+  const redirectUri = shopCallbackUrl(origin);
   save({ pkce: { state, verifier, redirectUri, startedAt: Date.now() }, error: undefined });
   const u = new URL(`${AS}/oauth/authorize`);
   u.search = new URLSearchParams({

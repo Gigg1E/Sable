@@ -102,7 +102,9 @@ function SetupSheet({ preset, onClose, onAdd }: { preset: ConnectorPreset | null
                 <Input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} />
               </Field>
             </div>
-            {callback.startsWith('http://localhost') && <p className="text-xs text-accent">The redirect URI uses localhost. Set your Public URL in Settings → Network first if you open Sable from another address.</p>}
+            <p className="text-xs text-fg-3">
+              This is the address you have Sable open at right now, so do the sign-in from the same address. It doesn't need to be public: Google only sends your browser back to it. Google requires <b>https</b> with a real domain name (a Tailscale <code>…ts.net</code> address works) or <code>http://localhost</code>; plain IP addresses are refused.
+            </p>
           </>
         )}
         {preset.setup === 'token' && (

@@ -3,7 +3,6 @@ import type { OAuthClientProvider } from '@modelcontextprotocol/sdk/client/auth.
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from '@modelcontextprotocol/sdk/shared/auth.js';
 import { PORT } from '../../config.js';
 import { kvDel, kvGet, kvSet } from '../../db.js';
-import { publicBase } from '../../push.js';
 import type { McpServerConfig } from '../../settings.js';
 
 /**
@@ -23,8 +22,20 @@ interface Stored {
 
 const key = (id: string) => `mcp_oauth:${id}`;
 
-export function oauthCallbackUrl() {
-  return `${publicBase() || `http://localhost:${PORT}`}/api/mcp/oauth/callback`;
+/**
+ * The sign-in return address. It is a browser redirect, so it must be the address the user opens
+ * Sable at (e.g. the private Tailscale URL), never the public webhook front: providers never call it.
+ */
+export function oauthCallbackUrl(origin?: string) {
+  return `${(origin || kvGet<string>('appOrigin') || `http://localhost:${PORT}`).replace(/\/+$/, '')}/api/mcp/oauth/callback`;
+}
+
+/** Remember the callback this sign-in uses, so the code exchange sends the identical redirect_uri. */
+export function prepareRedirect(cfg: McpServerConfig, callbackUrl: string) {
+  const stored = kvGet<Stored>(key(cfg.id)) ?? {};
+  // A dynamically registered client is bound to its redirect URI: register again if the address changed.
+  const client = !cfg.oauth?.clientId && stored.redirectUrl && stored.redirectUrl !== callbackUrl ? undefined : stored.client;
+  kvSet(key(cfg.id), { ...stored, client, redirectUrl: callbackUrl });
 }
 
 export function serverForState(state: string): string | undefined {
@@ -44,7 +55,11 @@ export function forgetOAuth(id: string) {
 }
 
 export class SableOAuthProvider implements OAuthClientProvider {
-  constructor(private cfg: McpServerConfig) {}
+  /** exchanging: finishing a sign-in. A rejected client then fails with a clear error instead of being wiped and retried. */
+  constructor(
+    private cfg: McpServerConfig,
+    private opts: { exchanging?: boolean } = {},
+  ) {}
 
   private load(): Stored {
     return kvGet<Stored>(key(this.cfg.id)) ?? {};
@@ -111,6 +126,18 @@ export class SableOAuthProvider implements OAuthClientProvider {
   }
 
   invalidateCredentials(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery') {
+    if (scope === 'all' && this.opts.exchanging) {
+      // The SDK calls this when the provider answers invalid_client / unauthorized_client, then retries,
+      // which would only surface a confusing "no verifier" error. Report the real problem instead.
+      const redirect = String(this.redirectUrl);
+      if (!this.cfg.oauth?.clientId) this.save({ client: undefined });
+      this.save({ verifier: undefined });
+      throw new Error(
+        this.cfg.oauth?.clientId
+          ? `The provider rejected the OAuth client. Check the Client ID and secret, that the client type is "Web application", and that its authorized redirect URI is exactly ${redirect}`
+          : `The provider rejected Sable's registration. Press Connect again to register afresh (redirect URI ${redirect}).`,
+      );
+    }
     if (scope === 'all') return forgetOAuth(this.cfg.id);
     if (scope === 'client') this.save({ client: undefined, redirectUrl: undefined });
     if (scope === 'tokens') this.save({ tokens: undefined });

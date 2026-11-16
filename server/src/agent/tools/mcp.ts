@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { auth, UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
-import { oauthInfo, SableOAuthProvider } from './mcpAuth.js';
+import { oauthInfo, prepareRedirect, SableOAuthProvider } from './mcpAuth.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { WORKSPACE_DIR } from '../../config.js';
 import { emit } from '../../events.js';
@@ -71,6 +71,12 @@ async function connect(cfg: McpServerConfig) {
     }
     throw err;
   }
+  if (cfg.auth === 'oauth' && !oauthInfo(cfg.id).connected) {
+    // Some servers (e.g. Google's) list tools without a token but reject every call. Not connected yet.
+    await client.close().catch(() => {});
+    status.set(cfg.id, { id: cfg.id, name: cfg.name, state: 'needs_auth', tools: [], authUrl: oauthInfo(cfg.id).authUrl, oauth: true });
+    return;
+  }
   clients.set(cfg.id, client);
 
   const { tools } = await client.listTools();
@@ -90,7 +96,19 @@ async function connect(cfg: McpServerConfig) {
       defaultPolicy: 'ask',
       summarize: (a) => `${cfg.name} → ${t.name}(${truncate(JSON.stringify(a), 120)})`,
       async run(args, ctx) {
-        const res = await client.callTool({ name: t.name, arguments: args }, undefined, { signal: ctx.signal, timeout: 120_000 });
+        let res;
+        try {
+          res = await client.callTool({ name: t.name, arguments: args }, undefined, { signal: ctx.signal, timeout: 120_000 });
+        } catch (err) {
+          if (err instanceof UnauthorizedError || /unauthori[sz]ed|\b401\b/i.test(errorMessage(err))) {
+            status.set(cfg.id, { id: cfg.id, name: cfg.name, state: 'needs_auth', tools: names, authUrl: oauthInfo(cfg.id).authUrl, oauth: cfg.auth === 'oauth' });
+            emit({ type: 'mcp.changed' });
+            throw new Error(
+              `${cfg.name} is not signed in (or its sign-in expired). Tell the user to open Settings → Connectors and press Connect on ${cfg.name}. Don't retry until they have.`,
+            );
+          }
+          throw err;
+        }
         const parts = ((res.content ?? []) as { type: string; text?: string; mimeType?: string }[]).map((c) =>
           c.type === 'text' ? (c.text ?? '') : `[${c.type}${c.mimeType ? ' ' + c.mimeType : ''} content omitted]`,
         );
@@ -127,15 +145,16 @@ export async function reloadMcp() {
 export async function completeOAuth(serverId: string, code: string) {
   const cfg = getSettings().mcpServers.find((s) => s.id === serverId);
   if (!cfg?.url) throw new Error('Unknown connector');
-  const result = await auth(new SableOAuthProvider(cfg), { serverUrl: cfg.url, authorizationCode: code, scope: cfg.oauth?.scope });
+  const result = await auth(new SableOAuthProvider(cfg, { exchanging: true }), { serverUrl: cfg.url, authorizationCode: code, scope: cfg.oauth?.scope });
   if (result !== 'AUTHORIZED') throw new Error('The provider did not authorize the connection');
   await reloadMcp();
 }
 
 /** Start (or restart) sign-in for one connector and return the URL to open. */
-export async function beginOAuth(serverId: string): Promise<string | undefined> {
+export async function beginOAuth(serverId: string, callbackUrl: string): Promise<string | undefined> {
   const cfg = getSettings().mcpServers.find((s) => s.id === serverId);
   if (!cfg?.url) throw new Error('Unknown connector');
+  prepareRedirect(cfg, callbackUrl);
   const provider = new SableOAuthProvider(cfg);
   provider.invalidateCredentials('tokens');
   const result = await auth(provider, { serverUrl: cfg.url, scope: cfg.oauth?.scope });
