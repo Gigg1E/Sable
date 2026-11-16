@@ -1,0 +1,182 @@
+export type Policy = 'auto' | 'ask' | 'deny';
+export type Effort = '' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export interface ProviderConfig {
+  id: string;
+  type: 'ollama' | 'llamacpp' | 'openai' | 'openai-compatible' | 'anthropic';
+  name: string;
+  baseUrl?: string;
+  apiKey?: string;
+}
+export interface AgentProfile {
+  id: string;
+  name: string;
+  description: string;
+  providerId: string;
+  model: string;
+  systemPrompt?: string;
+  tools: string[];
+  enabled: boolean;
+  maxSteps?: number;
+  effort?: Effort;
+}
+export interface McpServerConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  transport: 'stdio' | 'http';
+  command?: string;
+  args?: string[];
+  env?: Record<string, string>;
+  url?: string;
+  headers?: Record<string, string>;
+}
+export interface Settings {
+  persona: { name: string; style: string; about: string };
+  providers: ProviderConfig[];
+  main: { providerId: string; model: string; maxSteps: number; contextMessages: number; effort: Effort };
+  subagents: AgentProfile[];
+  policies: Record<string, Policy>;
+  allowedDomains: string[];
+  blockedDomains: string[];
+  web: { searxngUrl: string };
+  scripts: { enabled: boolean; timeoutSec: number; python: string; node: string; bash: string };
+  mcpServers: McpServerConfig[];
+  anthropic: { serverFallbacks: boolean };
+}
+
+export interface ToolCall {
+  id: string;
+  name: string;
+  args: Record<string, unknown>;
+  summary?: string;
+}
+export interface Message {
+  id: string;
+  conversation_id: string;
+  run_id: string | null;
+  role: 'user' | 'assistant' | 'tool' | 'error';
+  agent: string | null;
+  content: string;
+  thinking: string | null;
+  tool_calls: ToolCall[] | null;
+  tool_call_id: string | null;
+  tool_name: string | null;
+  is_error: boolean;
+  created_at: number;
+}
+export interface Conversation {
+  id: string;
+  title: string;
+  kind: string;
+  created_at: number;
+  updated_at: number;
+  preview?: string | null;
+  running?: boolean;
+}
+export interface Approval {
+  id: string;
+  run_id: string;
+  conversation_id: string;
+  call_id: string | null;
+  agent: string;
+  tool: string;
+  toolLabel?: string;
+  args: Record<string, unknown>;
+  summary: string;
+  risk: 'low' | 'medium' | 'high';
+  scope: { kind: 'domain'; value: string } | null;
+  status: string;
+  created_at: number;
+}
+export interface ToolState {
+  callId: string;
+  parentCallId?: string;
+  conversationId: string;
+  name: string;
+  label: string;
+  summary: string;
+  agent: string;
+  args?: Record<string, unknown>;
+  status: 'running' | 'waiting' | 'ok' | 'error' | 'denied' | 'blocked';
+  progress: string;
+  preview?: string;
+  started: number;
+}
+export interface GoalStep {
+  text: string;
+  status: 'pending' | 'in_progress' | 'done' | 'skipped';
+  note?: string;
+}
+export interface Goal {
+  id: string;
+  title: string;
+  description: string | null;
+  status: 'active' | 'done' | 'blocked' | 'cancelled';
+  steps: GoalStep[];
+  conversation_id: string | null;
+  created_at: number;
+  updated_at: number;
+}
+export interface SpaceSummary {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  pinned: boolean;
+  updated_at: number;
+}
+export interface Space extends SpaceSummary {
+  html: string;
+  data: Record<string, unknown>;
+}
+export interface Memory {
+  id: string;
+  content: string;
+  source: string | null;
+  created_at: number;
+  updated_at: number;
+}
+export interface ActivityItem {
+  id: string;
+  ts: number;
+  conversation_id: string | null;
+  run_id: string | null;
+  agent: string;
+  tool: string;
+  status: string;
+  summary: string;
+  input: string;
+  output: string;
+  duration_ms: number | null;
+}
+export interface Schedule {
+  id: string;
+  title: string;
+  prompt: string;
+  kind: 'once' | 'interval' | 'daily' | 'weekly';
+  spec: { at?: string; every_minutes?: number; time?: string; weekday?: number };
+  next_run: number | null;
+  last_run: number | null;
+  enabled: boolean;
+  conversation_id: string | null;
+}
+export interface Notification {
+  id: string;
+  title: string;
+  body: string;
+  link: string;
+  kind: string;
+  read: number;
+  created_at: number;
+}
+export interface ToolInfo {
+  name: string;
+  label: string;
+  group: string;
+  description: string;
+  risk: 'low' | 'medium' | 'high';
+  source: 'builtin' | 'mcp';
+  defaultPolicy: Policy;
+  policy: Policy;
+}

@@ -1,0 +1,32 @@
+services:
+  sable:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    volumes:
+      - sable-data:/data
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      # SABLE_MODEL: qwen3:8b
+      # ANTHROPIC_API_KEY: sk-ant-...   (or add keys later in Settings → Models)
+      # TZ: Europe/Lisbon               (schedules use the server's time zone)
+    depends_on:
+      - ollama
+
+  # Remove this service if Ollama already runs on the host
+  # (then set OLLAMA_HOST to http://host.docker.internal:11434).
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    # For an NVIDIA GPU:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+volumes:
+  sable-data:
+  ollama:

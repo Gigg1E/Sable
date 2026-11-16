@@ -1,0 +1,286 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+:root {
+  --bg: #f6f4f1;
+  --bg-elev: #fbfaf8;
+  --surface: #ffffff;
+  --surface-2: #efece7;
+  --surface-3: #e6e2dc;
+  --border: rgba(24, 18, 44, 0.09);
+  --border-strong: rgba(24, 18, 44, 0.16);
+  --fg: #1b1924;
+  --muted: #676374;
+  --subtle: #9894a3;
+  --accent: #7647e6;
+  --accent-2: #e5853b;
+  --accent-fg: #ffffff;
+  --accent-soft: rgba(118, 71, 230, 0.1);
+  --ok: #1f9d64;
+  --warn: #b7791f;
+  --danger: #d6455d;
+  --shadow: 0 1px 2px rgba(20, 14, 40, 0.06), 0 8px 24px -8px rgba(20, 14, 40, 0.12);
+  --radius: 16px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #0b0a10;
+    --bg-elev: #100f17;
+    --surface: #15131d;
+    --surface-2: #1c1a26;
+    --surface-3: #25222f;
+    --border: rgba(255, 255, 255, 0.07);
+    --border-strong: rgba(255, 255, 255, 0.14);
+    --fg: #edebf3;
+    --muted: #a19eb0;
+    --subtle: #6f6b7e;
+    --accent: #b28cff;
+    --accent-2: #ffb874;
+    --accent-fg: #14101f;
+    --accent-soft: rgba(178, 140, 255, 0.12);
+    --ok: #5ddc9c;
+    --warn: #ffc65c;
+    --danger: #ff6b81;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+    color-scheme: dark;
+  }
+}
+:root[data-theme='dark'] {
+  --bg: #0b0a10;
+  --bg-elev: #100f17;
+  --surface: #15131d;
+  --surface-2: #1c1a26;
+  --surface-3: #25222f;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --fg: #edebf3;
+  --muted: #a19eb0;
+  --subtle: #6f6b7e;
+  --accent: #b28cff;
+  --accent-2: #ffb874;
+  --accent-fg: #14101f;
+  --accent-soft: rgba(178, 140, 255, 0.12);
+  --ok: #5ddc9c;
+  --warn: #ffc65c;
+  --danger: #ff6b81;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 12px 32px -12px rgba(0, 0, 0, 0.6);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-subtle: var(--subtle);
+  --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
+  --color-accent-fg: var(--accent-fg);
+  --color-accent-soft: var(--accent-soft);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-sans: 'Inter var', 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --shadow-soft: var(--shadow);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+::selection {
+  background: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--surface-3) transparent;
+}
+button,
+[role='button'] {
+  cursor: pointer;
+  user-select: none;
+}
+@layer base {
+  :focus-visible {
+    outline: 2px solid color-mix(in oklab, var(--accent) 70%, transparent);
+    outline-offset: 2px;
+  }
+  textarea:focus-visible,
+  input:focus-visible,
+  select:focus-visible {
+    outline: none;
+  }
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Soft aurora behind the app */
+.aurora::before {
+  content: '';
+  position: fixed;
+  inset: -20% -10% auto -10%;
+  height: 60vh;
+  pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 20% 20%, color-mix(in oklab, var(--accent) 16%, transparent), transparent 70%),
+    radial-gradient(35% 45% at 80% 0%, color-mix(in oklab, var(--accent-2) 12%, transparent), transparent 70%);
+  filter: blur(20px);
+  z-index: 0;
+}
+
+.shimmer {
+  background: linear-gradient(90deg, var(--muted) 0%, var(--fg) 45%, var(--muted) 60%);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shimmer 1.8s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+.caret::after {
+  content: '';
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -0.15em;
+  border-radius: 2px;
+  background: var(--accent);
+  animation: blink 1s steps(2) infinite;
+}
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+/* Markdown */
+.prose-sable {
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.prose-sable > * + * {
+  margin-top: 0.75em;
+}
+.prose-sable h1,
+.prose-sable h2,
+.prose-sable h3 {
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  line-height: 1.3;
+  margin-top: 1.2em;
+}
+.prose-sable h1 {
+  font-size: 1.35em;
+}
+.prose-sable h2 {
+  font-size: 1.18em;
+}
+.prose-sable h3 {
+  font-size: 1.05em;
+}
+.prose-sable ul,
+.prose-sable ol {
+  padding-left: 1.3em;
+}
+.prose-sable ul {
+  list-style: disc;
+}
+.prose-sable ol {
+  list-style: decimal;
+}
+.prose-sable li + li {
+  margin-top: 0.25em;
+}
+.prose-sable li::marker {
+  color: var(--subtle);
+}
+.prose-sable a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--accent) 40%, transparent);
+  text-underline-offset: 3px;
+}
+.prose-sable strong {
+  font-weight: 650;
+}
+.prose-sable code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  padding: 0.1em 0.35em;
+  border-radius: 6px;
+}
+.prose-sable pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 0.9em 1em;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.55;
+}
+.prose-sable pre code {
+  background: none;
+  border: 0;
+  padding: 0;
+}
+.prose-sable blockquote {
+  border-left: 3px solid color-mix(in oklab, var(--accent-2) 60%, transparent);
+  padding: 0.1em 0 0.1em 0.9em;
+  color: var(--muted);
+}
+.prose-sable table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+  font-size: 0.92em;
+}
+.prose-sable th,
+.prose-sable td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+.prose-sable th {
+  background: var(--surface-2);
+  font-weight: 600;
+}
+.prose-sable hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+}
