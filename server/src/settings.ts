@@ -87,6 +87,9 @@ export interface Settings {
     maxOrder: number;
     country: string;
     currency: string;
+    /** Optional own Shop app client (Dev Dashboard) instead of Shop's public device-flow client. */
+    clientId?: string;
+    clientSecret?: string;
   };
 }
 
@@ -198,6 +201,7 @@ export function publicSettings(): Settings {
     if (m.headers) for (const k of Object.keys(m.headers)) m.headers[k] = m.headers[k] ? MASK : '';
     if (m.oauth?.clientSecret) m.oauth.clientSecret = MASK;
   }
+  if (s.shopping?.clientSecret) s.shopping.clientSecret = MASK;
   return s;
 }
 
@@ -207,6 +211,7 @@ export function updateSettings(next: Settings): Settings {
   for (const p of next.providers ?? []) {
     if (p.apiKey?.startsWith(MASK)) p.apiKey = prev.providers.find((x) => x.id === p.id)?.apiKey ?? '';
   }
+  if (next.shopping?.clientSecret === MASK) next.shopping.clientSecret = prev.shopping.clientSecret ?? '';
   for (const c of next.channels ?? []) {
     const old = prev.channels.find((x) => x.id === c.id);
     if (c.token === MASK) c.token = old?.token ?? '';

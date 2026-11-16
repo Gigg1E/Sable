@@ -123,9 +123,6 @@ hooks.example.com {
     handle /hooks/* {
         reverse_proxy localhost:8787
     }
-    handle /oauth/sable-client.json {
-        reverse_proxy localhost:8787
-    }
     respond 404
 }
 ```
@@ -238,13 +235,15 @@ Sable talks to **[Shop MCP](https://shopify.dev/changelog/posts/add-shopping-and
 | Search, compare, show products, store Q&A | Nothing; no account, no approval |
 | Add to / edit carts | No approval (nothing is bought) |
 | Prepare checkout | Fills your linked account's email and saved address, and picks the cheapest shipping. No approval. |
-| **Place order** | **Always asks**, and can't be set to automatic. Requires *Settings → Shopping → Allow the agent to place orders* (off by default), a linked Shop account with a saved card, and a total under your per-order limit. |
+| **Place order** | **Always asks**, and can't be set to automatic. Requires *Settings → Shopping → Allow the agent to place orders* (off by default), a linked Shop account, a payment method offered by the store (you choose it), and a total under your per-order limit. |
 
 **Placing an order:** the approval shows the exact checkout fetched from the store, with a warning, and you must tick *“I've checked the item, quantity, delivery address and total”* before *Place order* is enabled. Right before paying, Sable fetches the checkout again. If items, quantities, total or payment method changed since you approved, it stops and charges nothing. A completion is never retried, so a network error can't double-charge; an uncertain result is reconciled by reading the checkout. If anything is missing (purchases off, no linked account, no saved card, over the limit, or the store needs a verification step), you get the store's own checkout link instead.
 
 **Cards:** Sable never stores card numbers. Shopify restricts agents from submitting raw cards, and a card number the model can read could leak through a malicious page. Payment uses the card saved in your **Shop account** (Shop Pay); Sable only sees a masked label like “Visa •••• 4242”.
 
-**Linking your Shop account** (Settings → Shopping → *Link Shop account*): OAuth with PKCE at accounts.shop.app. Shop identifies Sable by reading `https://<your Sable>/oauth/sable-client.json`, so Sable needs a **public HTTPS Public URL** for this one-time link. If you only expose webhooks publicly, also expose that path (add `handle /oauth/sable-client.json { reverse_proxy localhost:8787 }` to the Caddy example below). Shop traffic goes through the agent's network path, so the VPN proxy applies.
+**Linking your Shop account** (Settings → Shopping → *Link Shop account*): Sable uses Shop's documented **device flow** with Shop's public client, which Shop provides for a shopper's own agent. You get a code and an *Open Shop* button: check the code on Shop's page and approve “Sable (personal agent)”, and Settings updates by itself. No public URL is needed. Tokens stay on the server and are only sent to `mcp.shop.com`. When a sign-in expires, Sable notifies you to link again. Prefer your own registered Shop app? Add its client ID and secret under *Use my own Shop app client (advanced)*; it must be enabled for the `personal_agent` scope and `https://mcp.shop.com`, and it uses a redirect to `<Public URL>/api/shop/oauth/callback`.
+
+**Choosing how to pay:** the confirmation lists the payment methods the store offers for that checkout, and you pick one. Nothing is preselected; Sable sends exactly the method you chose. The account's email is never copied into a checkout, and saved addresses are used unchanged.
 
 **Price watchers on Shop products** use the catalog directly (watcher type *shop* with the variant ID), so they read structured price and stock instead of scraping the page.
 

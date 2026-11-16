@@ -1,5 +1,6 @@
 import { motion } from 'motion/react';
-import { ShieldAlert } from 'lucide-react';
+import { CreditCard, ShieldAlert } from 'lucide-react';
+import { cx } from '../lib/format';
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { timeAgo } from '../lib/format';
@@ -26,12 +27,13 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
   const preview = argPreview(approval);
   const rememberLabel = approval.scope?.kind === 'domain' ? `Always allow ${approval.scope.value}` : 'Always allow';
   const [checked, setChecked] = useState(false);
+  const [method, setMethod] = useState<string | null>(null);
   const purchase = approval.preview && approval.preview.type !== 'products' ? (approval.preview as CartLikeCard) : null;
 
   async function decide(decision: 'approve' | 'deny', remember = false) {
     setBusy(decision + remember);
     try {
-      await api.post(`/approvals/${approval.id}/decision`, { decision, remember });
+      await api.post(`/approvals/${approval.id}/decision`, { decision, remember, ...(method ? { choice: method } : {}) });
       useStore.setState((s) => ({ approvals: s.approvals.filter((a) => a.id !== approval.id) }));
     } catch (err) {
       toast({ title: 'Could not record decision', body: (err as Error).message, tone: 'error' });
@@ -55,6 +57,18 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
             <b className="text-fg">This charges your card and can't be undone from here.</b> The items, prices, address and total above come straight from the store, but AI agents can misunderstand what you asked for. Check the
             item, size/color, quantity, address and total before you approve. Returns follow the store's own policy.
           </div>
+          <div>
+            <div className="mb-1.5 text-[12px] font-medium text-fg-2">Pay with</div>
+            <div className="space-y-1.5">
+              {purchase.instruments.map((i) => (
+                <label key={i.id} className={cx('flex cursor-pointer items-center gap-2.5 rounded-md border px-3 py-2 text-[13px] transition-colors', method === i.id ? 'border-fg/50 bg-panel-2' : 'border-line hover:border-line-strong')}>
+                  <input type="radio" name={`pay-${approval.id}`} checked={method === i.id} onChange={() => setMethod(i.id)} className="size-4 accent-[var(--fg)]" />
+                  <CreditCard className="size-4 text-fg-3" />
+                  {i.label}
+                </label>
+              ))}
+            </div>
+          </div>
           <label className="flex cursor-pointer items-start gap-2.5 text-[13px]">
             <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5 size-4 accent-[var(--fg)]" />
             <span>I've checked the item, quantity, delivery address and total.</span>
@@ -63,7 +77,7 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
             <Button variant="ghost" size="sm" loading={busy === 'denyfalse'} onClick={() => void decide('deny')}>
               Don't buy
             </Button>
-            <Button variant="primary" size="sm" disabled={!checked} loading={busy === 'approvefalse'} onClick={() => void decide('approve')}>
+            <Button variant="primary" size="sm" disabled={!checked || !method} loading={busy === 'approvefalse'} onClick={() => void decide('approve')}>
               Place order{total ? ` · ${money({ amount: total.amount, currency: purchase.currency })}` : ''}
             </Button>
           </div>

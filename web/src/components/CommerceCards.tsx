@@ -150,7 +150,7 @@ export function CartCard({ card, compact }: { card: CartLikeCard; compact?: bool
         {isCheckout && !card.totals.some((t) => t.type === 'fulfillment' || t.type === 'shipping') && !isOrder && <div className="text-[11.5px] text-fg-3">Shipping and tax aren't calculated yet.</div>}
       </div>
 
-      {isCheckout && (card.address || card.shipping || card.payWith || card.instruments.length > 0) && (
+      {isCheckout && (card.address || card.shipping || (!card.confirm && (card.payWith || card.instruments.length > 0))) && (
         <div className="space-y-1.5 border-t border-line px-3.5 py-2.5 text-[12.5px] text-fg-2">
           {card.address && (
             <div className="flex gap-2">
@@ -163,7 +163,7 @@ export function CartCard({ card, compact }: { card: CartLikeCard; compact?: bool
               {card.shipping.amount != null && <span className="font-mono">· {money({ amount: card.shipping.amount, currency: card.currency })}</span>}
             </div>
           )}
-          {(card.payWith || card.instruments.length > 0) && (
+          {!card.confirm && (card.payWith || card.instruments.length > 0) && (
             <div className="flex gap-2">
               <CreditCard className="mt-0.5 size-3.5 shrink-0 text-fg-3" /> {card.payWith?.label ?? card.instruments.find((i) => i.selected)?.label ?? card.instruments[0]?.label} <span className="text-fg-3">(saved in Shop)</span>
             </div>

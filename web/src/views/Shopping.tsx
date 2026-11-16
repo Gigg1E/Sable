@@ -1,17 +1,23 @@
-import { CreditCard, ExternalLink, Link2, ShieldCheck, ShoppingBag, Unlink } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { ChevronRight, CreditCard, ExternalLink, Link2, ShieldCheck, ShoppingBag, Unlink } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Badge, Button, Card, Field, Input, Spinner, Toggle } from '../components/ui';
+import { Button, Card, Field, Input, Spinner, Ticker, Toggle } from '../components/ui';
 import { api } from '../lib/api';
+import { cx } from '../lib/format';
 import { navigate } from '../lib/router';
-import { useStore } from '../lib/store';
+import { onServerEvent, useStore } from '../lib/store';
 import type { Settings } from '../lib/types';
 
 type Edit = (fn: (d: Settings) => void) => void;
 interface Status {
   linked: boolean;
+  expired?: boolean;
   linkedAt: number | null;
-  account: { name: string | null; email: string | null; addresses: number; cards: string[] } | null;
-  error?: string;
+  expiresAt?: number | null;
+  method?: 'device' | 'app';
+  pending?: { userCode: string; verificationUri: string; verificationUriComplete: string | null; expiresAt: number } | null;
+  account: { email: string | null; addresses: number; cards: string[]; manageUrl: string | null } | null;
+  error?: string | null;
 }
 
 export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }) {
@@ -21,7 +27,9 @@ export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }
   const s = draft.shopping;
   const set = (fn: (x: Settings['shopping']) => void) => edit((d) => fn(d.shopping));
 
+  const [advanced, setAdvanced] = useState(!!s.clientId);
   const load = () => void api.get<Status>('/shop/status').then(setStatus).catch(() => setStatus({ linked: false, linkedAt: null, account: null }));
+  useEffect(() => onServerEvent((ev) => ev.type === 'shop.changed' && load()), []);
   useEffect(() => {
     load();
     const q = new URLSearchParams(location.search);
@@ -32,12 +40,13 @@ export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }
 
   async function link() {
     setBusy(true);
-    const r = await api.post<{ ok: boolean; url?: string; error?: string }>('/shop/link');
+    const r = await api.post<{ ok: boolean; url?: string; pending?: Status['pending']; error?: string }>('/shop/link');
     setBusy(false);
     if (!r.ok) return toast({ title: 'Could not start linking', body: r.error, tone: 'error' });
     if (r.url) location.href = r.url;
     else load();
   }
+  const pending = status?.pending && !status.linked ? status.pending : null;
 
   return (
     <>
@@ -58,13 +67,15 @@ export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }
                   <Spinner className="size-3" />
                 ) : status.linked ? (
                   <>
-                    Linked{status.account?.name ? ` as ${status.account.name}` : ''}
-                    {status.account?.email ? ` · ${status.account.email}` : ''}
-                    {status.error ? ` · ${status.error}` : ''}
+                    Linked{status.account?.email ? ` · ${status.account.email}` : ''}
+                    {status.expiresAt ? ` · sign-in valid until ${new Date(status.expiresAt).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` : ''}
                   </>
+                ) : status.expired ? (
+                  <span className="text-accent">Sign-in expired. Link again to keep using your saved addresses and Shop Pay.</span>
                 ) : (
                   'Not linked. Needed for saved addresses, Shop Pay checkout and order tracking.'
                 )}
+                {status?.error && !status.linked && !pending && <div className="text-danger">{status.error}</div>}
               </div>
             </div>
             {status?.linked ? (
@@ -72,11 +83,39 @@ export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }
                 <Unlink className="size-3.5" /> Unlink
               </Button>
             ) : (
-              <Button size="sm" variant="primary" loading={busy} onClick={() => void link()}>
-                <Link2 className="size-3.5" /> Link Shop account
-              </Button>
+              !pending && (
+                <Button size="sm" variant="primary" loading={busy} onClick={() => void link()}>
+                  <Link2 className="size-3.5" /> {status?.expired ? 'Link again' : 'Link Shop account'}
+                </Button>
+              )
             )}
           </div>
+          <AnimatePresence>
+            {pending && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                <div className="flex flex-wrap items-center gap-4 px-4 py-4">
+                  <div>
+                    <div className="text-[11px] font-medium text-fg-3">Your code</div>
+                    <div className="font-mono text-[22px] font-semibold tracking-[0.18em]">{pending.userCode}</div>
+                  </div>
+                  <div className="min-w-0 flex-1 text-[12.5px] leading-relaxed text-fg-2">
+                    Open Shop, check that it shows this code, and approve <b className="text-fg">“{draft.persona.name || 'Sable'} (personal agent)”</b>. This page updates by itself.
+                    <div className="mt-1 flex items-center gap-1.5 text-[12px] text-fg-3">
+                      <Ticker className="text-info" /> Waiting for approval · expires {new Date(pending.expiresAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <a href={pending.verificationUriComplete ?? pending.verificationUri} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-md bg-fg px-3 text-[13px] font-medium text-bg hover:bg-fg/90">
+                      Open Shop <ExternalLink className="size-3.5" />
+                    </a>
+                    <Button size="md" variant="ghost" onClick={() => void api.post('/shop/unlink').then(load)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           {status?.linked && status.account && (
             <div className="flex flex-wrap gap-x-6 gap-y-1 px-4 py-3 text-[12.5px] text-fg-2">
               <span>{status.account.addresses} saved address{status.account.addresses === 1 ? '' : 'es'}</span>
@@ -84,6 +123,11 @@ export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }
                 <CreditCard className="size-3.5 text-fg-3" />
                 {status.account.cards.length ? status.account.cards.join(', ') : 'No saved cards. Add one in the Shop app.'}
               </span>
+              {status.account.manageUrl && (
+                <a href={status.account.manageUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-fg-3 hover:text-fg">
+                  Manage connection in Shop <ExternalLink className="size-3" />
+                </a>
+              )}
             </div>
           )}
           <div className="flex items-center justify-between gap-4 px-4 py-3.5">
@@ -94,9 +138,33 @@ export function ShoppingSection({ draft, edit }: { draft: Settings; edit: Edit }
             <Toggle checked={s.enabled} onChange={(v) => set((x) => void (x.enabled = v))} />
           </div>
         </Card>
-        {!draft.publicUrl.startsWith('https://') && !status?.linked && (
-          <p className="mt-2 text-xs text-accent">Linking needs Sable on a public HTTPS address (Shop fetches a small client file from it). Set Settings → Network → Public URL first.</p>
-        )}
+        <button onClick={() => setAdvanced((v) => !v)} className="mt-3 flex items-center gap-1 text-[12.5px] text-fg-3 hover:text-fg">
+          <motion.span animate={{ rotate: advanced ? 90 : 0 }}>
+            <ChevronRight className="size-3.5" />
+          </motion.span>
+          Use my own Shop app client (advanced)
+        </button>
+        <AnimatePresence initial={false}>
+          {advanced && (
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+              <Card className="mt-2 space-y-3 p-4">
+                <p className="text-[12.5px] leading-relaxed text-fg-2">
+                  By default Sable links with Shop's public client, which Shop provides for a shopper's own agent. To use your own instead, create a Shop app in Shopify's Dev Dashboard, make sure it's enabled for the{' '}
+                  <code className="font-mono">personal_agent</code> scope and the <code className="font-mono">https://mcp.shop.com</code> resource, and add the redirect URI{' '}
+                  <code className="break-all font-mono">{(draft.publicUrl || location.origin) + '/api/shop/oauth/callback'}</code>. This needs a public HTTPS Public URL.
+                </p>
+                <div className={cx('grid gap-3 sm:grid-cols-2')}>
+                  <Field label="Client ID">
+                    <Input value={s.clientId ?? ''} onChange={(e) => set((x) => void (x.clientId = e.target.value))} />
+                  </Field>
+                  <Field label="Client secret">
+                    <Input type="password" value={s.clientSecret ?? ''} onChange={(e) => set((x) => void (x.clientSecret = e.target.value))} />
+                  </Field>
+                </div>
+              </Card>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </section>
 
       <section className="mb-10">

@@ -70,7 +70,7 @@ export function approvalJson(a: ApprovalRow) {
   };
 }
 
-const waiters = new Map<string, (approved: boolean) => void>();
+const waiters = new Map<string, (approved: boolean, choice?: string) => void>();
 
 export function requestApproval(input: {
   runId: string;
@@ -83,7 +83,7 @@ export function requestApproval(input: {
   scope?: ToolScope;
   preview?: Card;
   signal: AbortSignal;
-}): Promise<boolean> {
+}): Promise<{ ok: boolean; choice?: string }> {
   const aid = id('a_');
   run(
     'INSERT INTO approvals (id, run_id, conversation_id, call_id, agent, tool, args, summary, risk, scope, status, created_at, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
@@ -94,7 +94,7 @@ export function requestApproval(input: {
   emit({ type: 'approval.requested', approval: { ...approvalJson(row), toolLabel: input.tool.label } });
   void notify({ title: `Approve: ${input.summary}`, body: `${input.agent} is waiting for your OK.`, link: `/chat/${input.conversationId}`, kind: 'approval' });
 
-  return new Promise<boolean>((resolve, reject) => {
+  return new Promise<{ ok: boolean; choice?: string }>((resolve, reject) => {
     const onAbort = () => {
       waiters.delete(aid);
       run("UPDATE approvals SET status = 'expired', decided_at = ? WHERE id = ? AND status = 'pending'", now(), aid);
@@ -103,18 +103,23 @@ export function requestApproval(input: {
     };
     if (input.signal.aborted) return onAbort();
     input.signal.addEventListener('abort', onAbort, { once: true });
-    waiters.set(aid, (ok) => {
+    waiters.set(aid, (ok, choice) => {
       input.signal.removeEventListener('abort', onAbort);
-      resolve(ok);
+      resolve({ ok, choice });
     });
   });
 }
 
 /** Record the user's decision. `remember` widens the policy so the same kind of call won't ask again. */
-export function decideApproval(aid: string, approve: boolean, remember: boolean) {
+export function decideApproval(aid: string, approve: boolean, remember: boolean, choice?: string) {
   const row = get<ApprovalRow>('SELECT * FROM approvals WHERE id = ?', aid);
   if (!row) throw Object.assign(new Error('Approval not found'), { status: 404 });
   if (row.status !== 'pending') return approvalJson(row);
+  // Approvals that offer options (e.g. payment methods) need the user to pick one of them.
+  const options = (parseJson<{ instruments?: { id: string }[] } | null>(row.preview, null)?.instruments ?? []).map((i) => i.id);
+  if (approve && options.length && !options.includes(String(choice))) {
+    throw Object.assign(new Error('Choose one of the offered options first.'), { status: 400 });
+  }
   const waiter = waiters.get(aid);
   const status = waiter ? (approve ? 'approved' : 'denied') : 'expired';
   run('UPDATE approvals SET status = ?, decided_at = ? WHERE id = ?', status, now(), aid);
@@ -132,7 +137,7 @@ export function decideApproval(aid: string, approve: boolean, remember: boolean)
     emit({ type: 'settings.changed' });
   }
   waiters.delete(aid);
-  waiter?.(approve);
+  waiter?.(approve, choice);
   emit({ type: 'approval.resolved', id: aid, status });
   return approvalJson({ ...row, status, decided_at: now() });
 }

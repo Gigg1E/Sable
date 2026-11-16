@@ -1,5 +1,6 @@
 import { kvGet, kvSet } from '../db.js';
 import { getSettings } from '../settings.js';
+import crypto from 'node:crypto';
 import { truncate } from '../util.js';
 import { registerTool, type Card, type ToolPreview } from '../agent/tools/registry.js';
 import { shopLinkStatus } from './auth.js';
@@ -136,7 +137,7 @@ function cardFrom(kind: 'cart' | 'checkout', shop: string, sellerName: string, d
   const dest = method?.destinations?.find((d: any) => d.id === method?.selected_destination_id) ?? method?.destinations?.[0];
   const group = method?.groups?.[0];
   const option = group?.options?.find((o: any) => o.id === group?.selected_option_id);
-  const instruments = (doc.payment?.instruments ?? []).map(describeInstrument);
+  const instruments = (doc.payment?.instruments ?? []).map((i: any, n: number) => describeInstrument(i, n));
   return {
     type: kind,
     id: doc.id,
@@ -167,24 +168,28 @@ function cardFrom(kind: 'cart' | 'checkout', shop: string, sellerName: string, d
   };
 }
 
-function describeInstrument(i: any) {
+/** Display-only description of an offered payment method. The instrument itself is never shown to the model. */
+function describeInstrument(i: any, index = 0) {
   const d = i?.display ?? i?.credential?.display ?? {};
-  const brand = d.brand ?? i?.brand ?? i?.card_brand ?? '';
-  const last = d.last_digits ?? d.last4 ?? i?.last_digits ?? i?.last4 ?? '';
-  const label = [brand && String(brand).replace(/_/g, ' '), last && `•••• ${last}`].filter(Boolean).join(' ') || d.description || i?.handler_id || i?.type || 'Payment method';
-  return { id: i?.id ?? null, handler: i?.handler_id ?? null, label: String(label), selected: !!i?.selected };
+  const brand = d.brand ?? d.card_brand ?? i?.brand ?? '';
+  const last = d.last_digits ?? d.last4 ?? i?.last_digits ?? '';
+  const kind = i?.type === 'shop_pay' || i?.handler_id === 'shop_pay' ? 'Shop Pay' : '';
+  const label = [kind, brand && String(brand).replace(/_/g, ' '), last && `•••• ${last}`].filter(Boolean).join(' · ') || d.description || d.name || i?.handler_id || i?.type || 'Payment method';
+  return { id: instrumentKey(i, index), label: String(label), selected: !!i?.selected };
 }
+const instrumentKey = (i: any, index: number) => String(i?.id ?? `${i?.handler_id ?? 'instrument'}#${index}`);
 
 const totalOf = (doc: any): Money | null => {
   const t = (doc.totals ?? []).find((x: any) => x.type === 'total');
   return t ? { amount: t.amount, currency: doc.currency } : null;
 };
 
-/** Cart/checkout updates replace the whole document: copy current state minus response-only fields. */
+/** Cart/checkout updates replace the whole document: copy current state minus the response-only fields Shop documents. */
 function editable(doc: any) {
-  const { next: _n, signals: _s, attribution: _a, ucp: _u, messages: _m, ...rest } = structuredClone(doc);
+  const { next: _n, signals: _s, attribution: _a, ...rest } = structuredClone(doc);
   return rest;
 }
+const idem = () => ({ meta: { 'idempotency-key': crypto.randomUUID() } });
 
 async function readCart(shop: string, signal?: AbortSignal) {
   const ref = refs('cart')[shop];
@@ -349,9 +354,9 @@ registerTool({
       const line = (doc.line_items ?? []).find((l: any) => l.item?.id === offer.variantId);
       if (line) line.quantity += qty;
       else doc.line_items = [...(doc.line_items ?? []), { item: { id: offer.variantId }, quantity: qty }];
-      cart = await shopCall('update_cart', { shop, id: current.id, cart: doc }, ctx.signal);
+      cart = await shopCall('update_cart', { shop, id: current.id, cart: doc, ...idem() }, ctx.signal);
     } else {
-      cart = await shopCall('create_cart', { shop, cart: { line_items: [{ item: { id: offer.variantId }, quantity: qty }] } }, ctx.signal);
+      cart = await shopCall('create_cart', { shop, cart: { line_items: [{ item: { id: offer.variantId }, quantity: qty }] }, ...idem() }, ctx.signal);
     }
     saveRef('cart', shop, { id: cart.id, seller: offer.seller.name, updatedAt: Date.now() });
     return {
@@ -380,7 +385,7 @@ registerTool({
     if (!line) throw new Error('That item is not in the cart.');
     if (Number(a.quantity) <= 0) doc.line_items = doc.line_items.filter((l: any) => l !== line);
     else line.quantity = Math.min(Number(a.quantity), 20);
-    const cart = await shopCall('update_cart', { shop, id: current.id, cart: doc }, ctx.signal);
+    const cart = await shopCall('update_cart', { shop, id: current.id, cart: doc, ...idem() }, ctx.signal);
     const seller = refs('cart')[shop]?.seller ?? shop;
     return { content: `Cart updated. Total: ${fmtMoney(totalOf(cart))}.`, cards: [cardFrom('cart', shop, seller, cart)] };
   },
@@ -426,25 +431,24 @@ registerTool({
     const seller = refs('cart')[shop]?.seller ?? shop;
     const cart = await readCart(shop, ctx.signal);
     if (!cart?.line_items?.length) throw new Error('That cart is empty or expired.');
-    let co = await shopCall('create_checkout', { shop, checkout: { line_items: cart.line_items.map((l: any) => ({ item: { id: l.item.id }, quantity: l.quantity })) } }, ctx.signal);
+    // Check out the cart itself, as Shop documents.
+    let co = await shopCall('create_checkout', { shop, checkout: { cart_id: cart.id, line_items: [], context: { address_country: getSettings().shopping.country } }, ...idem() }, ctx.signal);
 
-    // With a linked account, fill contact + saved address and choose shipping, exactly as returned by Shop.
-    if (shopLinkStatus().linked) {
+    // Signed in: copy the preferred saved address unchanged into delivery, then choose the cheapest
+    // delivery option. (Shop: never type or change address fields; account email is display-only.)
+    if (shopLinkStatus().linked && co.status === 'incomplete') {
       try {
         const account = await shopCall('get_account', {}, ctx.signal);
-        const acct = account.account ?? account;
-        const addresses: any[] = acct.addresses ?? [];
-        const addr = addresses.find((x) => x.id === acct.preferred_address_id) ?? addresses[0];
-        const email = acct.email ?? acct.buyer?.email;
+        const addresses: any[] = account.addresses ?? [];
+        const addr = addresses.find((x) => x.id === account.preferred_address_id) ?? addresses[0];
         const doc = editable(co);
-        if (email) doc.buyer = { ...(doc.buyer ?? {}), email };
-        if (addr) {
-          const methods = doc.fulfillment?.methods ?? [];
-          if (methods.length) for (const m of methods) Object.assign(m, { destinations: [addr], selected_destination_id: addr.id });
-          else doc.fulfillment = { ...(doc.fulfillment ?? {}), methods: [{ type: 'shipping', line_item_ids: (doc.line_items ?? []).map((l: any) => l.id), destinations: [addr], selected_destination_id: addr.id }] };
+        const methods: any[] = doc.fulfillment?.methods ?? [];
+        if (addr && methods.length) {
+          const m = methods.find((x) => x.type === 'shipping') ?? methods[0];
+          m.destinations = [...(m.destinations ?? []).filter((d: any) => d.id !== addr.id), addr];
+          m.selected_destination_id = addr.id;
+          co = await shopCall('update_checkout', { shop, id: co.id, checkout: doc, ...idem() }, ctx.signal);
         }
-        co = await shopCall('update_checkout', { shop, id: co.id, checkout: doc }, ctx.signal);
-        // Pick the cheapest returned shipping option for any group without a selection.
         const doc2 = editable(co);
         let changed = false;
         for (const m of doc2.fulfillment?.methods ?? []) {
@@ -456,9 +460,9 @@ registerTool({
             }
           }
         }
-        if (changed) co = await shopCall('update_checkout', { shop, id: co.id, checkout: doc2 }, ctx.signal);
+        if (changed) co = await shopCall('update_checkout', { shop, id: co.id, checkout: doc2, ...idem() }, ctx.signal);
       } catch (err) {
-        // Fall through with whatever state Shop has; the card shows what's missing.
+        // Keep whatever state Shop has; the card shows what's missing and links to the store.
         if (!(err instanceof ShopError)) throw err;
       }
     }
@@ -477,11 +481,6 @@ async function snapshot(shop: string, signal?: AbortSignal) {
   if (!ref) throw new Error('No prepared checkout for that store. Call shop_checkout first.');
   const co = await shopCall('get_checkout', { shop, id: ref.id }, signal);
   return { co, card: cardFrom('checkout', shop, ref.seller, co), seller: ref.seller };
-}
-
-function pickInstrument(co: any) {
-  const list: any[] = co.payment?.instruments ?? [];
-  return list.find((i) => i.selected) ?? list[0] ?? null;
 }
 
 registerTool({
@@ -507,8 +506,7 @@ registerTool({
     if (!s.purchases) return handoff('Purchases by the agent are turned off (Settings → Shopping).');
     if (!shopLinkStatus().linked) return handoff('No Shop account is linked, so there is no saved payment method.');
     if (co.status !== 'ready_for_complete') return handoff(`The checkout isn't ready (${co.status}): ${warnings(co.messages).map((m) => m.text).join(' ') || 'details are missing'}.`);
-    const instrument = pickInstrument(co);
-    if (!instrument) return handoff('There is no saved card in the linked Shop account. Add one in the Shop app, then try again.');
+    if (!(co.payment?.instruments ?? []).length) return handoff('The store offered no saved payment method for this checkout. Add a card in the Shop app, or pay on the store.');
     const total = totalOf(co);
     if (!total) return handoff('Shop did not return a total for this checkout.');
     if (total.currency === s.currency && total.amount > toMinor(s.maxOrder, s.currency)) {
@@ -516,10 +514,11 @@ registerTool({
     }
     return {
       summary: `Place order with ${seller}: ${fmtMoney(total)}`,
-      card: { ...card, confirm: true, payWith: describeInstrument(instrument) },
+      // The user picks one of these in the approval; nothing is preselected.
+      card: { ...card, confirm: true },
     };
   },
-  async run(a, ctx) {
+  async run(_a, ctx) {
     const approved = ctx.approved?.card as any;
     if (!approved) throw new Error('No approved checkout.');
     const shop = approved.shop as string;
@@ -529,23 +528,26 @@ registerTool({
     const total = totalOf(co);
     const sameLines = JSON.stringify(now.lines.map((l: any) => [l.variantId, l.quantity])) === JSON.stringify(approved.lines.map((l: any) => [l.variantId, l.quantity]));
     const approvedTotal = (approved.totals as any[]).find((t) => t.type === 'total')?.amount;
-    const instrument = pickInstrument(co);
-    if (!sameLines || !total || total.amount !== approvedTotal || describeInstrument(instrument).label !== approved.payWith?.label || co.status !== 'ready_for_complete') {
+    const offered: any[] = co.payment?.instruments ?? [];
+    const idx = offered.findIndex((x, n) => instrumentKey(x, n) === ctx.choice);
+    const instrument = idx >= 0 ? offered[idx] : null;
+    if (!sameLines || !total || total.amount !== approvedTotal || !instrument || co.status !== 'ready_for_complete') {
       return {
-        content: `Stopped: the checkout changed after the user approved it (now ${fmtMoney(total)}, status ${co.status}). Nothing was charged. Ask the user to review the new checkout.`,
+        content: `Stopped: the checkout changed after the user approved it (now ${fmtMoney(total)}, status ${co.status}${instrument ? '' : ', chosen payment method no longer offered'}). Nothing was charged. Ask the user to review the new checkout.`,
         cards: [now],
       };
     }
     let result: any;
     try {
       // Never retried: a repeated completion could double-charge.
+      // The chosen instrument is copied exactly as Shop returned it, with selected: true.
       result = await shopCall('complete_checkout', { shop, id: co.id, checkout: { payment: { instruments: [{ ...instrument, selected: true }] } } }, ctx.signal);
     } catch (err) {
       // Reconcile by reading, never by completing again.
       try {
         result = await shopCall('get_checkout', { shop, id: co.id });
       } catch {
-        throw new Error(`The purchase result is unknown (${shopErrorText(err)}). Do not try again; ask the user to check their Shop app / email for an order before doing anything else.`);
+        throw new Error(`The purchase isn't confirmed (${shopErrorText(err)}). Do not try again or start a new checkout; tell the user to check the Shop app or their email, and give them the store checkout link.`);
       }
     }
     const card = cardFrom('checkout', shop, approved.seller, result);

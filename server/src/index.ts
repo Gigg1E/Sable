@@ -5,7 +5,7 @@ import './agent/tools/personal.js';
 import './agent/tools/web.js';
 import './agent/tools/workspace.js';
 import './shop/tools.js';
-import { shopClientMetadataDocument } from './shop/auth.js';
+import { resumeShopLink } from './shop/auth.js';
 import { recoverRuns } from './agent/runner.js';
 import { expireStaleApprovals } from './agent/sentinel.js';
 import { reloadMcp } from './agent/tools/mcp.js';
@@ -34,11 +34,6 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Public OAuth client metadata document that Shop reads when you link an account.
-app.get('/oauth/sable-client.json', (_req, res) => {
-  res.setHeader('Cache-Control', 'public, max-age=300');
-  res.json(shopClientMetadataDocument());
-});
 app.use('/hooks', hooksRouter());
 app.use('/api', apiRouter());
 
@@ -64,4 +59,5 @@ app.listen(PORT, HOST, () => {
   void reloadMcp();
   startScheduler();
   startWatchers();
+  resumeShopLink();
 });

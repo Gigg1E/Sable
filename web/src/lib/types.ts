@@ -123,7 +123,7 @@ export interface Settings {
   anthropic: { serverFallbacks: boolean };
   channels: Channel[];
   publicUrl: string;
-  shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string };
+  shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }
 
 export interface ToolCall {

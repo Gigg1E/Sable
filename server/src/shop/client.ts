@@ -1,6 +1,6 @@
 import { agentFetch } from '../net.js';
 import { errorMessage } from '../util.js';
-import { SHOP_MCP, shopAccessToken, unlinkShop } from './auth.js';
+import { invalidateShopToken, SHOP_MCP, shopAccessToken } from './auth.js';
 
 /**
  * Minimal client for Shop MCP (protocol 2026-07-28: stateless HTTP, no initialize; every request
@@ -60,13 +60,18 @@ function parseBody(text: string, type: string): any {
 
 /** Call a Shop tool and return its structured result. Throws ShopError with Shop's own messages. */
 export async function shopCall<T = any>(name: string, args: Record<string, unknown>, signal?: AbortSignal): Promise<T> {
-  let token = await shopAccessToken();
-  let res = await post('tools/call', name, { name, arguments: args }, signal, token);
-  if (res.status === 401 && token) {
-    // Token rejected: drop the link rather than silently acting anonymously on account actions.
-    unlinkShop();
-    throw new ShopError('Your Shop account sign-in expired. Link it again in Settings → Shopping.');
+  const token = await shopAccessToken();
+  const res = await post('tools/call', name, { name, arguments: args }, signal, token);
+  if (res.status === 401) {
+    if (token) {
+      // Rejected token: stop using it (never silently fall back to anonymous for account actions).
+      invalidateShopToken('Shop rejected the saved sign-in. Link your account again.');
+      throw new ShopError('Your Shop account sign-in expired. Link it again in Settings → Shopping.');
+    }
+    throw new ShopError('This needs a linked Shop account (Settings → Shopping).');
   }
+  if (res.status === 403) throw new ShopError('Shop refused this request for the linked account (check that the connection allows it).');
+  if (res.status >= 500) throw new ShopError(`Shop is having trouble right now (HTTP ${res.status}). Try again shortly.`);
   const text = await res.text();
   let body: any;
   try {

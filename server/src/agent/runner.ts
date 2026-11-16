@@ -292,6 +292,7 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
   }
   const ctxBase = { runId: o.runId, conversationId: o.conversationId, callId: call.id, agent: o.agent.name, signal: o.signal };
   let approved: ToolPreview | undefined;
+  let choice: string | undefined;
   if (decision.action === 'ask' && tool.preview) {
     // Fetch the real data the user will approve (e.g. the exact checkout), server-side.
     try {
@@ -308,12 +309,13 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
   if (decision.action === 'ask') {
     setRunStatus(o.runId, o.conversationId, 'waiting');
     emit({ type: 'tool.waiting', ...base });
-    const ok = await requestApproval({
+    const decisionResult = await requestApproval({
       runId: o.runId, conversationId: o.conversationId, callId: call.id, agent: o.agent.name, tool, args: call.args,
       summary: approved?.summary ?? summary, scope: decision.scope, preview: approved?.card, signal: o.signal,
     });
     setRunStatus(o.runId, o.conversationId, 'running');
-    if (!ok) {
+    choice = decisionResult.choice;
+    if (!decisionResult.ok) {
       logActivity({ ...base, tool: tool.name, status: 'denied', summary, input: call.args });
       return finish('denied', 'The user denied this action. Do not retry it; continue without it or ask the user what they would prefer.', true);
     }
@@ -321,6 +323,7 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
 
   const ctx: ToolContext = {
     approved,
+    choice,
     runId: o.runId,
     conversationId: o.conversationId,
     callId: call.id,

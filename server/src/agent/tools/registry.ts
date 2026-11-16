@@ -11,6 +11,8 @@ export interface ToolContext {
   signal: AbortSignal;
   /** The verified preview the user approved (for tools with a preview). */
   approved?: ToolPreview;
+  /** Option the user picked in the approval (e.g. a payment method id). */
+  choice?: string;
   /** Stream progress lines to the UI while a long tool runs. */
   progress?: (text: string, kind?: 'text' | 'tool') => void;
 }

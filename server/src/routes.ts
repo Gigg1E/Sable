@@ -22,7 +22,7 @@ import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type ProviderConfig, type Settings } from './settings.js';
 import { errorMessage, id, now, parseJson } from './util.js';
 import { getUpload, uploadRoutes } from './uploads.js';
-import { beginShopLink, completeShopLink, isShopState, shopLinkStatus, unlinkShop } from './shop/auth.js';
+import { beginAppLink, beginDeviceLink, completeAppLink, shopLinkStatus, unlinkShop } from './shop/auth.js';
 import { shopCall, shopErrorText } from './shop/client.js';
 
 type Handler = (req: Request, res: Response) => unknown;
@@ -284,7 +284,7 @@ export function apiRouter() {
   r.get('/approvals', h(() => pendingApprovals()));
   r.post(
     '/approvals/:id/decision',
-    h((req) => decideApproval(param(req, 'id'), req.body?.decision === 'approve', !!req.body?.remember)),
+    h((req) => decideApproval(param(req, 'id'), req.body?.decision === 'approve', !!req.body?.remember, req.body?.choice ? String(req.body.choice) : undefined)),
   );
 
   // ── Activity log ──
@@ -509,16 +509,14 @@ export function apiRouter() {
       const link = shopLinkStatus();
       if (!link.linked) return { ...link, account: null };
       try {
-        const data = await shopCall('get_account', {});
-        const a = data.account ?? data;
+        const a = await shopCall('get_account', {});
+        const cards = (a.selectable_instruments ?? []).map((c: any) => {
+          const d = c.display ?? c;
+          return [d.brand ?? d.card_brand, (d.last_digits ?? d.last4) && `•••• ${d.last_digits ?? d.last4}`].filter(Boolean).join(' ') || d.description || 'Saved card';
+        });
         return {
           ...link,
-          account: {
-            name: [a.first_name ?? a.given_name, a.last_name ?? a.family_name].filter(Boolean).join(' ') || a.name || null,
-            email: a.email ?? null,
-            addresses: (a.addresses ?? []).length,
-            cards: (a.cards ?? a.payment_methods ?? a.wallet?.cards ?? []).map((c: any) => [c.brand ?? c.display?.brand, (c.last_digits ?? c.display?.last_digits) && `•••• ${c.last_digits ?? c.display?.last_digits}`].filter(Boolean).join(' ')),
-          },
+          account: { email: a.buyer?.email ?? null, addresses: (a.addresses ?? []).length, cards, manageUrl: (a.links ?? []).find((l: any) => /manage/.test(l.type ?? l.rel ?? ''))?.url ?? null },
         };
       } catch (err) {
         return { ...shopLinkStatus(), account: null, error: shopErrorText(err) };
@@ -529,19 +527,20 @@ export function apiRouter() {
     '/shop/link',
     h(async () => {
       try {
-        return { ok: true, url: await beginShopLink() };
+        // Own app client → redirect flow; otherwise Shop's device flow (open a link, approve a code).
+        if (getSettings().shopping.clientId?.trim()) return { ok: true, url: beginAppLink() };
+        return { ok: true, pending: await beginDeviceLink() };
       } catch (err) {
         return { ok: false, error: errorMessage(err) };
       }
     }),
   );
-  r.post('/shop/unlink', h(() => (unlinkShop(), shopLinkStatus())));
+  r.post('/shop/unlink', h(async () => (await unlinkShop(), shopLinkStatus())));
   r.get('/shop/oauth/callback', async (req, res) => {
     const back = (q: string) => res.redirect(`/settings/shopping?${q}`);
     if (req.query.error) return back(`shop_error=${encodeURIComponent(String(req.query.error_description ?? req.query.error))}`);
-    if (!isShopState(String(req.query.state ?? ''))) return back(`shop_error=${encodeURIComponent('Sign-in expired. Try linking again.')}`);
     try {
-      await completeShopLink(String(req.query.code ?? ''));
+      await completeAppLink(String(req.query.state ?? ''), String(req.query.code ?? ''));
       back('shop_linked=1');
     } catch (err) {
       back(`shop_error=${encodeURIComponent(errorMessage(err))}`);
