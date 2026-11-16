@@ -37,6 +37,45 @@ export function mcpStatus(): McpStatus[] {
   );
 }
 
+/**
+ * Some hosted servers answer a request successfully but with a non-2xx HTTP status, which the SDK
+ * treats as a failure and reports with the whole body. If the body is a valid JSON-RPC success,
+ * pass it on as a normal 200 response.
+ */
+const lenientFetch = (serverName: string): typeof fetch => async (input, init) => {
+  const res = await fetch(input, init);
+  if (res.ok || res.status === 401 || !/json/i.test(res.headers.get('content-type') ?? '')) return res;
+  const text = await res.text();
+  try {
+    const data = JSON.parse(text);
+    const msgs = Array.isArray(data) ? data : [data];
+    if (msgs.length && msgs.every((m) => m && m.jsonrpc === '2.0' && 'result' in m && !('error' in m))) {
+      console.warn(`[mcp] ${serverName}: HTTP ${res.status} with a successful reply; treating as 200`);
+      return new Response(text, { status: 200, headers: res.headers });
+    }
+  } catch {
+    /* not JSON */
+  }
+  return new Response(text, { status: res.status, statusText: res.statusText, headers: res.headers });
+};
+
+/** Connector errors can embed a whole response body. Keep what a person needs; log the rest. */
+export function shortMcpError(serverName: string, err: unknown): string {
+  const full = errorMessage(err);
+  if (full.length <= 300) return full;
+  console.warn(`[mcp] ${serverName}: ${full}`);
+  const status = (err as { code?: number }).code;
+  let detail = '';
+  const json = full.slice(full.indexOf('{'));
+  try {
+    const d = JSON.parse(json);
+    detail = d?.error?.message ?? d?.error?.status ?? (d?.result ? 'the server sent a normal reply with an error status' : '');
+  } catch {
+    detail = full.replace(/\s+/g, ' ').slice(0, 200) + '…';
+  }
+  return `${serverName} returned an error${typeof status === 'number' && status > 0 ? ` (HTTP ${status})` : ''}${detail ? `: ${detail}` : ''}. Full details are in the server log.`;
+}
+
 function toolName(serverId: string, name: string) {
   return `mcp_${serverId}_${name}`.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64);
 }
@@ -48,6 +87,7 @@ async function connect(cfg: McpServerConfig) {
     if (!cfg.url) throw new Error('No URL configured');
     transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
       requestInit: { headers: cfg.headers ?? {} },
+      fetch: lenientFetch(cfg.name),
       ...(cfg.auth === 'oauth' ? { authProvider: new SableOAuthProvider(cfg) } : {}),
     });
   } else {
@@ -107,7 +147,7 @@ async function connect(cfg: McpServerConfig) {
               `${cfg.name} is not signed in (or its sign-in expired). Tell the user to open Settings → Connectors and press Connect on ${cfg.name}. Don't retry until they have.`,
             );
           }
-          throw err;
+          throw new Error(shortMcpError(cfg.name, err));
         }
         const parts = ((res.content ?? []) as { type: string; text?: string; mimeType?: string }[]).map((c) =>
           c.type === 'text' ? (c.text ?? '') : `[${c.type}${c.mimeType ? ' ' + c.mimeType : ''} content omitted]`,
@@ -134,7 +174,7 @@ export async function reloadMcp() {
         try {
           await connect(s);
         } catch (err) {
-          status.set(s.id, { id: s.id, name: s.name, state: 'error', error: errorMessage(err), tools: [] });
+          status.set(s.id, { id: s.id, name: s.name, state: 'error', error: shortMcpError(s.name, err), tools: [] });
         }
       }),
   );

@@ -300,7 +300,7 @@ export function ConnectorsSection({ draft, edit, saveNow, tools }: { draft: Sett
                         </motion.span>
                       </button>
                     </div>
-                    {st?.error && <p className="border-t border-line px-4 py-2 text-[12px] text-danger">{st.error}</p>}
+                    {st?.error && <p className="line-clamp-3 border-t border-line px-4 py-2 text-[12px] break-words text-danger" title={st.error}>{st.error}</p>}
                     <AnimatePresence initial={false}>
                       {open && (
                         <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
