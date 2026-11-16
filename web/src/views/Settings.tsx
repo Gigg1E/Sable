@@ -1,11 +1,12 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ShoppingBag } from 'lucide-react';
+import { Lock, ShoppingBag } from 'lucide-react';
 import { BarChart3, Bell, Bot, CheckCircle2, Code2, Cpu, Download, Globe, Map as MapIcon, PenLine, Plug, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Field, Input, Segmented, Select, Spinner, Textarea, Toggle, TopBar } from '../components/ui';
 import { AGENT_TEMPLATES } from '../lib/agentTemplates';
 import { ConnectorsSection } from './Connectors';
 import { ShoppingSection } from './Shopping';
+import { SecuritySection } from './Security';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
 import { disablePush, enablePush, pushState } from '../lib/push';
@@ -15,6 +16,7 @@ import type { AgentProfile, Effort, McpServerConfig, Policy, ProviderConfig, Set
 
 const SECTIONS = [
   { id: 'general', label: 'General', icon: User },
+  { id: 'security', label: 'Security', icon: Lock },
   { id: 'models', label: 'Models', icon: Cpu },
   { id: 'agents', label: 'Sub-agents', icon: Bot },
   { id: 'permissions', label: 'Permissions', icon: Shield },
@@ -898,6 +900,7 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'agents' && <AgentsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'permissions' && <PermissionsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'connectors' && <ConnectorsSection draft={draft} edit={edit} tools={tools} saveNow={(next) => save(next, true)} />}
+                {active === 'security' && <SecuritySection />}
                 {active === 'shopping' && <ShoppingSection draft={draft} edit={edit} />}
                 {active === 'network' && <NetworkSection draft={draft} edit={edit} />}
                 {active === 'notifications' && <NotificationsSection draft={draft} edit={edit} />}

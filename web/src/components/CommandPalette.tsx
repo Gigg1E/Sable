@@ -31,6 +31,7 @@ export function CommandPalette({ open, onClose, onSignOut }: { open: boolean; on
   ];
   const settings = [
     ['General', 'general'],
+    ['Security', 'security'],
     ['Models', 'models'],
     ['Sub-agents', 'agents'],
     ['Permissions', 'permissions'],

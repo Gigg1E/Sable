@@ -6,8 +6,11 @@ import { clearState, forgetOAuth, oauthCallbackUrl, serverForState } from './age
 import { computeNextRun, goalJson, type GoalRow, type ScheduleKind, type ScheduleSpec } from './agent/tools/personal.js';
 import { getTool, listTools } from './agent/tools/registry.js';
 import {
-  checkPassword, createSession, destroyAllSessions, destroySession, isAuthed, isSetUp, loginAllowed, recordFailedLogin, requireAuth, setPassword,
+  beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
+  recordFailedLogin, recoveryCodesLeft, requireAuth, sessionCount, setPassword, twoFactorEnabled,
 } from './auth.js';
+import QRCode from 'qrcode';
+import { spaceFrameHtml } from './spaceframe.js';
 import { all, get, run } from './db.js';
 import { emit, sseHandler } from './events.js';
 import { providerFor } from './llm/index.js';
@@ -37,12 +40,36 @@ const h = (fn: Handler) => async (req: Request, res: Response, next: NextFunctio
 };
 const param = (req: Request, name: string) => String(req.params[name]);
 
+/**
+ * Cross-site request guard. Browsers label every request with Sec-Fetch-Site / Origin; anything that
+ * changes state must come from Sable's own page. "same-site" is rejected too: that's a sibling
+ * subdomain (e.g. your main website), not Sable itself.
+ */
+function sameOriginOnly(req: Request, res: Response, next: NextFunction) {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  const site = req.get('sec-fetch-site');
+  if (site && site !== 'same-origin' && site !== 'none') return res.status(403).json({ error: 'Cross-site request blocked' });
+  const origin = req.get('origin');
+  if (origin) {
+    let host = '';
+    try {
+      host = new URL(origin).host;
+    } catch {
+      /* invalid */
+    }
+    const allowed = new Set([req.get('host'), req.get('x-forwarded-host')].filter(Boolean));
+    if (!allowed.has(host)) return res.status(403).json({ error: 'Cross-site request blocked' });
+  }
+  next();
+}
+
 export function apiRouter() {
   const r = express.Router();
+  r.use(sameOriginOnly);
   r.use(express.json({ limit: '4mb' }));
 
   // ── Auth (public) ──
-  r.get('/auth/status', h((req) => ({ setup: isSetUp(), authed: isAuthed(req) })));
+  r.get('/auth/status', h((req) => ({ setup: isSetUp(), authed: isAuthed(req), twoFactor: twoFactorEnabled() })));
   r.post(
     '/auth/setup',
     h((req, res) => {
@@ -62,6 +89,14 @@ export function apiRouter() {
       if (!checkPassword(String(req.body?.password ?? ''))) {
         recordFailedLogin(ip);
         throw new HttpError(401, 'Wrong password.');
+      }
+      if (twoFactorEnabled()) {
+        const code = String(req.body?.code ?? '');
+        if (!code) return res.status(401).json({ error: 'Enter the code from your authenticator app.', needCode: true });
+        if (!checkSecondFactor(code)) {
+          recordFailedLogin(ip);
+          return res.status(401).json({ error: 'That code is not valid.', needCode: true });
+        }
       }
       createSession(req, res);
       return { ok: true };
@@ -85,6 +120,42 @@ export function apiRouter() {
   );
 
   r.get('/events', sseHandler);
+
+  // ── Security ──
+  r.get('/security', h(() => ({ twoFactor: twoFactorEnabled(), recoveryLeft: recoveryCodesLeft(), sessions: sessionCount() })));
+  r.post(
+    '/security/2fa/begin',
+    h(async (req) => {
+      if (!checkPassword(String(req.body?.password ?? ''))) throw new HttpError(401, 'Password is wrong.');
+      const { secret, uri } = beginTwoFactor(getSettings().persona.name || 'Sable');
+      return { secret, uri, qr: await QRCode.toDataURL(uri, { margin: 1, width: 220 }) };
+    }),
+  );
+  r.post(
+    '/security/2fa/confirm',
+    h((req) => {
+      const codes = confirmTwoFactor(String(req.body?.code ?? ''));
+      if (!codes) throw new HttpError(400, 'That code didn\'t match. Check your phone\'s clock and try the newest code.');
+      return { recoveryCodes: codes };
+    }),
+  );
+  r.post(
+    '/security/2fa/disable',
+    h((req) => {
+      if (!checkPassword(String(req.body?.password ?? ''))) throw new HttpError(401, 'Password is wrong.');
+      if (!checkSecondFactor(String(req.body?.code ?? ''))) throw new HttpError(401, 'That code is not valid.');
+      disableTwoFactor();
+      return { ok: true };
+    }),
+  );
+  r.post(
+    '/security/signout-all',
+    h((req, res) => {
+      destroyAllSessions();
+      createSession(req, res); // keep this device signed in
+      return { ok: true };
+    }),
+  );
   uploadRoutes(r);
 
   r.get(
@@ -374,6 +445,28 @@ export function apiRouter() {
       emit({ type: 'space.changed', id: param(req, 'id'), deleted: true });
     }),
   );
+  // Spaces render from their own URL with a sandbox CSP: their scripts get an opaque origin and no
+  // network, so a space can never act as you, even if its HTML was influenced by a web page.
+  r.get('/spaces/:id/frame', (req, res) => {
+    const s = get<{ html: string }>('SELECT html FROM spaces WHERE id = ?', param(req, 'id'));
+    if (!s) return res.status(404).type('text').send('Not found');
+    res.setHeader('Content-Security-Policy', [
+      "default-src 'none'",
+      "script-src 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+      "style-src 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com",
+      "font-src https://fonts.gstatic.com data:",
+      "img-src data: blob: https:",
+      "media-src data: blob:",
+      "connect-src 'none'",
+      "form-action 'none'",
+      "base-uri 'none'",
+      "frame-ancestors 'self'",
+      'sandbox allow-scripts allow-forms allow-modals allow-popups',
+    ].join('; '));
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('html').send(spaceFrameHtml(s.html, req.query.theme === 'light' ? 'light' : 'dark'));
+  });
   r.put(
     '/spaces/:id/data',
     h((req) => {

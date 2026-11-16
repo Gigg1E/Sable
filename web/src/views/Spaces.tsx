@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { LayoutGrid, MessageSquare, Pin, PinOff, Plus, RotateCw, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Button, Empty, IconButton, Page, PageIntro, Spinner, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { cx, timeAgo } from '../lib/format';
+import { resolvedTheme } from '../lib/theme';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore } from '../lib/store';
 import type { Space, SpaceSummary } from '../lib/types';
@@ -77,24 +78,6 @@ export function SpacesList() {
   );
 }
 
-/** Builds the sandboxed document: CSP blocks all network except a couple of script CDNs. */
-function buildDoc(space: Space) {
-  const css = getComputedStyle(document.documentElement);
-  const v = (n: string) => css.getPropertyValue(n).trim();
-  const theme = `:root{--bg:${v('--bg')};--surface:${v('--panel')};--surface-2:${v('--panel-2')};--fg:${v('--fg')};--muted:${v('--fg-2')};--subtle:${v('--fg-3')};--accent:${v('--accent')};--ok:${v('--ok')};--danger:${v('--danger')};--border:${v('--line')};--radius:10px;color-scheme:${v('color-scheme') || 'dark'}}
-html,body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;-webkit-font-smoothing:antialiased}
-*{box-sizing:border-box}`;
-  const bridge = `(function(){var n=0,p={};function call(t,x){return new Promise(function(res,rej){var id=++n;p[id]={res:res,rej:rej};parent.postMessage({__sable:true,id:id,type:t,payload:x},'*')})}
-window.sable={get:function(k){return call('get',{key:k})},set:function(k,v){return call('set',{key:k,value:v})},all:function(){return call('all')},ask:function(q){return call('ask',{prompt:q})}};
-addEventListener('message',function(e){var d=e.data;if(d&&d.__sableReply&&p[d.id]){var x=p[d.id];delete p[d.id];d.error?x.rej(new Error(d.error)):x.res(d.result)}});})();`;
-  const csp = "default-src 'none'; script-src 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src data: blob: https:; media-src data: blob:; connect-src 'none'; form-action 'none'";
-  const html = space.html.trim();
-  const head = `<meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${csp}"><meta name="viewport" content="width=device-width,initial-scale=1"><style>${theme}</style><script>${bridge}</script>`;
-  if (/<head[^>]*>/i.test(html)) return html.replace(/<head[^>]*>/i, (m) => m + head);
-  if (/<html[^>]*>/i.test(html)) return html.replace(/<html[^>]*>/i, (m) => `${m}<head>${head}</head>`);
-  return `<!doctype html><html><head>${head}</head><body>${html}</body></html>`;
-}
-
 export function SpaceView({ id }: { id: string }) {
   const [space, setSpace] = useState<Space | null>(null);
   const [nonce, setNonce] = useState(0);
@@ -136,7 +119,8 @@ export function SpaceView({ id }: { id: string }) {
     return () => window.removeEventListener('message', onMessage);
   }, [id]);
 
-  const doc = useMemo(() => (space ? buildDoc(space) : ''), [space?.html, space?.id, nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Served by the server with a sandbox CSP (opaque origin, no network); reloads when the space changes.
+  const src = space ? `/api/spaces/${space.id}/frame?theme=${resolvedTheme()}&v=${space.updated_at}-${nonce}` : '';
 
   if (!space)
     return (
@@ -187,7 +171,7 @@ export function SpaceView({ id }: { id: string }) {
         animate={{ opacity: 1 }}
         title={space.title}
         sandbox="allow-scripts allow-forms allow-modals allow-popups"
-        srcDoc={doc}
+        src={src}
         className="min-h-0 w-full flex-1 border-0 bg-bg"
       />
     </div>

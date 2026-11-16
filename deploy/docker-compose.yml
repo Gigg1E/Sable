@@ -1,0 +1,85 @@
+# Sable on your domain, for more than one person.
+#
+#   front.example.com  → Caddy (public, automatic HTTPS) → only a blank page + each person's webhooks
+#   each Sable app     → private: 127.0.0.1 ports, reached through Tailscale (see docs/hosting-securely.md)
+#
+#   cd deploy && cp .env.example .env && $EDITOR .env Caddyfile && docker compose up -d
+#
+# Every person gets their own container, data volume, password, 2FA, Shop account and API keys.
+# Nothing is shared between instances except the Ollama model server (which stores no chats).
+name: sable
+
+x-sable: &sable
+  build: ..
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  networks: [internal]
+  depends_on: [ollama]
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      FRONT_DOMAIN: ${FRONT_DOMAIN}
+      SLUG_A: ${SLUG_A}
+      SLUG_B: ${SLUG_B}
+      FRONT_TITLE: ${FRONT_TITLE}
+    networks: [internal]
+
+  sable-a:
+    <<: *sable
+    ports:
+      - "127.0.0.1:8787:8787" # private app for person A
+    volumes:
+      - sable-a:/data
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      SABLE_PUBLIC_PORT: "8788" # public front, only reachable through Caddy
+      SABLE_PUBLIC_URL: https://${FRONT_DOMAIN}/${SLUG_A}
+      SABLE_PUBLIC_TITLE: ${FRONT_TITLE}
+      TZ: ${TZ}
+
+  sable-b:
+    <<: *sable
+    ports:
+      - "127.0.0.1:8789:8787" # private app for person B
+    volumes:
+      - sable-b:/data
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      SABLE_PUBLIC_PORT: "8788"
+      SABLE_PUBLIC_URL: https://${FRONT_DOMAIN}/${SLUG_B}
+      SABLE_PUBLIC_TITLE: ${FRONT_TITLE}
+      TZ: ${TZ}
+
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama
+    networks: [internal]
+    # NVIDIA GPU:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
+
+networks:
+  internal:
+
+volumes:
+  caddy-data:
+  caddy-config:
+  sable-a:
+  sable-b:
+  ollama:

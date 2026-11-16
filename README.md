@@ -69,7 +69,9 @@ docker compose up -d                                      # Sable + Ollama
 docker compose exec ollama ollama pull qwen3:8b
 ```
 
-Data (database, workspace, keys) lives in the `sable-data` volume.
+Data (database, workspace, keys) lives in the `sable-data` volume. The container runs as an unprivileged user, and the port is bound to `127.0.0.1` only.
+
+**On your own domain, or for more than one person:** use [`deploy/`](deploy) and follow **[docs/hosting-securely.md](docs/hosting-securely.md)**. The public subdomain shows only a blank page plus each person's secret webhook paths. Each person's app stays private (Tailscale), with its own container, data, login and Shop account.
 
 ### Development
 
@@ -221,6 +223,9 @@ Most things are set in the UI. Environment variables:
 | `TZ` | system | Time zone for routines |
 | `SABLE_TRUST_PROXY` | private ranges | Express `trust proxy` setting, for HTTPS detection behind a proxy |
 | `SABLE_PUBLIC_URL` | | Public base URL used for webhook links (also settable in the UI) |
+| `SABLE_PUBLIC_PORT` | off | Port for the public front (blank page + `/hooks` only) |
+| `SABLE_PUBLIC_HOST` | `0.0.0.0` | Address the public front listens on |
+| `SABLE_PUBLIC_TITLE` | `Hello` | Text shown on the front's blank page |
 | `SABLE_AGENT_PROXY` | | HTTP(S) proxy for the agent's outbound web traffic (see [VPN routing](#routing-agent-traffic-through-a-vpn-docker)) |
 | `SABLE_VAPID_SUBJECT` | `mailto:sable-agent@example.com` | Contact for web push (VAPID) |
 
@@ -308,6 +313,8 @@ The browser receives live updates over Server-Sent Events (`/api/events`). Runs 
 
 ## Security notes
 
-- Sable is single-user. Protect it with a strong password, and prefer a private network (Tailscale/VPN) over exposing it to the internet.
+- Sable is single-user per instance. Protect it with a strong password and **two-factor authentication** (Settings → Security), and prefer a private network (Tailscale/VPN) over exposing it to the internet. To host for others, run one instance each ([docs/hosting-securely.md](docs/hosting-securely.md)).
+- Built in: TOTP 2FA with recovery codes, login rate limits, hashed session tokens with "sign out everywhere", per-instance cookie names (`__Host-` on HTTPS), cross-site request blocking (including sibling subdomains), a strict Content Security Policy, and agent-built spaces served sandboxed with no network access.
+- `SABLE_PUBLIC_PORT` starts an optional **public front** that serves only a blank page (`SABLE_PUBLIC_TITLE`) and `/hooks`. Expose that port instead of the app.
 - `run_script` executes code **on your server** as the Sable user, confined to the workspace directory, with a minimal environment and a timeout. It is not a container sandbox. Run Sable in Docker, or as an unprivileged user, if that matters to you, or set *Run script* to *Off*.
 - Connectors run with whatever access you give them.

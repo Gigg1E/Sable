@@ -3,13 +3,14 @@ import { ArrowRight, Lock } from 'lucide-react';
 import { useState } from 'react';
 import { Logo } from '../components/Logo';
 import { Button, Input } from '../components/ui';
-import { api } from '../lib/api';
 import { useStore } from '../lib/store';
 
 export function AuthScreen({ mode }: { mode: 'setup' | 'login' }) {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState('');
+  const [code, setCode] = useState('');
+  const [needCode, setNeedCode] = useState(false);
   const [busy, setBusy] = useState(false);
   const boot = useStore((s) => s.boot);
 
@@ -19,7 +20,16 @@ export function AuthScreen({ mode }: { mode: 'setup' | 'login' }) {
     if (mode === 'setup' && password !== confirm) return setError("Passwords don't match.");
     setBusy(true);
     try {
-      await api.post(mode === 'setup' ? '/auth/setup' : '/auth/login', { password });
+      const res = await fetch(`/api/${mode === 'setup' ? 'auth/setup' : 'auth/login'}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, ...(needCode ? { code } : {}) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.needCode) setNeedCode(true);
+        throw new Error(needCode || !data.needCode ? data.error : 'Enter the 6-digit code from your authenticator app.');
+      }
       await boot();
     } catch (err) {
       setError((err as Error).message);
@@ -40,6 +50,17 @@ export function AuthScreen({ mode }: { mode: 'setup' | 'login' }) {
         <form onSubmit={submit} className="mt-6 space-y-2.5">
           <Input type="password" autoFocus autoComplete={mode === 'setup' ? 'new-password' : 'current-password'} placeholder={mode === 'setup' ? 'Password (8+ characters)' : 'Password'} value={password} onChange={(e) => setPassword(e.target.value)} className="h-9" />
           {mode === 'setup' && <Input type="password" autoComplete="new-password" placeholder="Confirm password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="h-9" />}
+          {needCode && (
+            <Input
+              autoFocus
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              placeholder="6-digit code (or a recovery code)"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className="h-9 font-mono tracking-widest"
+            />
+          )}
           {error && (
             <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1, x: [0, -4, 4, -2, 0] }} className="text-[13px] text-danger">
               {error}

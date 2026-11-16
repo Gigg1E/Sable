@@ -1,16 +1,20 @@
+# Single private Sable + Ollama. For a public domain (and several people), see deploy/.
 services:
   sable:
     build: .
     restart: unless-stopped
     ports:
-      - "8787:8787"
+      # Private app: only reachable from this machine. Reach it remotely with Tailscale
+      # (`tailscale serve --bg 8787`) or an authenticated reverse proxy, never by opening this port.
+      - "127.0.0.1:8787:8787"
     volumes:
       - sable-data:/data
     environment:
       OLLAMA_HOST: http://ollama:11434
       # SABLE_MODEL: qwen3:8b
-      # ANTHROPIC_API_KEY: sk-ant-...   (or add keys later in Settings → Models)
       # TZ: Europe/Lisbon               (schedules use the server's time zone)
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - ollama
 
@@ -21,11 +25,6 @@ services:
     restart: unless-stopped
     volumes:
       - ollama:/root/.ollama
-    # For an NVIDIA GPU:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices: [{ driver: nvidia, count: all, capabilities: [gpu] }]
 
 volumes:
   sable-data:
