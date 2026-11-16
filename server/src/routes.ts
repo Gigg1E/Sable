@@ -10,6 +10,7 @@ import {
 import { all, get, run } from './db.js';
 import { emit, sseHandler } from './events.js';
 import { providerFor } from './llm/index.js';
+import { pullOllamaModel } from './llm/pull.js';
 import { notify, removeSubscription, saveSubscription, vapidPublicKey } from './push.js';
 import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type ProviderConfig, type Settings } from './settings.js';
@@ -342,6 +343,18 @@ export function apiRouter() {
       } catch (err) {
         return { ok: false, error: errorMessage(err), models: [] };
       }
+    }),
+  );
+  r.post(
+    '/providers/:id/pull',
+    h((req) => {
+      const cfg = getSettings().providers.find((p) => p.id === param(req, 'id'));
+      if (!cfg) throw new HttpError(404, 'Unknown provider');
+      if (cfg.type !== 'ollama') throw new HttpError(400, 'Only Ollama can download models.');
+      const model = String(req.body?.model ?? '').trim();
+      if (!/^[\w.\-/:]+$/.test(model)) throw new HttpError(400, 'Invalid model name');
+      pullOllamaModel(cfg, model);
+      return { ok: true };
     }),
   );
   r.get(

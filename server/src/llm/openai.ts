@@ -41,6 +41,7 @@ export function openaiProvider(cfg: ProviderConfig): LlmProvider {
           ? { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) }
           : {}),
         ...(cfg.type === 'openai' && req.effort ? { reasoning_effort: req.effort === 'xhigh' || req.effort === 'max' ? 'high' : req.effort } : {}),
+        ...(req.temperature != null ? { temperature: req.temperature } : {}),
         stream: true,
       }),
     });

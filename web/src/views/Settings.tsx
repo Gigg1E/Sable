@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Bell, Bot, CheckCircle2, Cpu, Plug, Plus, RefreshCw, Shield, Trash2, User, XCircle } from 'lucide-react';
+import { Bell, Bot, CheckCircle2, Cpu, Download, Plug, Plus, RefreshCw, Shield, Trash2, User, XCircle } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Field, Input, PageHeader, Segmented, Select, Spinner, Textarea, Toggle } from '../components/ui';
+import { AGENT_TEMPLATES } from '../lib/agentTemplates';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
 import { disablePush, enablePush, pushState } from '../lib/push';
@@ -45,19 +46,67 @@ function fetchModels(providerId: string, refresh = false) {
   return modelCache.get(providerId)!;
 }
 
+const sameModel = (a: string, b: string) => a === b || a === `${b}:latest` || b === `${a}:latest`;
+
+interface PullState {
+  status: string;
+  completed?: number;
+  total?: number;
+  detail?: string;
+  error?: string;
+}
+
+/** Download button + progress for an Ollama model that isn't installed yet. */
+function OllamaPull({ providerId, model, onDone }: { providerId: string; model: string; onDone: () => void }) {
+  const [pull, setPull] = useState<PullState | null>(null);
+  useEffect(() => {
+    setPull(null);
+    return onServerEvent((ev) => {
+      if (ev.type !== 'model.pull' || ev.providerId !== providerId || ev.model !== model) return;
+      setPull(ev);
+      if (ev.status === 'success') onDone();
+    });
+  }, [providerId, model]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pct = pull?.total ? Math.round(((pull.completed ?? 0) / pull.total) * 100) : 0;
+  const busy = pull && pull.status !== 'error' && pull.status !== 'success';
+  return (
+    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-2 rounded-xl border border-warn/25 bg-warn/5 p-3">
+      <div className="flex items-center gap-3">
+        <div className="min-w-0 flex-1 text-xs">
+          <span className="font-medium text-warn">{model}</span> <span className="text-muted">isn't installed in Ollama yet.</span>
+          {pull?.status === 'error' && <div className="mt-0.5 text-danger">{pull.error}</div>}
+          {busy && <div className="mt-0.5 truncate text-subtle">{pull.detail ?? 'Starting…'}{pull.total ? ` · ${pct}%` : ''}</div>}
+        </div>
+        <Button size="sm" loading={!!busy} disabled={!!busy} onClick={() => void api.post(`/providers/${providerId}/pull`, { model }).catch((e) => setPull({ status: 'error', error: (e as Error).message }))}>
+          {!busy && <Download className="size-3.5" />} {busy ? 'Downloading' : 'Download'}
+        </Button>
+      </div>
+      {busy && (
+        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
+          <motion.div className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2" animate={{ width: `${pct}%` }} transition={{ type: 'spring', stiffness: 60, damping: 18 }} />
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
 function ModelPicker({ providerId, value, onChange, placeholder }: { providerId: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   const [models, setModels] = useState<string[]>([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const providerType = useStore((s) => s.settings?.providers.find((p) => p.id === providerId)?.type);
   const load = (refresh = false) => {
     setLoading(true);
     void fetchModels(providerId, refresh).then((r) => {
       setModels(r.models);
       setError(r.ok ? '' : (r.error ?? ''));
       setLoading(false);
+      setLoaded(r.ok);
     });
   };
   useEffect(() => load(), [providerId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const missing = providerType === 'ollama' && loaded && value.trim() !== '' && !models.some((m) => sameModel(m, value.trim()));
   const listId = `models-${providerId}`;
   return (
     <div>
@@ -82,7 +131,24 @@ function ModelPicker({ providerId, value, onChange, placeholder }: { providerId:
         </div>
       )}
       {error && <p className="mt-1.5 text-xs text-danger">{error}</p>}
+      {missing && <OllamaPull providerId={providerId} model={value.trim()} onDone={() => load(true)} />}
     </div>
+  );
+}
+
+/** Temperature + context window, mostly useful for local models. */
+function Tuning({ temperature, contextLength, onChange, showContext }: { temperature?: number | null; contextLength?: number | null; onChange: (t: { temperature?: number | null; contextLength?: number | null }) => void; showContext: boolean }) {
+  return (
+    <>
+      <Field label="Temperature" hint="Lower is more precise (coding), higher more creative (writing). Empty = model default.">
+        <Input type="number" step="0.1" min={0} max={2} value={temperature ?? ''} placeholder="default" onChange={(e) => onChange({ temperature: e.target.value === '' ? null : Number(e.target.value) })} />
+      </Field>
+      {showContext && (
+        <Field label="Context window (tokens)" hint="Ollama's num_ctx. Agents need room for tools and history; 16k–32k is a good start if your GPU allows.">
+          <Input type="number" step="1024" min={2048} value={contextLength ?? ''} placeholder="model default" onChange={(e) => onChange({ contextLength: e.target.value === '' ? null : Number(e.target.value) })} />
+        </Field>
+      )}
+    </>
   );
 }
 
@@ -248,6 +314,11 @@ function ModelsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
             <Input type="number" min={4} max={1000} value={draft.main.contextMessages} onChange={(e) => edit((d) => void (d.main.contextMessages = Number(e.target.value)))} />
           </Field>
         </div>
+        {mainProvider?.type !== 'anthropic' && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Tuning temperature={draft.main.temperature} contextLength={draft.main.contextLength} showContext={mainProvider?.type === 'ollama'} onChange={(t) => edit((d) => void Object.assign(d.main, t))} />
+          </div>
+        )}
       </Section>
 
       <Section title="Model providers" description="Local servers and cloud APIs Sable can use. Add as many as you like.">
@@ -299,7 +370,7 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
           const set = (fn: (x: AgentProfile) => void) => edit((d) => fn(d.subagents[i]));
           return (
             <motion.div key={i} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}>
-              <Card className={cx('p-4 transition-opacity', !a.enabled && 'opacity-60')}>
+              <Card data-agent-card className={cx('p-4 transition-opacity', !a.enabled && 'opacity-60')}>
                 <div className="flex items-center gap-3">
                   <div className="flex size-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
                     <Bot className="size-4.5" />
@@ -361,6 +432,11 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
                       </Select>
                     </Field>
                   </div>
+                  {draft.providers.find((p) => p.id === a.providerId)?.type !== 'anthropic' && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Tuning temperature={a.temperature} contextLength={a.contextLength} showContext={draft.providers.find((p) => p.id === a.providerId)?.type === 'ollama'} onChange={(t) => set((x) => void Object.assign(x, t))} />
+                    </div>
+                  )}
                   <Field label="Extra instructions (optional)">
                     <Textarea className="!min-h-14" value={a.systemPrompt ?? ''} onChange={(e) => set((x) => void (x.systemPrompt = e.target.value))} />
                   </Field>
@@ -370,7 +446,44 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
           );
         })}
       </AnimatePresence>
+      <div className="pt-2">
+        <h3 className="text-sm font-semibold">Add a local specialist</h3>
+        <p className="mt-0.5 text-xs text-muted">Purpose-built presets that run on Ollama, each with a model suggested for its job. Change anything after adding; a missing model can be downloaded from the card.</p>
+        <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {AGENT_TEMPLATES.map((t, i) => (
+            <motion.button
+              key={t.id}
+              type="button"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0, transition: { delay: i * 0.03 } }}
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => {
+                edit((d) => {
+                  const ollama = d.providers.find((p) => p.type === 'ollama');
+                  let aid = t.id;
+                  let n = 2;
+                  while (d.subagents.some((s) => s.id === aid)) aid = `${t.id}-${n++}`;
+                  d.subagents.push({ ...structuredClone(t.profile), id: aid, providerId: ollama?.id ?? d.main.providerId, model: t.model, enabled: true });
+                });
+                setTimeout(() => [...document.querySelectorAll('[data-agent-card]')].pop()?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
+              }}
+              className="group flex items-start gap-3 rounded-2xl border border-line bg-surface p-3.5 text-left transition-colors hover:border-accent/40"
+            >
+              <span className="text-2xl leading-none">{t.emoji}</span>
+              <span className="min-w-0">
+                <span className="flex items-center gap-1.5 text-sm font-medium">
+                  {t.name} <Plus className="size-3.5 text-subtle transition-colors group-hover:text-accent" />
+                </span>
+                <span className="mt-0.5 block text-xs text-muted">{t.blurb}</span>
+                <code className="mt-1.5 block truncate text-[11px] text-accent">{t.model}</code>
+              </span>
+            </motion.button>
+          ))}
+        </div>
+      </div>
       <Button
+        variant="ghost"
         onClick={() =>
           edit((d) => {
             let aid = 'helper';
@@ -380,7 +493,7 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
           })
         }
       >
-        <Plus className="size-4" /> Add sub-agent
+        <Plus className="size-4" /> Blank sub-agent
       </Button>
     </Section>
   );

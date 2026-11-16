@@ -19,6 +19,8 @@ export interface AgentProfile {
   enabled: boolean;
   maxSteps?: number;
   effort?: Effort;
+  temperature?: number | null;
+  contextLength?: number | null;
 }
 export interface McpServerConfig {
   id: string;
@@ -34,7 +36,7 @@ export interface McpServerConfig {
 export interface Settings {
   persona: { name: string; style: string; about: string };
   providers: ProviderConfig[];
-  main: { providerId: string; model: string; maxSteps: number; contextMessages: number; effort: Effort };
+  main: { providerId: string; model: string; maxSteps: number; contextMessages: number; effort: Effort; temperature?: number | null; contextLength?: number | null };
   subagents: AgentProfile[];
   policies: Record<string, Policy>;
   allowedDomains: string[];

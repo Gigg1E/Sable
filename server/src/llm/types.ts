@@ -46,6 +46,9 @@ export interface ChatRequest {
   tools: ToolSpec[];
   signal?: AbortSignal;
   effort?: string;
+  temperature?: number | null;
+  /** Context window to request from local servers that support it (Ollama num_ctx). */
+  contextLength?: number | null;
   /** True when older history was dropped to fit the context budget. */
   historyTrimmed?: boolean;
 }

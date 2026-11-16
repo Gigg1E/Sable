@@ -22,6 +22,10 @@ export interface AgentProfile {
   enabled: boolean;
   maxSteps?: number;
   effort?: Effort;
+  /** Sampling temperature (local / OpenAI-compatible models). Empty = model default. */
+  temperature?: number | null;
+  /** Ollama context window (num_ctx). Empty = model default. */
+  contextLength?: number | null;
 }
 
 export type Effort = '' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -42,7 +46,7 @@ export interface McpServerConfig {
 export interface Settings {
   persona: { name: string; style: string; about: string };
   providers: ProviderConfig[];
-  main: { providerId: string; model: string; maxSteps: number; contextMessages: number; effort: Effort };
+  main: { providerId: string; model: string; maxSteps: number; contextMessages: number; effort: Effort; temperature?: number | null; contextLength?: number | null };
   subagents: AgentProfile[];
   /** Per-tool approval policy. Tools not listed fall back to their own default. */
   policies: Record<string, Policy>;
@@ -75,6 +79,8 @@ export function defaultSettings(): Settings {
       maxSteps: 24,
       contextMessages: 80,
       effort: '',
+      temperature: null,
+      contextLength: null,
     },
     subagents: [
       {

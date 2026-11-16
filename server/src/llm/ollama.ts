@@ -31,6 +31,9 @@ export function ollamaProvider(cfg: ProviderConfig): LlmProvider {
           ? { tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })) }
           : {}),
         stream: true,
+        ...(req.temperature != null || req.contextLength
+          ? { options: { ...(req.temperature != null ? { temperature: req.temperature } : {}), ...(req.contextLength ? { num_ctx: req.contextLength } : {}) } }
+          : {}),
       }),
     });
     if (!res.ok || !res.body) {

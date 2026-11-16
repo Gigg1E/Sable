@@ -130,6 +130,8 @@ interface LoopOptions {
   providerId: string;
   model: string;
   effort?: Effort;
+  temperature?: number | null;
+  contextLength?: number | null;
   system: string;
   messages: ChatMessage[];
   historyTrimmed?: boolean;
@@ -163,6 +165,8 @@ async function agentLoop(o: LoopOptions): Promise<string> {
       tools: toolSpecs,
       signal: o.signal,
       effort: o.effort || undefined,
+      temperature: o.temperature,
+      contextLength: o.contextLength,
       historyTrimmed: o.historyTrimmed,
     })) {
       if (part.type === 'text') {
@@ -341,6 +345,8 @@ registerTool({
       providerId: profile.providerId,
       model,
       effort: profile.effort,
+      temperature: profile.temperature,
+      contextLength: profile.contextLength,
       system: subagentSystemPrompt(profile),
       messages: [{ role: 'user', content: String(a.task) }],
       tools,
@@ -415,6 +421,8 @@ async function execute(runId: string, conversationId: string, controller: AbortC
       providerId: s.main.providerId,
       model,
       effort: s.main.effort,
+      temperature: s.main.temperature,
+      contextLength: s.main.contextLength,
       system: mainSystemPrompt(),
       messages: history.messages,
       historyTrimmed: history.trimmed,

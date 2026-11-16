@@ -100,6 +100,23 @@ Most things are set in the UI. Environment variables:
 | `SABLE_TRUST_PROXY` | private ranges | Express `trust proxy` setting, for HTTPS detection behind a proxy |
 | `SABLE_VAPID_SUBJECT` | `mailto:sable-agent@example.com` | Contact for web push (VAPID) |
 
+### Local specialists (all on Ollama)
+
+**Settings → Sub-agents → Add a local specialist** adds a purpose-built agent, each with a suggested local model, a matching toolset, a temperature and a context size:
+
+| Specialist | Suggested model | Tools | Temp |
+|---|---|---|---|
+| 💻 Coder | `qwen2.5-coder:7b` | files, scripts | 0.2 |
+| 🔎 Researcher | `qwen3:8b` | web search, fetch, memory | 0.3 |
+| ✍️ Writer | `llama3.1:8b` | memory, files | 0.7 |
+| 📊 Analyst | `qwen3:14b` | files, scripts | 0.2 |
+| 🗺️ Planner | `qwen3:8b` | goals, routines, search | 0.4 |
+| ⚡ Summarizer | `llama3.2:3b` | fetch, files | 0.2 |
+
+If the model isn't installed yet, a **Download** button on the card pulls it through Ollama and shows progress. Every field is editable, including the provider, model, tools, *temperature*, *context window* (Ollama `num_ctx`) and instructions. The main agent reads each specialist's "when to use it" description to decide whom to delegate to.
+
+> Ollama loads models on demand. With several specialists on one GPU, set `OLLAMA_MAX_LOADED_MODELS` / `OLLAMA_KEEP_ALIVE` on the Ollama side to control swapping.
+
 ### Example: local main agent + Claude for scripting
 
 1. **Settings → Models**: set the main agent to *Ollama · qwen3:8b*, and paste your Anthropic key into the *Claude* provider.
