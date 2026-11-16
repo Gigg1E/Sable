@@ -55,6 +55,27 @@ CREATE TABLE IF NOT EXISTS schedules (
   next_run INTEGER, last_run INTEGER, enabled INTEGER NOT NULL DEFAULT 1, conversation_id TEXT,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS watchers (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL, extract TEXT NOT NULL, condition TEXT NOT NULL,
+  actions TEXT NOT NULL, interval_min INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,
+  last_value TEXT, last_numeric REAL, last_checked INTEGER, last_changed INTEGER, last_triggered INTEGER,
+  last_error TEXT, fail_count INTEGER NOT NULL DEFAULT 0, next_check INTEGER, conversation_id TEXT, created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS watch_history (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, watcher_id TEXT NOT NULL REFERENCES watchers(id) ON DELETE CASCADE,
+  ts INTEGER NOT NULL, value TEXT, numeric REAL, triggered INTEGER NOT NULL DEFAULT 0, error TEXT
+);
+CREATE INDEX IF NOT EXISTS watch_history_w ON watch_history(watcher_id, ts);
+CREATE TABLE IF NOT EXISTS hooks (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, token TEXT NOT NULL, verify TEXT NOT NULL DEFAULT 'none', secret TEXT,
+  action TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1, last_received INTEGER, count INTEGER NOT NULL DEFAULT 0,
+  conversation_id TEXT, created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hook_events (
+  id TEXT PRIMARY KEY, hook_id TEXT NOT NULL REFERENCES hooks(id) ON DELETE CASCADE, ts INTEGER NOT NULL,
+  method TEXT, headers TEXT, body TEXT, delivery_id TEXT, status TEXT NOT NULL, detail TEXT
+);
+CREATE INDEX IF NOT EXISTS hook_events_h ON hook_events(hook_id, ts);
 CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, sub TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT, link TEXT, kind TEXT,

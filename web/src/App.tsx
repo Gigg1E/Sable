@@ -13,12 +13,16 @@ import { InboxView } from './views/Inbox';
 import { MemoryView } from './views/Memory';
 import { SettingsView } from './views/Settings';
 import { SpaceView, SpacesList } from './views/Spaces';
+import { WatchersView } from './views/Watchers';
+import { WebhooksView } from './views/Webhooks';
 
 function Routes() {
   const path = usePath();
   let m: Record<string, string> | null;
   if ((m = match('/chat/:id', path))) return { key: `chat-${m.id}`, el: <ChatView id={m.id} /> };
   if (path === '/goals') return { key: 'goals', el: <GoalsView /> };
+  if (path === '/watchers') return { key: 'watchers', el: <WatchersView /> };
+  if (path === '/webhooks') return { key: 'webhooks', el: <WebhooksView /> };
   if (path === '/routines') return { key: 'routines', el: <RoutinesView /> };
   if (path === '/spaces') return { key: 'spaces', el: <SpacesList /> };
   if ((m = match('/spaces/:id', path))) return { key: `space-${m.id}`, el: <SpaceView id={m.id} /> };

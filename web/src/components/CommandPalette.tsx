@@ -1,6 +1,6 @@
 import { Command } from 'cmdk';
 import { AnimatePresence, motion } from 'motion/react';
-import { Activity, Brain, CalendarClock, Home, Inbox, LayoutGrid, ListChecks, LogOut, MessageSquare, Moon, Plus, Search, Settings, Sun, SunMoon } from 'lucide-react';
+import { Activity, Brain, CalendarClock, Home, Inbox, LayoutGrid, ListChecks, LogOut, MessageSquare, Moon, Plus, Radar, Search, Settings, Sun, SunMoon, Webhook } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
@@ -23,6 +23,8 @@ export function CommandPalette({ open, onClose, onSignOut }: { open: boolean; on
     { label: 'Inbox', to: '/inbox', icon: Inbox },
     { label: 'Goals', to: '/goals', icon: ListChecks },
     { label: 'Routines', to: '/routines', icon: CalendarClock },
+    { label: 'Watchers', to: '/watchers', icon: Radar },
+    { label: 'Webhooks', to: '/webhooks', icon: Webhook },
     { label: 'Spaces', to: '/spaces', icon: LayoutGrid },
     { label: 'Memory', to: '/memory', icon: Brain },
     { label: 'Activity', to: '/activity', icon: Activity },
@@ -33,6 +35,7 @@ export function CommandPalette({ open, onClose, onSignOut }: { open: boolean; on
     ['Sub-agents', 'agents'],
     ['Permissions', 'permissions'],
     ['Connectors', 'connectors'],
+    ['Network', 'network'],
     ['Notifications', 'notifications'],
   ];
 

@@ -43,6 +43,18 @@ export interface McpServerConfig {
   headers?: Record<string, string>;
 }
 
+export interface Channel {
+  id: string;
+  name: string;
+  type: 'ntfy' | 'discord' | 'slack' | 'webhook';
+  url: string;
+  /** ntfy access token, or a bearer token for generic webhooks. */
+  token?: string;
+  enabled: boolean;
+  /** Which notifications go to this channel. */
+  events: 'all' | 'important';
+}
+
 export interface Settings {
   persona: { name: string; style: string; about: string };
   providers: ProviderConfig[];
@@ -56,6 +68,10 @@ export interface Settings {
   scripts: { enabled: boolean; timeoutSec: number; python: string; node: string; bash: string };
   mcpServers: McpServerConfig[];
   anthropic: { serverFallbacks: boolean };
+  /** Outbound notification channels (ntfy, Discord, Slack, generic webhooks). */
+  channels: Channel[];
+  /** Public base URL of this Sable server, used to build inbound webhook URLs. */
+  publicUrl: string;
 }
 
 const env = process.env;
@@ -113,6 +129,8 @@ export function defaultSettings(): Settings {
     scripts: { enabled: true, timeoutSec: 60, python: 'python3', node: 'node', bash: 'bash' },
     mcpServers: [],
     anthropic: { serverFallbacks: true },
+    channels: [],
+    publicUrl: env.SABLE_PUBLIC_URL ?? '',
   };
 }
 
@@ -137,10 +155,27 @@ function merge(defaults: Settings, stored: Partial<Settings>): Settings {
 
 const MASK = '••••••••';
 
+/** Webhook URLs embed their secret (Discord/Slack), so only show the host. */
+function maskUrl(url: string): string {
+  if (!url) return '';
+  try {
+    const u = new URL(url);
+    if (u.pathname.length <= 1 && !u.search) return url;
+    // ntfy topics are the secret; Discord/Slack paths contain tokens.
+    return `${u.protocol}//${u.host}/${MASK}`;
+  } catch {
+    return MASK;
+  }
+}
+
 /** Settings safe to send to the browser: API keys never leave the server. */
 export function publicSettings(): Settings {
   const s = structuredClone(getSettings());
   for (const p of s.providers) p.apiKey = p.apiKey ? MASK + p.apiKey.slice(-4) : '';
+  for (const c of s.channels ?? []) {
+    c.token = c.token ? MASK : '';
+    c.url = maskUrl(c.url);
+  }
   for (const m of s.mcpServers) {
     if (m.env) for (const k of Object.keys(m.env)) m.env[k] = m.env[k] ? MASK : '';
     if (m.headers) for (const k of Object.keys(m.headers)) m.headers[k] = m.headers[k] ? MASK : '';
@@ -153,6 +188,11 @@ export function updateSettings(next: Settings): Settings {
   const prev = getSettings();
   for (const p of next.providers ?? []) {
     if (p.apiKey?.startsWith(MASK)) p.apiKey = prev.providers.find((x) => x.id === p.id)?.apiKey ?? '';
+  }
+  for (const c of next.channels ?? []) {
+    const old = prev.channels.find((x) => x.id === c.id);
+    if (c.token === MASK) c.token = old?.token ?? '';
+    if (c.url?.includes(MASK)) c.url = old?.url ?? '';
   }
   for (const m of next.mcpServers ?? []) {
     const old = prev.mcpServers.find((x) => x.id === m.id);

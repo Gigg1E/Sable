@@ -165,7 +165,7 @@ function Section({ title, description, children }: { title: string; description?
 
 const TEMPLATE_ICONS = { code: Code2, search: Search, pen: PenLine, chart: BarChart3, map: MapIcon, zap: Zap };
 
-function NetworkSection() {
+function NetworkSection({ draft, edit }: { draft: Settings; edit: Edit }) {
   const [proxy, setProxy] = useState<string | null | undefined>(undefined);
   const [check, setCheck] = useState<{ ok: boolean; ip?: string; viaProxy?: boolean; error?: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -173,6 +173,12 @@ function NetworkSection() {
     void api.get<{ proxy: string | null }>('/network').then((r) => setProxy(r.proxy));
   }, []);
   return (
+    <>
+    <Section title="Public address" description="The URL people and services use to reach this server. Inbound webhook URLs and links in notifications are built from it.">
+      <Field label="Public URL" hint={draft.publicUrl ? undefined : `Not set. Using the address you last opened Sable from${location.hostname === 'localhost' ? ' (localhost won\u2019t work for outside services)' : `: ${location.origin}`}.`}>
+        <Input value={draft.publicUrl} placeholder={location.origin} onChange={(e) => edit((d) => void (d.publicUrl = e.target.value.trim()))} />
+      </Field>
+    </Section>
     <Section
       title="Outbound network"
       description="Where the agent's own internet traffic goes: web search, page reads, HTTP requests, scripts and local connectors. Model APIs and Ollama are not affected."
@@ -220,6 +226,7 @@ function NetworkSection() {
         </div>
       </Card>
     </Section>
+    </>
   );
 }
 
@@ -748,13 +755,107 @@ function ConnectorsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
   );
 }
 
-function NotificationsSection() {
+const CHANNEL_TYPES = [
+  { value: 'ntfy', label: 'ntfy', placeholder: 'https://ntfy.sh/your-secret-topic', hint: 'Free push app for iOS/Android, self-hostable. Use a hard-to-guess topic name.' },
+  { value: 'discord', label: 'Discord', placeholder: 'https://discord.com/api/webhooks/…', hint: 'Channel → Edit → Integrations → Webhooks → New webhook → Copy URL.' },
+  { value: 'slack', label: 'Slack', placeholder: 'https://hooks.slack.com/services/…', hint: 'Create an app with Incoming Webhooks enabled and copy the webhook URL.' },
+  { value: 'webhook', label: 'Generic webhook', placeholder: 'https://example.com/hooks/sable', hint: 'Receives JSON: { source, title, body, link, ts }. Optional bearer token.' },
+] as const;
+
+function ChannelsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
+  const [tests, setTests] = useState<Record<string, { ok: boolean; error?: string } | 'busy'>>({});
+  return (
+    <Section title="Channels" description="Send notifications to other apps as well as this device's push. Approvals, watcher alerts, webhooks and agent messages go to every enabled channel; choose “All” to include routine run summaries too.">
+      <AnimatePresence initial={false}>
+        {draft.channels.map((c, i) => {
+          const meta = CHANNEL_TYPES.find((t) => t.value === c.type)!;
+          const set = (fn: (x: (typeof draft.channels)[number]) => void) => edit((d) => fn(d.channels[i]));
+          const t = tests[c.id];
+          return (
+            <motion.div key={c.id} layout initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+              <Card className="p-4">
+                <div className="flex items-center gap-3">
+                  <Input className="!w-auto flex-1 !border-transparent !bg-transparent !px-0 !text-[14px] font-medium !shadow-none focus:!ring-0" value={c.name} onChange={(e) => set((x) => void (x.name = e.target.value))} />
+                  <Badge tone="outline">{meta.label}</Badge>
+                  <Toggle size="sm" checked={c.enabled} onChange={(v) => set((x) => void (x.enabled = v))} />
+                  <IconBtn onClick={() => edit((d) => void d.channels.splice(i, 1))} />
+                </div>
+                <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_160px]">
+                  <Field label="URL" hint={meta.hint}>
+                    <Input value={c.url} placeholder={meta.placeholder} onChange={(e) => set((x) => void (x.url = e.target.value))} />
+                  </Field>
+                  <Field label="Send">
+                    <Select value={c.events} onChange={(e) => set((x) => void (x.events = e.target.value as 'all' | 'important'))}>
+                      <option value="important">Important</option>
+                      <option value="all">All</option>
+                    </Select>
+                  </Field>
+                </div>
+                {(c.type === 'ntfy' || c.type === 'webhook') && (
+                  <div className="mt-3">
+                    <Field label="Access token (optional)">
+                      <Input type="password" autoComplete="off" value={c.token ?? ''} onChange={(e) => set((x) => void (x.token = e.target.value))} />
+                    </Field>
+                  </div>
+                )}
+                <div className="mt-3 flex items-center gap-3">
+                  <Button
+                    size="sm"
+                    loading={t === 'busy'}
+                    disabled={!c.url}
+                    onClick={async () => {
+                      setTests((x) => ({ ...x, [c.id]: 'busy' }));
+                      const r = await api.post<{ ok: boolean; error?: string }>('/channels/test', c);
+                      setTests((x) => ({ ...x, [c.id]: r }));
+                    }}
+                  >
+                    Send test
+                  </Button>
+                  {t && t !== 'busy' && <span className={cx('text-xs', t.ok ? 'text-ok' : 'text-danger')}>{t.ok ? 'Delivered' : t.error}</span>}
+                </div>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </AnimatePresence>
+      <div className="flex flex-wrap gap-1.5">
+        {CHANNEL_TYPES.map((t) => (
+          <Button
+            key={t.value}
+            size="sm"
+            onClick={() =>
+              edit((d) => {
+                let cid = t.value as string;
+                let n = 2;
+                while (d.channels.some((c) => c.id === cid)) cid = `${t.value}-${n++}`;
+                d.channels.push({ id: cid, name: t.label, type: t.value, url: '', enabled: true, events: 'important' });
+              })
+            }
+          >
+            <Plus className="size-3.5" /> {t.label}
+          </Button>
+        ))}
+      </div>
+    </Section>
+  );
+}
+
+function IconBtn({ onClick }: { onClick: () => void }) {
+  return (
+    <button onClick={onClick} aria-label="Remove" className="inline-flex size-7 items-center justify-center rounded-md text-fg-3 hover:bg-panel-2 hover:text-danger">
+      <Trash2 className="size-3.5" />
+    </button>
+  );
+}
+
+function NotificationsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
   const [state, setState] = useState<string>('…');
   const [busy, setBusy] = useState(false);
   const toast = useStore((s) => s.toast);
   const refresh = () => void pushState().then(setState);
   useEffect(refresh, []);
   return (
+    <>
     <Section title="Push notifications" description="Get notified on this device when Sable needs your approval or finishes background work.">
       <Card className="p-4">
         {state === 'insecure' && (
@@ -794,6 +895,8 @@ function NotificationsSection() {
         )}
       </Card>
     </Section>
+    <ChannelsSection draft={draft} edit={edit} />
+    </>
   );
 }
 
@@ -873,8 +976,8 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'agents' && <AgentsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'permissions' && <PermissionsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'connectors' && <ConnectorsSection draft={draft} edit={edit} />}
-                {active === 'network' && <NetworkSection />}
-                {active === 'notifications' && <NotificationsSection />}
+                {active === 'network' && <NetworkSection draft={draft} edit={edit} />}
+                {active === 'notifications' && <NotificationsSection draft={draft} edit={edit} />}
               </motion.div>
             </AnimatePresence>
           </div>

@@ -33,6 +33,8 @@ ${s.persona.about ? `\n## About the user (written by them)\n${s.persona.about}\n
 - Memory: when you learn a lasting fact or preference that will matter later, save it with memory_save. Don't save trivia or secrets. Use memory_forget when asked to forget something.
 - Spaces: when the user wants a tracker, dashboard, planner, checklist or board, build a Space (space_create) as a polished, responsive mini-app, and update it later with space_update.
 - Background work: use schedule_create for anything recurring or later ("every morning", "remind me Friday"). Scheduled runs happen while the user is away, so use notify to tell them the result.
+- Watching for changes ("watch this price", "tell me when it's back in stock", "alert me if this page changes"): prefer a watcher over a schedule. Find the right page, test the extraction with watch_test (kind "price" for shop product pages, "json" for APIs, "selector"/"regex" for specific elements, "text" for any change, "ai" only as a last resort), then watch_create with a fitting condition and a polite interval. For "the best price across shops", create one watcher per shop.
+- When another service should be able to notify the user or wake you ("ping me when my GitHub build fails", "when Home Assistant sees motion"), create an inbound webhook with webhook_create and explain where to paste the URL.
 - Workspace: you have a private folder on the server for files (file_*) and can run scripts (run_script).
 ${subagents.length ? `- Sub-agents: hand off a self-contained job with delegate when a specialist suits it better:\n${subagents.map((a) => `  - ${a.id}: ${a.name}. ${a.description}`).join('\n')}\n  Give them every detail they need; they can't see this conversation.` : ''}
 

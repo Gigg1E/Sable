@@ -10,6 +10,8 @@ import { reloadMcp } from './agent/tools/mcp.js';
 import { DATA_DIR, HOST, PORT, WEB_DIST } from './config.js';
 import { initPush } from './push.js';
 import { apiRouter } from './routes.js';
+import { hooksRouter } from './agent/hooks.js';
+import { startWatchers } from './agent/watchers.js';
 import { startScheduler } from './scheduler.js';
 import { proxyLabel } from './net.js';
 import { getSettings } from './settings.js';
@@ -30,6 +32,7 @@ app.use((_req, res, next) => {
   next();
 });
 
+app.use('/hooks', hooksRouter());
 app.use('/api', apiRouter());
 
 if (fs.existsSync(WEB_DIST)) {
@@ -42,7 +45,7 @@ if (fs.existsSync(WEB_DIST)) {
       },
     }),
   );
-  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(WEB_DIST, 'index.html')));
+  app.get(/^(?!\/(api|hooks)\/).*/, (_req, res) => res.sendFile(path.join(WEB_DIST, 'index.html')));
 } else {
   app.get('/', (_req, res) => res.type('text').send('Sable API is running. Build the web app with `npm run build`, or use `npm run dev` for the dev server.'));
 }
@@ -53,4 +56,5 @@ app.listen(PORT, HOST, () => {
   console.log(`  Agent web traffic: ${proxyLabel() ? `via proxy ${proxyLabel()}` : 'direct'}\n`);
   void reloadMcp();
   startScheduler();
+  startWatchers();
 });

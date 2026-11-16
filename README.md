@@ -21,6 +21,7 @@ The web app installs on phones and desktops (PWA), with push notifications for a
 | | |
 |---|---|
 | **Chat with goals** | Describe an outcome. The agent makes a plan (a *goal* with steps), works through it with tools, and reports back. Responses stream live, with collapsible reasoning and expandable tool steps. |
+| **Watchers & webhooks** | Track prices, restocks, pages or APIs on a schedule without spending model calls, and get one alert when your condition is met. Inbound webhook URLs let GitHub, Home Assistant and others notify you or wake the agent. Alerts can also go to ntfy, Discord or Slack. |
 | **Background work** | Runs live on the server, not in your browser tab. Close the app and the work continues. **Routines** run on a schedule (once, every N minutes, daily, weekly). |
 | **Approvals (the Sentinel)** | Every tool call goes through a policy check: *Auto*, *Ask* or *Off*, per tool. Web access is approved per domain ("Always allow example.com"). Approvals show up in the chat, in the Inbox and as push notifications. |
 | **Activity log** | A complete, searchable record of every action each agent took, approved, or was blocked from taking. |
@@ -75,6 +76,62 @@ Data (database, workspace, keys) lives in the `sable-data` volume.
 ```bash
 npm run dev          # API on :8787 (auto-reload) + Vite on :5173 with HTTP proxying
 ```
+
+## Watchers, webhooks and notification channels
+
+### Watchers: “tell me when this changes”
+
+Ask in chat, e.g. *“Watch this product and tell me if it drops under $200”*, *“Let me know when the PS6 is back in stock at Best Buy”*, *“Alert me if this status page changes”*. The agent finds the page and checks it can read the value (`watch_test`), then creates a **watcher** (`watch_create`). You can also build one by hand under **Watchers → New watcher**, with a live *Test extraction* button.
+
+Watchers run on the server and **don't use the model on each check**. Every check fetches the page through the agent's network path (so the VPN applies), extracts one value, and compares it with the last one:
+
+| Reads | How |
+|---|---|
+| **Product price** | The structured data shops publish for search engines: schema.org `Product`/`Offer` JSON-LD (including `@graph` and variants), OpenGraph `product:price:*`, and microdata `itemprop="price"`. Also reports stock status. Works on most product pages with no setup. |
+| **CSS selector** | Text or an attribute of the first matching element |
+| **JSON path** | e.g. `data.items[0].price` for APIs |
+| **Pattern** | Regex; the first capture group is the value |
+| **Page text** | Whole page or a selector, for any change |
+| **AI extraction** | The main model reads the page with your instruction. A last resort, since it costs a model call per check. |
+
+Conditions are **edge-triggered**, so you get one alert when the condition becomes true, not one every hour while it stays true. They are: *changes*, *drops below* / *rises above* a value, *falls* / *rises by N %*, *contains* / *stops containing* text. When one fires, Sable can push a notification, POST JSON to a webhook of yours (`{ watcher, previous, current, numeric, reason, ts }`), and/or wake the agent with an instruction such as *“check two other shops and tell me if this is the best price”*. Price history is kept and charted. Failing pages back off exponentially, and you get one alert after three failures in a row.
+
+### Inbound webhooks: “wake me when something happens elsewhere”
+
+**Webhooks → New webhook** (or ask: *“ping me when my GitHub build fails”*) creates a private URL:
+
+```
+https://your-sable.example.com/hooks/<id>/<256-bit token>
+```
+
+Any service can `POST` JSON, form data or text to it, or simply `GET` it with query parameters. Each call can:
+- push a notification, with an optional title template like `Build {{body.workflow_run.conclusion}}: {{body.repository.name}}`
+- wake the agent with your instruction. The payload is attached as untrusted data, and sensitive actions still need your approval.
+
+Security: the token is compared in constant time. Optional **HMAC-SHA256 signatures** are checked over the raw body: GitHub's `X-Hub-Signature-256`, or a generic `X-Signature-256: sha256=<hex>`. Duplicate deliveries (`X-GitHub-Delivery`, `Idempotency-Key`) are ignored. Bodies are capped at 256 KB and each hook allows 60 calls a minute. Unknown hooks and wrong tokens get the same 404. Every delivery is logged, rejected ones included, and you can rotate a URL at any time.
+
+```bash
+curl -X POST 'https://your-sable.example.com/hooks/h_…/…' \
+  -H 'Content-Type: application/json' \
+  -d '{"message": "Nightly backup finished", "status": "ok"}'
+```
+
+**Exposing only webhooks to the internet.** If Sable itself is private (Tailscale/VPN), publish just `/hooks/*`. With Caddy:
+
+```
+hooks.example.com {
+    handle /hooks/* {
+        reverse_proxy localhost:8787
+    }
+    respond 404
+}
+```
+
+Then set **Settings → Network → Public URL** to `https://hooks.example.com` so the URLs Sable shows use it. With Tailscale you can use `tailscale funnel --set-path /hooks 8787`. If you don't set a Public URL, Sable uses the address you last opened it from.
+
+### Notification channels
+
+**Settings → Notifications → Channels** sends alerts to **ntfy** (free push app, self-hostable), **Discord**, **Slack** or any **generic webhook** (JSON `{ source, title, body, link, ts }`), alongside browser push. Each channel can receive just the important events (approvals, watcher alerts, webhooks, agent messages) or everything. Channel URLs contain secrets, so they're masked in the UI.
 
 ## Routing agent traffic through a VPN (Docker)
 
@@ -163,6 +220,7 @@ Most things are set in the UI. Environment variables:
 | `SEARXNG_URL` | | Use your SearXNG for web search |
 | `TZ` | system | Time zone for routines |
 | `SABLE_TRUST_PROXY` | private ranges | Express `trust proxy` setting, for HTTPS detection behind a proxy |
+| `SABLE_PUBLIC_URL` | | Public base URL used for webhook links (also settable in the UI) |
 | `SABLE_AGENT_PROXY` | | HTTP(S) proxy for the agent's outbound web traffic (see [VPN routing](#routing-agent-traffic-through-a-vpn-docker)) |
 | `SABLE_VAPID_SUBJECT` | `mailto:sable-agent@example.com` | Contact for web push (VAPID) |
 

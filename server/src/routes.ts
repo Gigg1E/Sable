@@ -12,7 +12,11 @@ import { emit, sseHandler } from './events.js';
 import { providerFor } from './llm/index.js';
 import { pullOllamaModel } from './llm/pull.js';
 import { checkExitIp, proxyLabel } from './net.js';
-import { notify, removeSubscription, saveSubscription, vapidPublicKey } from './push.js';
+import { checkWatcher, createWatcher, describeCondition, extractFrom, parseNumber, watcherJson, type Condition, type ExtractSpec, type WatcherRow } from './agent/watchers.js';
+import { createHook, hookJson, type HookAction, type HookRow, type Verify } from './agent/hooks.js';
+import crypto from 'node:crypto';
+import { kvSet } from './db.js';
+import { notify, removeSubscription, saveSubscription, sendToChannel, vapidPublicKey } from './push.js';
 import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type ProviderConfig, type Settings } from './settings.js';
 import { errorMessage, id, now, parseJson } from './util.js';
@@ -80,12 +84,128 @@ export function apiRouter() {
 
   r.get(
     '/bootstrap',
-    h(() => ({
+    h((req) => {
+      // Remember how the user reaches this server, to build webhook and notification links.
+      const origin = `${req.protocol}://${req.get('host')}`;
+      if (req.get('host') && !/^(localhost|127\.|\[::1\])/.test(req.get('host')!)) kvSet('lastOrigin', origin);
+      return {
       settings: publicSettings(),
       approvals: pendingApprovals(),
       activeRuns: activeRuns(),
       unread: get<{ n: number }>('SELECT COUNT(*) AS n FROM notifications WHERE read = 0')?.n ?? 0,
-    })),
+      };
+    }),
+  );
+
+  // ── Watchers ──
+  const watcherOut = (w: WatcherRow) => ({
+    ...watcherJson(w),
+    conditionLabel: describeCondition(watcherJson(w).condition),
+    spark: all('SELECT ts, numeric, triggered FROM (SELECT ts, numeric, triggered FROM watch_history WHERE watcher_id = ? AND numeric IS NOT NULL ORDER BY ts DESC LIMIT 40) ORDER BY ts', w.id),
+  });
+  r.get('/watchers', h(() => all<WatcherRow>('SELECT * FROM watchers ORDER BY created_at DESC').map(watcherOut)));
+  r.get(
+    '/watchers/:id/history',
+    h((req) => all('SELECT ts, value, numeric, triggered FROM watch_history WHERE watcher_id = ? ORDER BY ts DESC LIMIT 200', param(req, 'id'))),
+  );
+  const normCondition = (c: Condition & { value?: unknown }): Condition => {
+    if (['below', 'above', 'drop_percent', 'rise_percent'].includes(c.kind)) return { kind: c.kind, value: parseNumber(c.value) ?? 0 } as Condition;
+    return c;
+  };
+  r.post(
+    '/watchers/test',
+    h(async (req) => {
+      try {
+        return { ok: true, ...(await extractFrom(String(req.body?.url), req.body?.extract as ExtractSpec)) };
+      } catch (err) {
+        return { ok: false, error: errorMessage(err) };
+      }
+    }),
+  );
+  r.post(
+    '/watchers',
+    h((req) => {
+      const b = req.body ?? {};
+      if (!/^https?:\/\//.test(String(b.url))) throw new HttpError(400, 'Enter an http(s) URL');
+      return { id: createWatcher({ title: String(b.title || new URL(b.url).host), url: String(b.url), extract: b.extract, condition: normCondition(b.condition ?? { kind: 'changed' }), interval_min: Number(b.interval_min) || 60, actions: b.actions ?? { notify: true } }) };
+    }),
+  );
+  r.patch(
+    '/watchers/:id',
+    h((req) => {
+      const w = get<WatcherRow>('SELECT * FROM watchers WHERE id = ?', param(req, 'id'));
+      if (!w) throw new HttpError(404, 'Not found');
+      const b = req.body ?? {};
+      run(
+        'UPDATE watchers SET title = ?, enabled = ?, interval_min = ?, condition = ?, actions = ?, next_check = CASE WHEN ? THEN ? ELSE next_check END WHERE id = ?',
+        String(b.title ?? w.title), b.enabled === undefined ? w.enabled : b.enabled ? 1 : 0, Math.max(5, Number(b.interval_min ?? w.interval_min)),
+        b.condition ? JSON.stringify(normCondition(b.condition)) : w.condition, b.actions ? JSON.stringify(b.actions) : w.actions,
+        b.enabled ? 1 : 0, now(), w.id,
+      );
+      emit({ type: 'watcher.changed', id: w.id });
+    }),
+  );
+  r.post('/watchers/:id/check', h(async (req) => checkWatcher(param(req, 'id'))));
+  r.delete(
+    '/watchers/:id',
+    h((req) => {
+      run('DELETE FROM watchers WHERE id = ?', param(req, 'id'));
+      emit({ type: 'watcher.changed', id: param(req, 'id'), deleted: true });
+    }),
+  );
+
+  // ── Inbound webhooks ──
+  r.get('/hooks', h(() => all<HookRow>('SELECT * FROM hooks ORDER BY created_at DESC').map((x) => hookJson(x))));
+  r.post(
+    '/hooks',
+    h((req) => {
+      const b = req.body ?? {};
+      const hook = createHook({ name: String(b.name || 'Webhook'), verify: (b.verify as Verify) ?? 'none', action: (b.action as HookAction) ?? { notify: true } });
+      return hookJson(hook, true);
+    }),
+  );
+  r.get('/hooks/:id/secret', h((req) => ({ secret: get<HookRow>('SELECT * FROM hooks WHERE id = ?', param(req, 'id'))?.secret ?? null })));
+  r.get('/hooks/:id/events', h((req) => all('SELECT * FROM hook_events WHERE hook_id = ? ORDER BY ts DESC LIMIT 50', param(req, 'id'))));
+  r.patch(
+    '/hooks/:id',
+    h((req) => {
+      const x = get<HookRow>('SELECT * FROM hooks WHERE id = ?', param(req, 'id'));
+      if (!x) throw new HttpError(404, 'Not found');
+      const b = req.body ?? {};
+      run('UPDATE hooks SET name = ?, enabled = ?, action = ? WHERE id = ?', String(b.name ?? x.name), b.enabled === undefined ? x.enabled : b.enabled ? 1 : 0, b.action ? JSON.stringify(b.action) : x.action, x.id);
+      emit({ type: 'hook.changed', id: x.id });
+    }),
+  );
+  r.post(
+    '/hooks/:id/rotate',
+    h((req) => {
+      run('UPDATE hooks SET token = ? WHERE id = ?', crypto.randomBytes(32).toString('base64url'), param(req, 'id'));
+      emit({ type: 'hook.changed', id: param(req, 'id') });
+      return hookJson(get<HookRow>('SELECT * FROM hooks WHERE id = ?', param(req, 'id'))!);
+    }),
+  );
+  r.delete(
+    '/hooks/:id',
+    h((req) => {
+      run('DELETE FROM hooks WHERE id = ?', param(req, 'id'));
+      emit({ type: 'hook.changed', id: param(req, 'id'), deleted: true });
+    }),
+  );
+
+  // ── Notification channels ──
+  r.post(
+    '/channels/test',
+    h(async (req) => {
+      const c = req.body ?? {};
+      const saved = getSettings().channels.find((x) => x.id === c.id);
+      const ch = { ...c, url: String(c.url ?? '').includes('••') ? (saved?.url ?? '') : c.url, token: String(c.token ?? '').includes('••') ? saved?.token : c.token };
+      try {
+        await sendToChannel(ch, `${getSettings().persona.name} test notification`, 'If you can read this, the channel works.', '');
+        return { ok: true };
+      } catch (err) {
+        return { ok: false, error: errorMessage(err) };
+      }
+    }),
   );
 
   // ── Conversations ──

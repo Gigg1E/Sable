@@ -33,6 +33,79 @@ export interface McpServerConfig {
   url?: string;
   headers?: Record<string, string>;
 }
+export interface Channel {
+  id: string;
+  name: string;
+  type: 'ntfy' | 'discord' | 'slack' | 'webhook';
+  url: string;
+  token?: string;
+  enabled: boolean;
+  events: 'all' | 'important';
+}
+
+export type ExtractSpec =
+  | { kind: 'price' }
+  | { kind: 'selector'; selector: string; attribute?: string }
+  | { kind: 'json'; path: string }
+  | { kind: 'regex'; pattern: string }
+  | { kind: 'text'; selector?: string }
+  | { kind: 'ai'; instruction: string };
+export type Condition = { kind: 'changed' } | { kind: 'below' | 'above' | 'drop_percent' | 'rise_percent'; value: number } | { kind: 'contains' | 'not_contains'; value: string };
+
+export interface Watcher {
+  id: string;
+  title: string;
+  url: string;
+  extract: ExtractSpec;
+  condition: Condition;
+  conditionLabel: string;
+  actions: { notify: boolean; prompt?: string; webhook?: string };
+  interval_min: number;
+  enabled: boolean;
+  last_value: string | null;
+  last_numeric: number | null;
+  last_checked: number | null;
+  last_changed: number | null;
+  last_triggered: number | null;
+  last_error: string | null;
+  fail_count: number;
+  next_check: number | null;
+  conversation_id: string | null;
+  created_at: number;
+  spark: { ts: number; numeric: number | null; triggered: number }[];
+}
+export interface WatchPoint {
+  ts: number;
+  value: string;
+  numeric: number | null;
+  triggered: number;
+}
+export interface Hook {
+  id: string;
+  name: string;
+  verify: 'none' | 'github' | 'hmac-sha256';
+  action: { notify: boolean; title?: string; prompt?: string };
+  enabled: boolean;
+  last_received: number | null;
+  count: number;
+  conversation_id: string | null;
+  created_at: number;
+  path: string;
+  url: string;
+  hasSecret: boolean;
+  secret?: string;
+}
+export interface HookEvent {
+  id: string;
+  ts: number;
+  method: string;
+  headers: string;
+  body: string;
+  delivery_id: string | null;
+  status: 'accepted' | 'rejected' | 'error';
+  detail: string;
+}
+
 export interface Settings {
   persona: { name: string; style: string; about: string };
   providers: ProviderConfig[];
@@ -45,6 +118,8 @@ export interface Settings {
   scripts: { enabled: boolean; timeoutSec: number; python: string; node: string; bash: string };
   mcpServers: McpServerConfig[];
   anthropic: { serverFallbacks: boolean };
+  channels: Channel[];
+  publicUrl: string;
 }
 
 export interface ToolCall {

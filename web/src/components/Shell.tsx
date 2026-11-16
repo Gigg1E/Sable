@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Pencil, Plus, Search, Settings, Shield, Sun, Trash2,
+  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Pencil, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -164,6 +164,8 @@ function SidebarContent({ onNavigate, onSearch }: { onNavigate?: () => void; onS
   const agentNav = [
     { to: '/goals', label: 'Goals', icon: ListChecks },
     { to: '/routines', label: 'Routines', icon: CalendarClock },
+    { to: '/watchers', label: 'Watchers', icon: Radar },
+    { to: '/webhooks', label: 'Webhooks', icon: Webhook },
     { to: '/spaces', label: 'Spaces', icon: LayoutGrid },
     { to: '/memory', label: 'Memory', icon: Brain },
     { to: '/activity', label: 'Activity', icon: Activity },
@@ -274,7 +276,7 @@ function MobileTabs({ onMore }: { onMore: () => void }) {
     { to: '/spaces', label: 'Spaces', icon: LayoutGrid, active: path.startsWith('/spaces') },
     { to: '/inbox', label: 'Inbox', icon: Inbox, active: path === '/inbox', count: approvals + unread },
   ];
-  const moreActive = ['/routines', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
+  const moreActive = ['/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
   return (
     <nav className="pb-safe z-30 shrink-0 border-t border-line bg-bg/90 backdrop-blur-md md:hidden">
       <div className="grid h-14 grid-cols-5">
@@ -358,6 +360,8 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
           <div className="-m-2 space-y-px">
             {[
               { to: '/routines', label: 'Routines', icon: CalendarClock },
+              { to: '/watchers', label: 'Watchers', icon: Radar },
+              { to: '/webhooks', label: 'Webhooks', icon: Webhook },
               { to: '/memory', label: 'Memory', icon: Brain },
               { to: '/activity', label: 'Activity', icon: Activity },
               { to: '/settings', label: 'Settings', icon: Settings },

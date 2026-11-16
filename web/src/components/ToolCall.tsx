@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Ban, Bell, Brain, CalendarClock, Check, ChevronRight, FileText, Globe, LayoutGrid, ListChecks, Plug, Search, Terminal, Users, Webhook, X,
+  Ban, Bell, Brain, CalendarClock, Check, ChevronRight, FileText, Globe, LayoutGrid, ListChecks, Plug, Radar, Search, Terminal, Users, Webhook, X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
@@ -16,6 +16,8 @@ export function toolIcon(name: string) {
   if (name.startsWith('schedule_')) return CalendarClock;
   if (name.startsWith('file_')) return FileText;
   if (name.startsWith('mcp_')) return Plug;
+  if (name.startsWith('watch_')) return Radar;
+  if (name.startsWith('webhook_')) return Webhook;
   return ({ web_search: Search, web_fetch: Globe, http_request: Webhook, run_script: Terminal, notify: Bell, delegate: Users } as Record<string, typeof Search>)[name] ?? Plug;
 }
 

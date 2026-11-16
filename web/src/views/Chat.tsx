@@ -12,7 +12,8 @@ import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore, type Streaming } from '../lib/store';
-import type { Goal, Message, Schedule } from '../lib/types';
+import type { Goal, Message, Schedule, Watcher } from '../lib/types';
+import { Sparkline } from '../components/Sparkline';
 
 export async function startChat(text: string) {
   const { id } = await api.post<{ id: string }>('/conversations');
@@ -42,14 +43,16 @@ export function ChatHome() {
   const composer = useRef<ComposerHandle>(null);
   const [goals, setGoals] = useState<Goal[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [watchers, setWatchers] = useState<Watcher[]>([]);
 
   useEffect(() => {
     const load = () => {
       void api.get<Goal[]>('/goals').then(setGoals);
       void api.get<Schedule[]>('/schedules').then(setSchedules);
+      void api.get<Watcher[]>('/watchers').then(setWatchers);
     };
     load();
-    return onServerEvent((ev) => (ev.type === 'goal.changed' || ev.type === 'schedule.changed') && load());
+    return onServerEvent((ev) => (ev.type === 'goal.changed' || ev.type === 'schedule.changed' || ev.type === 'watcher.changed') && load());
   }, []);
 
   const active = goals.filter((g) => g.status === 'active' || g.status === 'blocked').slice(0, 4);
@@ -125,6 +128,27 @@ export function ChatHome() {
                 );
               })}
             </Card>
+          </section>
+        )}
+
+        {watchers.filter((w) => w.enabled).length > 0 && (
+          <section className="mt-10">
+            <SectionLabel right={<button onClick={() => navigate('/watchers')} className="text-xs text-fg-3 hover:text-fg">All watchers</button>}>Watching</SectionLabel>
+            <div className="grid gap-2.5 sm:grid-cols-2">
+              {watchers
+                .filter((w) => w.enabled)
+                .slice(0, 4)
+                .map((w) => (
+                  <button key={w.id} onClick={() => navigate('/watchers')} className="flex items-center gap-3 rounded-lg border border-line bg-panel px-3.5 py-3 text-left shadow-1 transition-colors hover:border-line-strong">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[13px]">{w.title}</div>
+                      <div className={cx('truncate font-mono text-[13px] tabular', w.last_error ? 'text-danger' : 'text-fg')}>{w.last_error ? 'error' : w.extract.kind === 'text' ? 'tracking changes' : (w.last_value ?? '—')}</div>
+                      <div className="truncate text-[11px] text-fg-3">{w.conditionLabel}</div>
+                    </div>
+                    <Sparkline points={w.spark} width={84} height={30} />
+                  </button>
+                ))}
+            </div>
           </section>
         )}
 
