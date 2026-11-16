@@ -82,8 +82,12 @@ function SetupSheet({ preset, onClose, onAdd }: { preset: ConnectorPreset | null
           <>
             <ol className="list-decimal space-y-2 pl-5 leading-relaxed text-fg-2">
               <li>
-                In the <a className="text-fg underline underline-offset-2" href="https://console.cloud.google.com/auth/clients" target="_blank" rel="noreferrer">Google Auth Platform</a>, create a project and enable the {preset.name === 'Gmail' ? 'Gmail' : 'Google Calendar'} API and its MCP server (
-                <a className="text-fg underline underline-offset-2" href={preset.docs} target="_blank" rel="noreferrer">Google's guide</a>). Google's MCP servers are in developer preview.
+                Google's MCP servers are in developer preview: your Cloud project must be enrolled in the{' '}
+                <a className="text-fg underline underline-offset-2" href="https://developers.google.com/workspace/preview" target="_blank" rel="noreferrer">Workspace Developer Preview Program</a> (needs a Google Workspace account; approval takes a few days). Full steps: <code>docs/google-connectors.md</code>.
+              </li>
+              <li>
+                In the same project, enable the {preset.name === 'Gmail' ? 'Gmail' : 'Google Calendar'} API <b>and</b> the {preset.name === 'Gmail' ? 'Gmail' : 'Google Calendar'} MCP API (
+                <a className="text-fg underline underline-offset-2" href={preset.docs} target="_blank" rel="noreferrer">Google's guide</a>).
               </li>
               <li>
                 Create an OAuth client of type <b>Web application</b>, and tick <b>“Use this client for an AI-powered agent”</b> (Google requires this for MCP).
