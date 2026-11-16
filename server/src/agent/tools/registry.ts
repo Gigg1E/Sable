@@ -9,8 +9,30 @@ export interface ToolContext {
   /** Display name of the agent making the call (main agent or a sub-agent). */
   agent: string;
   signal: AbortSignal;
+  /** The verified preview the user approved (for tools with a preview). */
+  approved?: ToolPreview;
   /** Stream progress lines to the UI while a long tool runs. */
   progress?: (text: string, kind?: 'text' | 'tool') => void;
+}
+
+/** Structured UI card built from real tool data (never from model text). */
+export interface Card {
+  type: string;
+  [key: string]: unknown;
+}
+
+/** What a tool returns: plain text for the model, optionally with verified cards for the UI. */
+export type ToolResult = string | { content: string; cards?: Card[] };
+
+export interface ToolPreview {
+  /** Overrides the approval summary. */
+  summary?: string;
+  /** Verified card shown in the approval (e.g. the exact checkout). */
+  card?: Card;
+  /** If set, the call is refused with this message and the user is not asked. */
+  refuse?: string;
+  /** Cards to show even when refusing (e.g. "finish checkout on the store"). */
+  cards?: Card[];
 }
 
 export interface ToolScope {
@@ -32,7 +54,11 @@ export interface ToolDef {
   summarize?: (args: Record<string, any>) => string;
   /** Resource the call touches, used for scoped approvals ("always allow this domain"). */
   scope?: (args: Record<string, any>) => ToolScope | undefined;
-  run: (args: Record<string, any>, ctx: ToolContext) => Promise<string>;
+  /** Always ask the user, regardless of policy; "Always allow" is not offered. */
+  alwaysAsk?: boolean;
+  /** Build a verified preview before asking (fetches real data server-side). */
+  preview?: (args: Record<string, any>, ctx: ToolContext) => Promise<ToolPreview>;
+  run: (args: Record<string, any>, ctx: ToolContext) => Promise<ToolResult>;
 }
 
 const tools = new Map<string, ToolDef>();

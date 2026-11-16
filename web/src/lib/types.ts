@@ -123,6 +123,7 @@ export interface Settings {
   anthropic: { serverFallbacks: boolean };
   channels: Channel[];
   publicUrl: string;
+  shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string };
 }
 
 export interface ToolCall {
@@ -145,6 +146,7 @@ export interface Message {
   tool_name: string | null;
   is_error: boolean;
   attachments?: { id: string; mime: string; width: number | null; height: number | null }[];
+  cards?: CommerceCard[];
   created_at: number;
 }
 export interface Conversation {
@@ -168,6 +170,8 @@ export interface Approval {
   summary: string;
   risk: 'low' | 'medium' | 'high';
   scope: { kind: 'domain'; value: string } | null;
+  preview?: CommerceCard | null;
+  alwaysAsk?: boolean;
   status: string;
   created_at: number;
 }
@@ -263,3 +267,43 @@ export interface ToolInfo {
   defaultPolicy: Policy;
   policy: Policy;
 }
+
+export interface Money {
+  amount: number;
+  currency: string;
+}
+export interface OfferCard {
+  variantId: string;
+  productId: string;
+  title: string;
+  options: string;
+  price: Money | null;
+  available: boolean | null;
+  image: string | null;
+  url: string | null;
+  seller: { name: string; domain: string; url?: string };
+  rating: { value: number; count: number } | null;
+  fetchedAt: number;
+}
+export interface CartLikeCard {
+  type: 'cart' | 'checkout' | 'order';
+  id: string;
+  shop: string;
+  seller: string;
+  status: string | null;
+  currency: string;
+  lines: { variantId: string; title: string; image: string | null; quantity: number; unitPrice: Money | null; total: Money | null }[];
+  totals: { type: string; label: string; amount: number }[];
+  address: string | null;
+  shipping: { title: string; amount: number | null } | null;
+  instruments: { id: string | null; label: string; selected: boolean }[];
+  messages: { type: string; code: string; text: string }[];
+  links: { title: string; url: string }[];
+  continueUrl: string | null;
+  order: { id: string; number: string | null; url: string | null } | null;
+  fetchedAt: number;
+  confirm?: boolean;
+  payWith?: { label: string };
+  handoffReason?: string;
+}
+export type CommerceCard = { type: 'products'; heading: string | null; items: OfferCard[]; source: string } | CartLikeCard;

@@ -49,6 +49,16 @@ export function describeCall(call: ToolCall, label?: string): string {
   if (n.startsWith('webhook_')) return 'Setting up a webhook';
   if (n.startsWith('schedule_')) return 'Scheduling';
   if (n === 'notify') return 'Sending a notification';
+  if (n === 'shop_search') return `Searching stores for “${String(a.query ?? '').slice(0, 50)}”`;
+  if (n === 'shop_lookup') return 'Matching products on Shop';
+  if (n === 'shop_product') return 'Checking sizes and options';
+  if (n === 'shop_show') return 'Showing products';
+  if (n === 'shop_cart_add') return 'Adding to cart';
+  if (n === 'shop_cart_update') return 'Updating the cart';
+  if (n === 'shop_cart_view') return 'Opening your carts';
+  if (n === 'shop_checkout') return 'Preparing checkout';
+  if (n === 'shop_buy') return 'Placing the order';
+  if (n === 'shop_orders') return 'Checking your orders';
   if (n === 'delegate') return `Handing off to ${a.agent ?? 'a sub-agent'}`;
   return label ?? n.replace(/_/g, ' ');
 }
@@ -60,7 +70,7 @@ function plural(n: number, one: string, many = one + 's') {
 /** "4 searches · 6 pages · 2 other steps" */
 function summarize(calls: ToolCall[]) {
   const count = (pred: (c: ToolCall) => boolean) => calls.filter(pred).length;
-  const searches = count((c) => c.name === 'web_search');
+  const searches = count((c) => c.name === 'web_search' || c.name === 'shop_search');
   const pages = count((c) => c.name === 'web_fetch' || c.name === 'http_request' || c.name === 'watch_test');
   const scripts = count((c) => c.name === 'run_script');
   const agents = count((c) => c.name === 'delegate');

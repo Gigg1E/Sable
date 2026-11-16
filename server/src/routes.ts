@@ -22,6 +22,8 @@ import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type ProviderConfig, type Settings } from './settings.js';
 import { errorMessage, id, now, parseJson } from './util.js';
 import { getUpload, uploadRoutes } from './uploads.js';
+import { beginShopLink, completeShopLink, isShopState, shopLinkStatus, unlinkShop } from './shop/auth.js';
+import { shopCall, shopErrorText } from './shop/client.js';
 
 type Handler = (req: Request, res: Response) => unknown;
 /** Wrap async handlers so thrown errors become JSON responses. */
@@ -500,6 +502,52 @@ export function apiRouter() {
       }
     }),
   );
+  // ── Shopping (Shop) ──
+  r.get(
+    '/shop/status',
+    h(async () => {
+      const link = shopLinkStatus();
+      if (!link.linked) return { ...link, account: null };
+      try {
+        const data = await shopCall('get_account', {});
+        const a = data.account ?? data;
+        return {
+          ...link,
+          account: {
+            name: [a.first_name ?? a.given_name, a.last_name ?? a.family_name].filter(Boolean).join(' ') || a.name || null,
+            email: a.email ?? null,
+            addresses: (a.addresses ?? []).length,
+            cards: (a.cards ?? a.payment_methods ?? a.wallet?.cards ?? []).map((c: any) => [c.brand ?? c.display?.brand, (c.last_digits ?? c.display?.last_digits) && `•••• ${c.last_digits ?? c.display?.last_digits}`].filter(Boolean).join(' ')),
+          },
+        };
+      } catch (err) {
+        return { ...shopLinkStatus(), account: null, error: shopErrorText(err) };
+      }
+    }),
+  );
+  r.post(
+    '/shop/link',
+    h(async () => {
+      try {
+        return { ok: true, url: await beginShopLink() };
+      } catch (err) {
+        return { ok: false, error: errorMessage(err) };
+      }
+    }),
+  );
+  r.post('/shop/unlink', h(() => (unlinkShop(), shopLinkStatus())));
+  r.get('/shop/oauth/callback', async (req, res) => {
+    const back = (q: string) => res.redirect(`/settings/shopping?${q}`);
+    if (req.query.error) return back(`shop_error=${encodeURIComponent(String(req.query.error_description ?? req.query.error))}`);
+    if (!isShopState(String(req.query.state ?? ''))) return back(`shop_error=${encodeURIComponent('Sign-in expired. Try linking again.')}`);
+    try {
+      await completeShopLink(String(req.query.code ?? ''));
+      back('shop_linked=1');
+    } catch (err) {
+      back(`shop_error=${encodeURIComponent(errorMessage(err))}`);
+    }
+  });
+
   r.get('/mcp', h(() => mcpStatus()));
   r.post('/mcp/reload', h(async () => (await reloadMcp(), mcpStatus())));
   r.get('/mcp/oauth/info', h(() => ({ callbackUrl: oauthCallbackUrl() })));

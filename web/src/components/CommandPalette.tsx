@@ -35,6 +35,7 @@ export function CommandPalette({ open, onClose, onSignOut }: { open: boolean; on
     ['Sub-agents', 'agents'],
     ['Permissions', 'permissions'],
     ['Connectors', 'connectors'],
+    ['Shopping', 'shopping'],
     ['Network', 'network'],
     ['Notifications', 'notifications'],
   ];

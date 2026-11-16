@@ -93,6 +93,8 @@ function addColumn(table: string, column: string, type: string) {
 }
 addColumn('messages', 'attachments', 'TEXT');
 addColumn('approvals', 'call_id', 'TEXT');
+addColumn('messages', 'cards', 'TEXT');
+addColumn('approvals', 'preview', 'TEXT');
 
 type Row = Record<string, unknown>;
 

@@ -8,7 +8,7 @@ import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
 import { getUpload, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
-import { getTool, listTools, registerTool, toSpec, validateArgs, type ToolContext, type ToolDef } from './tools/registry.js';
+import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
 
 // ───────────────────────── Active runs ─────────────────────────
 
@@ -52,6 +52,7 @@ export interface MessageRow {
   raw: string | null;
   raw_model: string | null;
   attachments?: string | null;
+  cards?: string | null;
   created_at: number;
 }
 
@@ -61,16 +62,16 @@ export function messageJson(m: MessageRow) {
     const u = getUpload(aid);
     return { id: aid, mime: u?.mime ?? 'image/jpeg', width: u?.width ?? null, height: u?.height ?? null };
   });
-  return { ...rest, tool_calls: parseJson<ToolCall[] | null>(m.tool_calls, null), is_error: !!m.is_error, attachments };
+  return { ...rest, tool_calls: parseJson<ToolCall[] | null>(m.tool_calls, null), is_error: !!m.is_error, attachments, cards: parseJson<Card[]>(m.cards, []) };
 }
 
 function insertMessage(m: Omit<MessageRow, 'created_at'> & { created_at?: number }) {
   const row: MessageRow = { ...m, created_at: m.created_at ?? now() };
   run(
-    `INSERT INTO messages (id, conversation_id, run_id, role, agent, content, thinking, tool_calls, tool_call_id, tool_name, is_error, raw, raw_model, attachments, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO messages (id, conversation_id, run_id, role, agent, content, thinking, tool_calls, tool_call_id, tool_name, is_error, raw, raw_model, attachments, cards, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id, row.conversation_id, row.run_id, row.role, row.agent, row.content, row.thinking, row.tool_calls, row.tool_call_id, row.tool_name,
-    row.is_error, row.raw, row.raw_model, row.attachments ?? null, row.created_at,
+    row.is_error, row.raw, row.raw_model, row.attachments ?? null, row.cards ?? null, row.created_at,
   );
   run('UPDATE conversations SET updated_at = ? WHERE id = ?', now(), row.conversation_id);
   emit({ type: 'message', conversationId: row.conversation_id, message: messageJson(row) });
@@ -250,6 +251,7 @@ async function agentLoop(o: LoopOptions): Promise<string> {
           is_error: result.isError ? 1 : 0,
           raw: null,
           raw_model: null,
+          cards: result.cards?.length ? JSON.stringify(result.cards) : null,
         });
       }
     }
@@ -265,12 +267,12 @@ async function agentLoop(o: LoopOptions): Promise<string> {
   return lastText ? `${lastText}\n\n(${note})` : note;
 }
 
-async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: string; isError: boolean }> {
+async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: string; isError: boolean; cards?: Card[] }> {
   const tool = o.tools.find((t) => t.name === call.name);
   const base = { conversationId: o.conversationId, runId: o.runId, callId: call.id, parentCallId: o.parentCallId, agent: o.agent.name, name: call.name };
-  const finish = (status: string, content: string, isError: boolean) => {
+  const finish = (status: string, content: string, isError: boolean, cards?: Card[]) => {
     emit({ type: 'tool.end', ...base, status, preview: truncate(content, 600) });
-    return { content, isError };
+    return { content, isError, cards };
   };
 
   if (!tool) {
@@ -288,20 +290,37 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
     logActivity({ ...base, tool: tool.name, status: 'blocked', summary, input: call.args, output: decision.reason });
     return finish('blocked', `Blocked by the user's permission settings (${decision.reason}). Don't try to work around this; tell the user if it matters.`, true);
   }
+  const ctxBase = { runId: o.runId, conversationId: o.conversationId, callId: call.id, agent: o.agent.name, signal: o.signal };
+  let approved: ToolPreview | undefined;
+  if (decision.action === 'ask' && tool.preview) {
+    // Fetch the real data the user will approve (e.g. the exact checkout), server-side.
+    try {
+      approved = await tool.preview(call.args, ctxBase);
+    } catch (err) {
+      if (o.signal.aborted) throw err;
+      return finish('error', `Error: ${errorMessage(err)}`, true);
+    }
+    if (approved.refuse) {
+      logActivity({ ...base, tool: tool.name, status: 'blocked', summary, input: call.args, output: approved.refuse });
+      return finish('blocked', approved.refuse, true, approved.cards);
+    }
+  }
   if (decision.action === 'ask') {
     setRunStatus(o.runId, o.conversationId, 'waiting');
     emit({ type: 'tool.waiting', ...base });
-    const approved = await requestApproval({
-      runId: o.runId, conversationId: o.conversationId, callId: call.id, agent: o.agent.name, tool, args: call.args, summary, scope: decision.scope, signal: o.signal,
+    const ok = await requestApproval({
+      runId: o.runId, conversationId: o.conversationId, callId: call.id, agent: o.agent.name, tool, args: call.args,
+      summary: approved?.summary ?? summary, scope: decision.scope, preview: approved?.card, signal: o.signal,
     });
     setRunStatus(o.runId, o.conversationId, 'running');
-    if (!approved) {
+    if (!ok) {
       logActivity({ ...base, tool: tool.name, status: 'denied', summary, input: call.args });
       return finish('denied', 'The user denied this action. Do not retry it; continue without it or ask the user what they would prefer.', true);
     }
   }
 
   const ctx: ToolContext = {
+    approved,
     runId: o.runId,
     conversationId: o.conversationId,
     callId: call.id,
@@ -311,9 +330,11 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
   };
   const t0 = Date.now();
   try {
-    const out = await tool.run(call.args, ctx);
+    const result = await tool.run(call.args, ctx);
+    const out = typeof result === 'string' ? result : result.content;
+    const cards = typeof result === 'string' ? undefined : result.cards;
     logActivity({ ...base, tool: tool.name, status: decision.action === 'ask' ? 'approved' : 'ok', summary, input: call.args, output: out, ms: Date.now() - t0 });
-    return finish('ok', truncate(out, 40_000), false);
+    return finish('ok', truncate(out, 40_000), false, cards);
   } catch (err) {
     if (o.signal.aborted) throw err;
     const msg = errorMessage(err);

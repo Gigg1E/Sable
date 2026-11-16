@@ -6,6 +6,8 @@ import { timeAgo } from '../lib/format';
 import { useStore } from '../lib/store';
 import type { Approval } from '../lib/types';
 import { toolIcon } from './ToolCall';
+import { CartCard, money } from './CommerceCards';
+import type { CartLikeCard } from '../lib/types';
 import { Badge, Button } from './ui';
 
 function argPreview(a: Approval): string | null {
@@ -23,6 +25,8 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
   const Icon = toolIcon(approval.tool);
   const preview = argPreview(approval);
   const rememberLabel = approval.scope?.kind === 'domain' ? `Always allow ${approval.scope.value}` : 'Always allow';
+  const [checked, setChecked] = useState(false);
+  const purchase = approval.preview && approval.preview.type !== 'products' ? (approval.preview as CartLikeCard) : null;
 
   async function decide(decision: 'approve' | 'deny', remember = false) {
     setBusy(decision + remember);
@@ -33,6 +37,39 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
       toast({ title: 'Could not record decision', body: (err as Error).message, tone: 'error' });
       setBusy(null);
     }
+  }
+
+  if (purchase) {
+    const total = purchase.totals.find((t) => t.type === 'total');
+    return (
+      <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden rounded-lg border border-danger/40 bg-panel shadow-2">
+        <div className="flex items-center gap-2 border-b border-danger/25 bg-danger/8 px-3.5 py-2 text-[12px]">
+          <ShieldAlert className="size-3.5 text-danger" />
+          <span className="font-semibold text-danger">Confirm purchase</span>
+          <span className="text-fg-3">·</span>
+          <span className="text-fg-2">{approval.agent} wants to place a real order</span>
+        </div>
+        <div className="space-y-3 p-3.5">
+          <CartCard card={purchase} compact />
+          <div className="rounded-md border border-accent/30 bg-accent-soft px-3 py-2.5 text-[12.5px] leading-relaxed text-fg-2">
+            <b className="text-fg">This charges your card and can't be undone from here.</b> The items, prices, address and total above come straight from the store, but AI agents can misunderstand what you asked for. Check the
+            item, size/color, quantity, address and total before you approve. Returns follow the store's own policy.
+          </div>
+          <label className="flex cursor-pointer items-start gap-2.5 text-[13px]">
+            <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} className="mt-0.5 size-4 accent-[var(--fg)]" />
+            <span>I've checked the item, quantity, delivery address and total.</span>
+          </label>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" loading={busy === 'denyfalse'} onClick={() => void decide('deny')}>
+              Don't buy
+            </Button>
+            <Button variant="primary" size="sm" disabled={!checked} loading={busy === 'approvefalse'} onClick={() => void decide('approve')}>
+              Place order{total ? ` · ${money({ amount: total.amount, currency: purchase.currency })}` : ''}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
   }
 
   return (
@@ -71,9 +108,11 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
           <Button variant="ghost" size="sm" loading={busy === 'denyfalse'} onClick={() => void decide('deny')}>
             Deny
           </Button>
-          <Button size="sm" loading={busy === 'approvetrue'} onClick={() => void decide('approve', true)}>
-            {rememberLabel}
-          </Button>
+          {!approval.alwaysAsk && (
+            <Button size="sm" loading={busy === 'approvetrue'} onClick={() => void decide('approve', true)}>
+              {rememberLabel}
+            </Button>
+          )}
           <Button variant="primary" size="sm" loading={busy === 'approvefalse'} onClick={() => void decide('approve')}>
             Approve
           </Button>

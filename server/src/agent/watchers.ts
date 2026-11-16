@@ -7,6 +7,7 @@ import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { activeRunFor, createConversation, quickAnswer, startRun } from './runner.js';
 import { htmlToText } from './tools/web.js';
 import { registerTool } from './tools/registry.js';
+import { fmtMoney, shopVariantSnapshot } from '../shop/tools.js';
 
 /**
  * Watchers: deterministic change detection. The server polls a URL, extracts one value and
@@ -21,7 +22,9 @@ export type ExtractSpec =
   | { kind: 'json'; path: string }
   | { kind: 'regex'; pattern: string }
   | { kind: 'text'; selector?: string }
-  | { kind: 'ai'; instruction: string };
+  | { kind: 'ai'; instruction: string }
+  /** Live price and stock of one variant from the Shop catalog (structured, no scraping). */
+  | { kind: 'shop'; variant_id: string };
 
 export type Condition =
   | { kind: 'changed' }
@@ -179,6 +182,11 @@ function jsonPath(data: unknown, path: string): unknown {
 }
 
 export async function extractFrom(url: string, spec: ExtractSpec, signal?: AbortSignal): Promise<Extracted> {
+  if (spec.kind === 'shop') {
+    const o = await shopVariantSnapshot(spec.variant_id, signal);
+    const stock = o.available === false ? 'out of stock' : o.available ? 'in stock' : 'stock unknown';
+    return { value: `${fmtMoney(o.price)} · ${stock}`, numeric: o.price ? o.price.amount / 100 : null, detail: `${o.title}${o.options ? ` (${o.options})` : ''} · ${o.seller.name} · Shop catalog` };
+  }
   const res = await agentFetch(url, {}, signal);
   if (!res.ok) throw new Error(`${new URL(url).host} returned HTTP ${res.status}`);
   const body = await res.text();
@@ -390,9 +398,10 @@ export function createWatcher(input: { title: string; url: string; extract: Extr
 const extractSchema = {
   type: 'object',
   description:
-    'How to read the value. kind=price: automatic product price (structured data; best for shop product pages). selector: CSS selector text (or attribute). json: dot path into a JSON API response, e.g. "data.items[0].price". regex: first capture group. text: whole page or selector text (any change). ai: natural-language instruction, uses the model on every check (last resort).',
+    'How to read the value. kind=shop: live price + stock of a Shop catalog variant (most reliable for Shopify stores; url can be the product URL). kind=price: automatic product price (structured data; best for shop product pages). selector: CSS selector text (or attribute). json: dot path into a JSON API response, e.g. "data.items[0].price". regex: first capture group. text: whole page or selector text (any change). ai: natural-language instruction, uses the model on every check (last resort).',
   properties: {
-    kind: { type: 'string', enum: ['price', 'selector', 'json', 'regex', 'text', 'ai'] },
+    kind: { type: 'string', enum: ['shop', 'price', 'selector', 'json', 'regex', 'text', 'ai'] },
+    variant_id: { type: 'string', description: 'For kind=shop: a variant_id from shop_search' },
     selector: { type: 'string' },
     attribute: { type: 'string' },
     path: { type: 'string' },

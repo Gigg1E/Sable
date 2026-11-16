@@ -78,6 +78,16 @@ export interface Settings {
   channels: Channel[];
   /** Public base URL of this Sable server, used to build inbound webhook URLs. */
   publicUrl: string;
+  shopping: {
+    /** Shop catalog tools available to the agent. */
+    enabled: boolean;
+    /** Master switch for completing purchases (each one still needs approval). */
+    purchases: boolean;
+    /** Largest order total allowed, in major units of `currency`. */
+    maxOrder: number;
+    country: string;
+    currency: string;
+  };
 }
 
 const env = process.env;
@@ -137,6 +147,7 @@ export function defaultSettings(): Settings {
     anthropic: { serverFallbacks: true },
     channels: [],
     publicUrl: env.SABLE_PUBLIC_URL ?? '',
+    shopping: { enabled: true, purchases: false, maxOrder: 200, country: 'US', currency: 'USD' },
   };
 }
 
@@ -153,7 +164,7 @@ export function getSettings(): Settings {
 
 function merge(defaults: Settings, stored: Partial<Settings>): Settings {
   const out = { ...defaults, ...stored } as Settings;
-  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic'] as const) {
+  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping'] as const) {
     (out as any)[key] = { ...(defaults as any)[key], ...((stored as any)[key] ?? {}) };
   }
   return out;

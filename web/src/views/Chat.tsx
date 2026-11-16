@@ -7,6 +7,7 @@ import { Composer, type ComposerHandle } from '../components/Composer';
 import { Logo } from '../components/Logo';
 import { Markdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
+import { CommerceCardView } from '../components/CommerceCards';
 import { Button, Card, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
@@ -228,7 +229,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
   const [since] = useState(Date.now());
 
   // Split the turn into the work (reasoning, interim notes, tool calls) and the final answer.
-  const { steps, final, errors } = useMemo(() => {
+  const { steps, final, errors, cards } = useMemo(() => {
     const results: Record<string, { content: string; isError: boolean }> = {};
     for (const m of messages) if (m.role === 'tool' && m.tool_call_id) results[m.tool_call_id] = { content: m.content, isError: m.is_error };
     const assistant = messages.filter((m) => m.role === 'assistant');
@@ -242,7 +243,8 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
       if (m.content?.trim()) out.push({ kind: 'note', id: `n-${m.id}`, text: m.content });
       for (const c of m.tool_calls ?? []) out.push({ kind: 'tool', id: c.id, call: c, result: results[c.id]?.content, isError: results[c.id]?.isError });
     }
-    return { steps: out, final: finalMsg, errors: messages.filter((m) => m.role === 'error') };
+    const cards = messages.filter((m) => m.role === 'tool' && m.cards?.length).flatMap((m) => m.cards!.map((c, i) => ({ key: `${m.id}-${i}`, card: c })));
+    return { steps: out, final: finalMsg, errors: messages.filter((m) => m.role === 'error'), cards };
   }, [messages, working]);
 
   const liveSteps: Step[] = streaming?.thinking && !streaming.text ? [...steps, { kind: 'thinking', id: `live-${streaming.messageId}`, text: streaming.thinking, live: true }] : steps;
@@ -255,6 +257,9 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
       <TurnHeader who={messages.find((m) => m.agent)?.agent ?? streaming?.agent ?? agentName} time={messages[0]?.created_at} agent />
       <div className="pl-[26px]">
         {showBlock && <WorkBlock steps={liveSteps} working={working} waiting={waiting} started={started} ended={working ? undefined : ended} />}
+        {cards.map((c) => (
+          <CommerceCardView key={c.key} card={c.card} />
+        ))}
         {final && <Markdown text={final.content} />}
         {streaming?.text && <Markdown text={streaming.text} streaming />}
         {errors.map((m) => (

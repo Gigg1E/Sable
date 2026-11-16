@@ -3,7 +3,7 @@ import { emit } from '../events.js';
 import { notify } from '../push.js';
 import { getSettings, updateSettings } from '../settings.js';
 import { id, now, parseJson } from '../util.js';
-import type { ToolDef, ToolScope } from './tools/registry.js';
+import { getTool, type Card, type ToolDef, type ToolScope } from './tools/registry.js';
 
 /**
  * The Sentinel decides, for every tool call, whether it runs, needs the user's OK, or is blocked.
@@ -32,6 +32,7 @@ export function decide(tool: ToolDef, args: Record<string, unknown>): Decision {
   }
   const policy = policyFor(tool);
   if (policy === 'deny') return { action: 'deny', reason: `${tool.label} is turned off`, scope };
+  if (tool.alwaysAsk) return { action: 'ask', reason: 'Always needs your approval', scope };
   if (policy === 'auto') return { action: 'allow', reason: 'Allowed by policy', scope };
   if (scope?.kind === 'domain' && domainMatches(scope.value, s.allowedDomains)) {
     const method = String((args as { method?: string }).method ?? 'GET').toUpperCase();
@@ -48,6 +49,7 @@ export interface ApprovalRow {
   conversation_id: string;
   call_id: string | null;
   agent: string;
+  preview: string | null;
   tool: string;
   args: string;
   summary: string;
@@ -59,7 +61,13 @@ export interface ApprovalRow {
 }
 
 export function approvalJson(a: ApprovalRow) {
-  return { ...a, args: parseJson(a.args, {}), scope: parseJson<ToolScope | null>(a.scope, null) };
+  return {
+    ...a,
+    args: parseJson(a.args, {}),
+    scope: parseJson<ToolScope | null>(a.scope, null),
+    preview: parseJson<unknown>(a.preview, null),
+    alwaysAsk: !!getTool(a.tool)?.alwaysAsk,
+  };
 }
 
 const waiters = new Map<string, (approved: boolean) => void>();
@@ -73,13 +81,14 @@ export function requestApproval(input: {
   args: Record<string, unknown>;
   summary: string;
   scope?: ToolScope;
+  preview?: Card;
   signal: AbortSignal;
 }): Promise<boolean> {
   const aid = id('a_');
   run(
-    'INSERT INTO approvals (id, run_id, conversation_id, call_id, agent, tool, args, summary, risk, scope, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO approvals (id, run_id, conversation_id, call_id, agent, tool, args, summary, risk, scope, status, created_at, preview) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     aid, input.runId, input.conversationId, input.callId, input.agent, input.tool.name, JSON.stringify(input.args), input.summary, input.tool.risk,
-    input.scope ? JSON.stringify(input.scope) : null, 'pending', now(),
+    input.scope ? JSON.stringify(input.scope) : null, 'pending', now(), input.preview ? JSON.stringify(input.preview) : null,
   );
   const row = get<ApprovalRow>('SELECT * FROM approvals WHERE id = ?', aid)!;
   emit({ type: 'approval.requested', approval: { ...approvalJson(row), toolLabel: input.tool.label } });
@@ -110,7 +119,8 @@ export function decideApproval(aid: string, approve: boolean, remember: boolean)
   const status = waiter ? (approve ? 'approved' : 'denied') : 'expired';
   run('UPDATE approvals SET status = ?, decided_at = ? WHERE id = ?', status, now(), aid);
 
-  if (approve && remember) {
+  // Tools that always ask (purchases) can never be widened to auto-approve.
+  if (approve && remember && !getTool(row.tool)?.alwaysAsk) {
     const s = structuredClone(getSettings());
     const scope = parseJson<ToolScope | null>(row.scope, null);
     if (scope?.kind === 'domain') {

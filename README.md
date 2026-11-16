@@ -123,6 +123,9 @@ hooks.example.com {
     handle /hooks/* {
         reverse_proxy localhost:8787
     }
+    handle /oauth/sable-client.json {
+        reverse_proxy localhost:8787
+    }
     respond 404
 }
 ```
@@ -223,6 +226,27 @@ Most things are set in the UI. Environment variables:
 | `SABLE_PUBLIC_URL` | | Public base URL used for webhook links (also settable in the UI) |
 | `SABLE_AGENT_PROXY` | | HTTP(S) proxy for the agent's outbound web traffic (see [VPN routing](#routing-agent-traffic-through-a-vpn-docker)) |
 | `SABLE_VAPID_SUBJECT` | `mailto:sable-agent@example.com` | Contact for web push (VAPID) |
+
+### Shopping (Shop by Shopify)
+
+Sable talks to **[Shop MCP](https://shopify.dev/changelog/posts/add-shopping-and-shop-pay-checkout-to-any-agent-with-shop-mcp)** (`https://mcp.shop.com`), Shopify's official agent catalog covering Shopify stores. Ask things like *“find a mechanical keyboard under $80”*, *“add the white one to my cart”*, *“check out”*.
+
+**What you see is real data, not the AI's words.** Product, cart, checkout and order cards are built by the server from Shop's responses: photos, exact size/color, live price, stock, seller, totals in the store's order, delivery address, shipping option, payment method and order number. The model only passes IDs; if it references a product Shop never returned, the call is refused. Price caps (“under $80”) are enforced by the server, not left to the model or the catalog filter.
+
+| Action | Needs |
+|---|---|
+| Search, compare, show products, store Q&A | Nothing; no account, no approval |
+| Add to / edit carts | No approval (nothing is bought) |
+| Prepare checkout | Fills your linked account's email and saved address, and picks the cheapest shipping. No approval. |
+| **Place order** | **Always asks**, and can't be set to automatic. Requires *Settings → Shopping → Allow the agent to place orders* (off by default), a linked Shop account with a saved card, and a total under your per-order limit. |
+
+**Placing an order:** the approval shows the exact checkout fetched from the store, with a warning, and you must tick *“I've checked the item, quantity, delivery address and total”* before *Place order* is enabled. Right before paying, Sable fetches the checkout again. If items, quantities, total or payment method changed since you approved, it stops and charges nothing. A completion is never retried, so a network error can't double-charge; an uncertain result is reconciled by reading the checkout. If anything is missing (purchases off, no linked account, no saved card, over the limit, or the store needs a verification step), you get the store's own checkout link instead.
+
+**Cards:** Sable never stores card numbers. Shopify restricts agents from submitting raw cards, and a card number the model can read could leak through a malicious page. Payment uses the card saved in your **Shop account** (Shop Pay); Sable only sees a masked label like “Visa •••• 4242”.
+
+**Linking your Shop account** (Settings → Shopping → *Link Shop account*): OAuth with PKCE at accounts.shop.app. Shop identifies Sable by reading `https://<your Sable>/oauth/sable-client.json`, so Sable needs a **public HTTPS Public URL** for this one-time link. If you only expose webhooks publicly, also expose that path (add `handle /oauth/sable-client.json { reverse_proxy localhost:8787 }` to the Caddy example below). Shop traffic goes through the agent's network path, so the VPN proxy applies.
+
+**Price watchers on Shop products** use the catalog directly (watcher type *shop* with the variant ID), so they read structured price and stock instead of scraping the page.
 
 ### Images
 
