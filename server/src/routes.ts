@@ -21,6 +21,7 @@ import { notify, removeSubscription, saveSubscription, sendToChannel, vapidPubli
 import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type ProviderConfig, type Settings } from './settings.js';
 import { errorMessage, id, now, parseJson } from './util.js';
+import { getUpload, uploadRoutes } from './uploads.js';
 
 type Handler = (req: Request, res: Response) => unknown;
 /** Wrap async handlers so thrown errors become JSON responses. */
@@ -82,6 +83,7 @@ export function apiRouter() {
   );
 
   r.get('/events', sseHandler);
+  uploadRoutes(r);
 
   r.get(
     '/bootstrap',
@@ -268,8 +270,10 @@ export function apiRouter() {
     '/conversations/:id/messages',
     h((req) => {
       const text = String(req.body?.text ?? '').trim();
-      if (!text) throw new HttpError(400, 'Message is empty');
-      return { runId: startRun(param(req, 'id'), text) };
+      const attachments = (Array.isArray(req.body?.attachments) ? req.body.attachments : []).map(String).slice(0, 8);
+      for (const a of attachments) if (!getUpload(a)) throw new HttpError(400, 'An attached image is missing. Try attaching it again.');
+      if (!text && !attachments.length) throw new HttpError(400, 'Message is empty');
+      return { runId: startRun(param(req, 'id'), text, 'user', attachments) };
     }),
   );
   r.post('/runs/:id/cancel', h((req) => cancelRun(param(req, 'id'))));

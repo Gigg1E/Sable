@@ -144,6 +144,7 @@ export interface Message {
   tool_call_id: string | null;
   tool_name: string | null;
   is_error: boolean;
+  attachments?: { id: string; mime: string; width: number | null; height: number | null }[];
   created_at: number;
 }
 export interface Conversation {

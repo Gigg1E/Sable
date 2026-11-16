@@ -224,6 +224,12 @@ Most things are set in the UI. Environment variables:
 | `SABLE_AGENT_PROXY` | | HTTP(S) proxy for the agent's outbound web traffic (see [VPN routing](#routing-agent-traffic-through-a-vpn-docker)) |
 | `SABLE_VAPID_SUBJECT` | `mailto:sable-agent@example.com` | Contact for web push (VAPID) |
 
+### Images
+
+Attach images with the **image button** in the message box, **paste** them (⌘V / Ctrl+V), or **drag and drop** them. On phones the button opens the photo library or camera. Images are resized in the browser (longest side 1600 px; screenshots stay PNG, photos become JPEG, HEIC is converted), stored in `data/uploads`, and sent to the model in each provider's native image format. The model gets the images from your three most recent image messages; older ones are mentioned but not re-sent.
+
+The main model must support vision. On Ollama, use something like `gemma3`, `qwen2.5vl`, `llama3.2-vision` or `mistral-small3.1`. With llama.cpp, start `llama-server` with the model's `--mmproj`. All current Claude and OpenAI models can read images.
+
 ### Local specialists (all on Ollama)
 
 **Settings → Sub-agents → Add a local specialist** adds a purpose-built agent, each with a suggested local model, a matching toolset, a temperature and a context size:

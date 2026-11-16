@@ -4,9 +4,15 @@ export interface ToolCall {
   args: Record<string, unknown>;
 }
 
+export interface ImagePart {
+  mime: string;
+  /** base64, no data: prefix */
+  data: string;
+}
 export interface UserMessage {
   role: 'user';
   content: string;
+  images?: ImagePart[];
 }
 export interface AssistantMessage {
   role: 'assistant';

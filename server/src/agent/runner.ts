@@ -6,6 +6,7 @@ import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
+import { getUpload, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type ToolContext, type ToolDef } from './tools/registry.js';
 
@@ -50,21 +51,26 @@ export interface MessageRow {
   is_error: number;
   raw: string | null;
   raw_model: string | null;
+  attachments?: string | null;
   created_at: number;
 }
 
 export function messageJson(m: MessageRow) {
   const { raw: _raw, raw_model: _rawModel, ...rest } = m;
-  return { ...rest, tool_calls: parseJson<ToolCall[] | null>(m.tool_calls, null), is_error: !!m.is_error };
+  const attachments = parseJson<string[]>(m.attachments, []).map((aid) => {
+    const u = getUpload(aid);
+    return { id: aid, mime: u?.mime ?? 'image/jpeg', width: u?.width ?? null, height: u?.height ?? null };
+  });
+  return { ...rest, tool_calls: parseJson<ToolCall[] | null>(m.tool_calls, null), is_error: !!m.is_error, attachments };
 }
 
 function insertMessage(m: Omit<MessageRow, 'created_at'> & { created_at?: number }) {
   const row: MessageRow = { ...m, created_at: m.created_at ?? now() };
   run(
-    `INSERT INTO messages (id, conversation_id, run_id, role, agent, content, thinking, tool_calls, tool_call_id, tool_name, is_error, raw, raw_model, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO messages (id, conversation_id, run_id, role, agent, content, thinking, tool_calls, tool_call_id, tool_name, is_error, raw, raw_model, attachments, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     row.id, row.conversation_id, row.run_id, row.role, row.agent, row.content, row.thinking, row.tool_calls, row.tool_call_id, row.tool_name,
-    row.is_error, row.raw, row.raw_model, row.created_at,
+    row.is_error, row.raw, row.raw_model, row.attachments ?? null, row.created_at,
   );
   run('UPDATE conversations SET updated_at = ? WHERE id = ?', now(), row.conversation_id);
   emit({ type: 'message', conversationId: row.conversation_id, message: messageJson(row) });
@@ -95,6 +101,9 @@ function loadHistory(conversationId: string, limit: number): { messages: ChatMes
   }
   while (rows.length && rows[0].role !== 'user') rows.shift();
 
+  // Re-sending every image on every turn gets expensive, so only the newest few go to the model.
+  const imageRows = rows.filter((r) => r.role === 'user' && parseJson<string[]>(r.attachments, []).length).slice(-3).map((r) => r.id);
+
   const out: ChatMessage[] = [];
   let pending: ToolCall[] = [];
   const flush = () => {
@@ -110,7 +119,15 @@ function loadHistory(conversationId: string, limit: number): { messages: ChatMes
       continue;
     }
     flush();
-    if (r.role === 'user') out.push({ role: 'user', content: r.content });
+    if (r.role === 'user') {
+      const ids = parseJson<string[]>(r.attachments, []);
+      if (ids.length && imageRows.includes(r.id)) {
+        const images = ids.map(readImage).filter((x): x is NonNullable<typeof x> => !!x);
+        out.push({ role: 'user', content: r.content, images });
+      } else {
+        out.push({ role: 'user', content: ids.length ? `${r.content}\n[${ids.length} earlier image${ids.length > 1 ? 's' : ''} not shown]`.trim() : r.content });
+      }
+    }
     else {
       const toolCalls = parseJson<ToolCall[] | null>(r.tool_calls, null) ?? undefined;
       out.push({ role: 'assistant', content: r.content, toolCalls, raw: parseJson(r.raw, undefined), rawModel: r.raw_model ?? undefined });
@@ -384,7 +401,7 @@ export function createConversation(title = 'New chat', kind = 'chat') {
   return cid;
 }
 
-export function startRun(conversationId: string, text: string, source: 'user' | 'schedule' = 'user'): string {
+export function startRun(conversationId: string, text: string, source: 'user' | 'schedule' = 'user', attachments: string[] = []): string {
   const conv = get<{ id: string; title: string }>('SELECT id, title FROM conversations WHERE id = ?', conversationId);
   if (!conv) throw new HttpError(404, 'Conversation not found');
   if (activeRunFor(conversationId)) throw new HttpError(409, "I'm still working on the last request in this chat. Stop it or wait for it to finish.");
@@ -394,9 +411,10 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
   insertMessage({
     id: id('msg_'), conversation_id: conversationId, run_id: runId, role: 'user', agent: source === 'schedule' ? 'Schedule' : null, content: text,
     thinking: null, tool_calls: null, tool_call_id: null, tool_name: null, is_error: 0, raw: null, raw_model: null,
+    attachments: attachments.length ? JSON.stringify(attachments) : null,
   });
   if (conv.title === 'New chat') {
-    const title = text.split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, 60) || 'New chat';
+    const title = text.split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, 60) || (attachments.length ? 'Image' : 'New chat');
     run('UPDATE conversations SET title = ? WHERE id = ?', title, conversationId);
     emit({ type: 'conversation.changed', id: conversationId });
   }

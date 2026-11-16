@@ -76,12 +76,23 @@ CREATE TABLE IF NOT EXISTS hook_events (
   method TEXT, headers TEXT, body TEXT, delivery_id TEXT, status TEXT NOT NULL, detail TEXT
 );
 CREATE INDEX IF NOT EXISTS hook_events_h ON hook_events(hook_id, ts);
+CREATE TABLE IF NOT EXISTS uploads (
+  id TEXT PRIMARY KEY, mime TEXT NOT NULL, size INTEGER NOT NULL, width INTEGER, height INTEGER, created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, sub TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT, link TEXT, kind TEXT,
   read INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL
 );
 `);
+
+// Columns added after the first release (existing databases are upgraded in place).
+function addColumn(table: string, column: string, type: string) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+  if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+}
+addColumn('messages', 'attachments', 'TEXT');
+addColumn('approvals', 'call_id', 'TEXT');
 
 type Row = Record<string, unknown>;
 

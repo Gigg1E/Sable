@@ -17,4 +17,8 @@ export const HOST = process.env.HOST ?? '0.0.0.0';
  */
 export const AGENT_USER_AGENT = 'SableAgent/0.1 (+self-hosted personal AI agent; automated)';
 
+/** Images people attach to messages. */
+export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
+
 fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
+fs.mkdirSync(UPLOAD_DIR, { recursive: true });

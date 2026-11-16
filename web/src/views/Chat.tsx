@@ -14,13 +14,15 @@ import { navigate } from '../lib/router';
 import { onServerEvent, useStore, type Streaming } from '../lib/store';
 import type { Goal, Message, Schedule, Watcher } from '../lib/types';
 import { Sparkline } from '../components/Sparkline';
+import { ImageViewer } from '../components/ImageViewer';
+import { imageUrl } from '../lib/images';
 
-export async function startChat(text: string) {
+export async function startChat(text: string, attachments: string[] = []) {
   const { id } = await api.post<{ id: string }>('/conversations');
   useStore.setState((s) => ({ messages: { ...s.messages, [id]: [] } }));
   navigate(`/chat/${id}`);
   try {
-    await api.post(`/conversations/${id}/messages`, { text });
+    await api.post(`/conversations/${id}/messages`, { text, attachments });
   } catch (err) {
     useStore.getState().toast({ title: 'Could not send', body: (err as Error).message, tone: 'error' });
   }
@@ -278,6 +280,7 @@ export function ChatView({ id }: { id: string }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [pinned, setPinned] = useState(true);
   const [notFound, setNotFound] = useState(false);
+  const [viewing, setViewing] = useState<string | null>(null);
 
   useEffect(() => {
     setNotFound(false);
@@ -294,10 +297,10 @@ export function ChatView({ id }: { id: string }) {
     if (el && pinned) el.scrollTop = el.scrollHeight;
   }, [messages, streaming?.text, streaming?.thinking, approvals.length, pinned, running]);
 
-  async function send(text: string) {
+  async function send(text: string, attachments: string[]) {
     try {
       setPinned(true);
-      await api.post(`/conversations/${id}/messages`, { text });
+      await api.post(`/conversations/${id}/messages`, { text, attachments });
     } catch (err) {
       toast({ title: 'Could not send', body: (err as Error).message, tone: 'error' });
     }
@@ -358,9 +361,26 @@ export function ChatView({ id }: { id: string }) {
                 t.kind === 'user' ? (
                   <motion.div key={t.message.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
                     <TurnHeader who={t.message.agent === 'Schedule' ? 'Routine' : 'You'} time={t.message.created_at} />
-                    <div className="ml-[26px] whitespace-pre-wrap break-words rounded-lg border border-line bg-panel-2/60 px-3.5 py-2.5 text-[14.5px] leading-relaxed">
-                      {t.message.content.replace(/^\[Scheduled task: [^\]]*\]\n/, '')}
-                    </div>
+                    {!!t.message.attachments?.length && (
+                      <div className="mb-2 ml-[26px] flex flex-wrap gap-2">
+                        {t.message.attachments.map((a) => (
+                          <motion.button key={a.id} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} onClick={() => setViewing(a.id)} className="block overflow-hidden rounded-lg border border-line bg-panel-2 transition-opacity hover:opacity-90">
+                            <img
+                              src={imageUrl(a.id)}
+                              alt=""
+                              loading="lazy"
+                              className={cx('block w-auto max-w-[260px] object-cover', t.message.attachments!.length > 1 ? 'h-32' : 'h-48')}
+                              style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}` } : undefined}
+                            />
+                          </motion.button>
+                        ))}
+                      </div>
+                    )}
+                    {t.message.content && (
+                      <div className="ml-[26px] whitespace-pre-wrap break-words rounded-lg border border-line bg-panel-2/60 px-3.5 py-2.5 text-[14.5px] leading-relaxed">
+                        {t.message.content.replace(/^\[Scheduled task: [^\]]*\]\n/, '')}
+                      </div>
+                    )}
                   </motion.div>
                 ) : (
                   <AgentTurn key={t.key} messages={t.messages} agentName={agentName} streaming={i === turns.length - 1 ? streaming : undefined} working={running && i === turns.length - 1} waiting={waiting && i === turns.length - 1} />
@@ -395,6 +415,7 @@ export function ChatView({ id }: { id: string }) {
             )}
           </AnimatePresence>
 
+          <ImageViewer id={viewing} onClose={() => setViewing(null)} />
           <div className={cx('mx-auto w-full max-w-3xl px-3 pb-3 md:px-8 md:pb-5')}>
             <Composer onSend={send} onStop={stop} running={running} autoFocus placeholder={running ? 'Working… you can stop it at any time' : 'Reply or give a new instruction…'} />
           </div>

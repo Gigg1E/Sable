@@ -4,7 +4,7 @@ import { httpError, readLines, safeToolId, type ChatMessage, type ChatRequest, t
 function toOllama(system: string, messages: ChatMessage[]) {
   const out: Record<string, unknown>[] = [{ role: 'system', content: system }];
   for (const m of messages) {
-    if (m.role === 'user') out.push({ role: 'user', content: m.content });
+    if (m.role === 'user') out.push({ role: 'user', content: m.content, ...(m.images?.length ? { images: m.images.map((i) => i.data) } : {}) });
     else if (m.role === 'assistant')
       out.push({
         role: 'assistant',
@@ -42,6 +42,9 @@ export function ollamaProvider(cfg: ProviderConfig): LlmProvider {
         yield { type: 'notice', text: `${req.model} can't call tools, so it's answering without them. Pick a tool-capable model (e.g. qwen3, llama3.1, mistral-nemo) for full agent abilities.` };
         yield* chat(req, false);
         return;
+      }
+      if (/image|vision|multimodal/i.test(err.message) && req.messages.some((m) => m.role === 'user' && m.images?.length)) {
+        throw new Error(`${req.model} can't read images. Pick a vision model for images (e.g. gemma3, qwen2.5vl, llama3.2-vision, mistral-small3.1). Details: ${err.message}`);
       }
       throw err;
     }

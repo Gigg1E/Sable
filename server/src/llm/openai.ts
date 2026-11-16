@@ -5,7 +5,13 @@ import { httpError, readLines, safeToolId, type ChatMessage, type ChatRequest, t
 function toOpenAI(system: string, messages: ChatMessage[]) {
   const out: Record<string, unknown>[] = [{ role: 'system', content: system }];
   for (const m of messages) {
-    if (m.role === 'user') out.push({ role: 'user', content: m.content });
+    if (m.role === 'user')
+      out.push({
+        role: 'user',
+        content: m.images?.length
+          ? [...m.images.map((i) => ({ type: 'image_url', image_url: { url: `data:${i.mime};base64,${i.data}` } })), { type: 'text', text: m.content || 'See the attached image.' }]
+          : m.content,
+      });
     else if (m.role === 'assistant')
       out.push({
         role: 'assistant',

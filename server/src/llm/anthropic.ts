@@ -19,7 +19,11 @@ function toAnthropic(messages: ChatMessage[], model: string, allowRaw: boolean):
   };
   for (const m of messages) {
     if (m.role === 'user') {
-      push('user', [{ type: 'text', text: m.content || '(empty message)' }]);
+      const images: Block[] = (m.images ?? []).map((i) => ({
+        type: 'image',
+        source: { type: 'base64', media_type: i.mime as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data: i.data },
+      }));
+      push('user', [...images, { type: 'text', text: m.content || (images.length ? 'See the attached image.' : '(empty message)') }]);
     } else if (m.role === 'tool') {
       push('user', [{ type: 'tool_result', tool_use_id: m.toolCallId, content: m.content || '(no output)', is_error: m.isError || undefined }]);
     } else {
