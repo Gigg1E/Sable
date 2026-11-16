@@ -6,7 +6,7 @@ import { ApprovalCard } from '../components/ApprovalCard';
 import { Composer, type ComposerHandle } from '../components/Composer';
 import { Logo } from '../components/Logo';
 import { Markdown } from '../components/Markdown';
-import { ToolTrace } from '../components/ToolCall';
+import { WorkBlock, type Step } from '../components/WorkBlock';
 import { Button, Card, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
@@ -212,34 +212,6 @@ function groupTurns(messages: Message[]): Turn[] {
   return out;
 }
 
-function Reasoning({ text, live }: { text: string; live?: boolean }) {
-  const [open, setOpen] = useState(false);
-  if (!text.trim()) return null;
-  return (
-    <div className="mb-2">
-      <button onClick={() => setOpen((o) => !o)} className="flex items-center gap-1.5 text-[12px] text-fg-3 hover:text-fg-2">
-        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.15 }}>
-          <ChevronRight className="size-3" />
-        </motion.span>
-        {live ? (
-          <>
-            <Ticker /> Reasoning
-          </>
-        ) : (
-          'Reasoning'
-        )}
-      </button>
-      <AnimatePresence initial={false}>
-        {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
-            <div className="mt-1.5 whitespace-pre-wrap border-l border-line-strong pl-3 text-[13px] leading-relaxed text-fg-2">{text}</div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
 function TurnHeader({ who, time, agent }: { who: string; time?: number; agent?: boolean }) {
   return (
     <div className="mb-1.5 flex items-center gap-2">
@@ -250,69 +222,45 @@ function TurnHeader({ who, time, agent }: { who: string; time?: number; agent?: 
   );
 }
 
-function WorkingLine({ since }: { since: number }) {
-  const [now, setNow] = useState(Date.now());
-  useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 250);
-    return () => clearInterval(t);
-  }, []);
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 py-1 text-[13px] text-fg-2">
-      <Ticker className="text-info" /> Working <span className="font-mono text-[11px] text-fg-3 tabular">{Math.max(0, Math.round((now - since) / 1000))}s</span>
-    </motion.div>
-  );
-}
-
-function AgentTurn({ messages, streaming, working, agentName }: { messages: Message[]; streaming?: Streaming; working: boolean; agentName: string }) {
-  const results = useMemo(() => {
-    const r: Record<string, { content: string; isError: boolean }> = {};
-    for (const m of messages) if (m.role === 'tool' && m.tool_call_id) r[m.tool_call_id] = { content: m.content, isError: m.is_error };
-    return r;
-  }, [messages]);
-  // Consecutive tool-only steps merge into one trace, so a long run reads as a single log.
-  const blocks = useMemo(() => {
-    const out: ({ kind: 'msg'; m: Message } | { kind: 'trace'; key: string; calls: NonNullable<Message['tool_calls']> })[] = [];
-    for (const m of messages) {
-      if (m.role === 'tool') continue;
-      const calls = m.tool_calls ?? [];
-      const last = out[out.length - 1];
-      if (m.role === 'assistant' && !m.content && !m.thinking && calls.length && last?.kind === 'trace') {
-        last.calls = [...last.calls, ...calls];
-        continue;
-      }
-      out.push({ kind: 'msg', m: { ...m, tool_calls: null } });
-      if (calls.length) out.push({ kind: 'trace', key: `t-${m.id}`, calls: [...calls] });
-    }
-    return out;
-  }, [messages]);
+function AgentTurn({ messages, streaming, working, waiting, agentName }: { messages: Message[]; streaming?: Streaming; working: boolean; waiting: boolean; agentName: string }) {
   const [since] = useState(Date.now());
+
+  // Split the turn into the work (reasoning, interim notes, tool calls) and the final answer.
+  const { steps, final, errors } = useMemo(() => {
+    const results: Record<string, { content: string; isError: boolean }> = {};
+    for (const m of messages) if (m.role === 'tool' && m.tool_call_id) results[m.tool_call_id] = { content: m.content, isError: m.is_error };
+    const assistant = messages.filter((m) => m.role === 'assistant');
+    const lastMsg = assistant[assistant.length - 1];
+    // The answer is the last assistant message once it stops calling tools (and nothing is still streaming).
+    const finalMsg = lastMsg && !lastMsg.tool_calls?.length && lastMsg.content ? lastMsg : null;
+    const out: Step[] = [];
+    for (const m of assistant) {
+      if (m.thinking?.trim()) out.push({ kind: 'thinking', id: `th-${m.id}`, text: m.thinking });
+      if (m === finalMsg) continue;
+      if (m.content?.trim()) out.push({ kind: 'note', id: `n-${m.id}`, text: m.content });
+      for (const c of m.tool_calls ?? []) out.push({ kind: 'tool', id: c.id, call: c, result: results[c.id]?.content, isError: results[c.id]?.isError });
+    }
+    return { steps: out, final: finalMsg, errors: messages.filter((m) => m.role === 'error') };
+  }, [messages, working]);
+
+  const liveSteps: Step[] = streaming?.thinking && !streaming.text ? [...steps, { kind: 'thinking', id: `live-${streaming.messageId}`, text: streaming.thinking, live: true }] : steps;
+  const started = messages[0]?.created_at ?? since;
+  const ended = messages[messages.length - 1]?.created_at;
+  const showBlock = liveSteps.length > 0 || (working && !streaming?.text);
 
   return (
     <div>
       <TurnHeader who={messages.find((m) => m.agent)?.agent ?? streaming?.agent ?? agentName} time={messages[0]?.created_at} agent />
       <div className="pl-[26px]">
-        {blocks.map((b) => {
-          if (b.kind === 'trace') return <ToolTrace key={b.key} calls={b.calls} results={results} />;
-          const m = b.m;
-          return m.role === 'error' ? (
-            <div key={m.id} className="my-2 flex items-start gap-2.5 rounded-lg border border-danger/25 bg-danger/5 px-3.5 py-3 text-[13px] text-danger">
-              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-              <span className="break-words">{m.content}</span>
-            </div>
-          ) : (
-            <div key={m.id}>
-              {m.thinking && <Reasoning text={m.thinking} />}
-              {m.content && <Markdown text={m.content} />}
-            </div>
-          );
-        })}
-        {streaming && (
-          <div>
-            {streaming.thinking && <Reasoning text={streaming.thinking} live={!streaming.text} />}
-            {streaming.text && <Markdown text={streaming.text} streaming />}
+        {showBlock && <WorkBlock steps={liveSteps} working={working} waiting={waiting} started={started} ended={working ? undefined : ended} />}
+        {final && <Markdown text={final.content} />}
+        {streaming?.text && <Markdown text={streaming.text} streaming />}
+        {errors.map((m) => (
+          <div key={m.id} className="my-2 flex items-start gap-2.5 rounded-lg border border-danger/25 bg-danger/5 px-3.5 py-3 text-[13px] text-danger">
+            <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+            <span className="break-words">{m.content}</span>
           </div>
-        )}
-        <AnimatePresence>{working && !streaming?.text && !streaming?.thinking && <WorkingLine since={since} />}</AnimatePresence>
+        ))}
       </div>
     </div>
   );
@@ -415,10 +363,10 @@ export function ChatView({ id }: { id: string }) {
                     </div>
                   </motion.div>
                 ) : (
-                  <AgentTurn key={t.key} messages={t.messages} agentName={agentName} streaming={i === turns.length - 1 ? streaming : undefined} working={running && !waiting && i === turns.length - 1} />
+                  <AgentTurn key={t.key} messages={t.messages} agentName={agentName} streaming={i === turns.length - 1 ? streaming : undefined} working={running && i === turns.length - 1} waiting={waiting && i === turns.length - 1} />
                 ),
               )}
-              {running && !lastIsAgent && <AgentTurn messages={[]} agentName={agentName} streaming={streaming} working={!waiting} />}
+              {running && !lastIsAgent && <AgentTurn messages={[]} agentName={agentName} streaming={streaming} working waiting={waiting} />}
 
               <AnimatePresence>
                 {approvals.map((a) => (

@@ -62,7 +62,7 @@ export function resolveStatus(live: ToolState | undefined, result: string | unde
   return 'error';
 }
 
-function ToolRow({ call, result, isError, depth = 0 }: { call: ToolCall; result?: string; isError?: boolean; depth?: number }) {
+export function ToolRow({ call, result, isError, depth = 0, title }: { call: ToolCall; result?: string; isError?: boolean; depth?: number; title?: string }) {
   const live = useStore((s) => s.tools[call.id]);
   const children = useStore(useShallow((s) => Object.values(s.tools).filter((t) => t.parentCallId === call.id)));
   const [open, setOpen] = useState(false);
@@ -79,8 +79,14 @@ function ToolRow({ call, result, isError, depth = 0 }: { call: ToolCall; result?
       <button onClick={() => setOpen((o) => !o)} className={cx('group flex h-8 w-full items-center gap-2.5 pr-3 text-left transition-colors hover:bg-panel-2/70', depth ? 'pl-8' : 'pl-3')}>
         <Glyph status={status} />
         <Icon className="size-3.5 shrink-0 text-fg-3" />
-        <span className="shrink-0 text-[13px] text-fg">{label}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-3">{summary.replace(label, '').replace(/^[:\s]+/, '') || summary}</span>
+        {title ? (
+          <span className="min-w-0 flex-1 truncate text-[13px] text-fg-2 group-hover:text-fg">{title}</span>
+        ) : (
+          <>
+            <span className="shrink-0 text-[13px] text-fg">{label}</span>
+            <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-3">{summary.replace(label, '').replace(/^[:\s]+/, '') || summary}</span>
+          </>
+        )}
         {status === 'waiting' && <span className="text-[11.5px] font-medium text-accent">needs approval</span>}
         {(status === 'denied' || status === 'blocked') && <span className="text-[11.5px] text-danger">{status}</span>}
         {elapsed !== undefined && status !== 'waiting' && <span className="font-mono text-[11px] text-fg-3 tabular">{fmtMs(elapsed)}</span>}
