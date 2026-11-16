@@ -1,7 +1,8 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { activeRunFor, activeRuns, cancelRun, createConversation, HttpError, messageJson, quickAnswer, startRun, type MessageRow } from './agent/runner.js';
 import { decideApproval, pendingApprovals, policyFor } from './agent/sentinel.js';
-import { mcpStatus, reloadMcp } from './agent/tools/mcp.js';
+import { beginOAuth, completeOAuth, mcpStatus, reloadMcp } from './agent/tools/mcp.js';
+import { clearState, forgetOAuth, oauthCallbackUrl, serverForState } from './agent/tools/mcpAuth.js';
 import { computeNextRun, goalJson, type GoalRow, type ScheduleKind, type ScheduleSpec } from './agent/tools/personal.js';
 import { getTool, listTools } from './agent/tools/registry.js';
 import {
@@ -497,6 +498,41 @@ export function apiRouter() {
   );
   r.get('/mcp', h(() => mcpStatus()));
   r.post('/mcp/reload', h(async () => (await reloadMcp(), mcpStatus())));
+  r.get('/mcp/oauth/info', h(() => ({ callbackUrl: oauthCallbackUrl() })));
+  r.post(
+    '/mcp/:id/connect',
+    h(async (req) => {
+      try {
+        const url = await beginOAuth(param(req, 'id'));
+        return { ok: true, authUrl: url ?? null };
+      } catch (err) {
+        return { ok: false, error: errorMessage(err) };
+      }
+    }),
+  );
+  r.post(
+    '/mcp/:id/disconnect',
+    h(async (req) => {
+      forgetOAuth(param(req, 'id'));
+      await reloadMcp();
+      return mcpStatus();
+    }),
+  );
+  // The provider redirects the browser here after the user approves (session cookie is sent: same-site top-level GET).
+  r.get('/mcp/oauth/callback', async (req, res) => {
+    const state = String(req.query.state ?? '');
+    const serverId = state ? serverForState(state) : undefined;
+    const back = (q: string) => res.redirect(`/settings/connectors?${q}`);
+    if (req.query.error) return back(`oauth_error=${encodeURIComponent(String(req.query.error_description ?? req.query.error))}`);
+    if (!serverId) return back('oauth_error=' + encodeURIComponent('Sign-in expired or was started elsewhere. Try Connect again.'));
+    clearState(state);
+    try {
+      await completeOAuth(serverId, String(req.query.code ?? ''));
+      back(`connected=${encodeURIComponent(serverId)}`);
+    } catch (err) {
+      back(`oauth_error=${encodeURIComponent(errorMessage(err))}`);
+    }
+  });
 
   // ── Push ──
   r.get('/push/key', h(() => ({ key: vapidPublicKey() })));

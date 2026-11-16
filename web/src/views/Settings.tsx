@@ -3,6 +3,7 @@ import { BarChart3, Bell, Bot, CheckCircle2, Code2, Cpu, Download, Globe, Map as
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Field, Input, Segmented, Select, Spinner, Textarea, Toggle, TopBar } from '../components/ui';
 import { AGENT_TEMPLATES } from '../lib/agentTemplates';
+import { ConnectorsSection } from './Connectors';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
 import { disablePush, enablePush, pushState } from '../lib/push';
@@ -670,91 +671,6 @@ const linesToRecord = (text: string, sep: string) =>
   );
 const recordToLines = (r: Record<string, string> | undefined, sep: string) => Object.entries(r ?? {}).map(([k, v]) => `${k}${sep}${v}`).join('\n');
 
-function ConnectorsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
-  const [status, setStatus] = useState<{ id: string; state: string; error?: string; tools: string[] }[]>([]);
-  useEffect(() => {
-    const load = () => void api.get<typeof status>('/mcp').then(setStatus);
-    load();
-    return onServerEvent((ev) => ev.type === 'mcp.changed' && load());
-  }, []);
-  return (
-    <Section
-      title="Connectors"
-      description={
-        <>
-          Connect Sable to your email, calendar, notes, smart home and more through any <b>MCP server</b>. Each connector's actions ask for approval until you allow them in Permissions. Changes apply when you save.
-        </>
-      }
-    >
-      <AnimatePresence initial={false}>
-        {draft.mcpServers.map((m, i) => {
-          const st = status.find((s) => s.id === m.id);
-          const set = (fn: (x: McpServerConfig) => void) => edit((d) => fn(d.mcpServers[i]));
-          return (
-            <motion.div key={m.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}>
-              <Card className="p-4">
-                <div className="flex items-center gap-3">
-                  <div className="flex size-9 items-center justify-center rounded-md bg-panel-2 text-fg-2">
-                    <Plug className="size-4" />
-                  </div>
-                  <Input className="!w-auto flex-1 !bg-transparent !border-transparent !px-0 font-medium !text-[15px] focus:!ring-0" value={m.name} onChange={(e) => set((x) => void (x.name = e.target.value))} />
-                  {st && (
-                    <Badge tone={st.state === 'connected' ? 'ok' : st.state === 'error' ? 'danger' : 'default'}>
-                      {st.state === 'connected' ? `${st.tools.length} tools` : st.state}
-                    </Badge>
-                  )}
-                  <Toggle checked={m.enabled} onChange={(v) => set((x) => void (x.enabled = v))} />
-                  <Button size="sm" variant="ghost" className="text-danger" onClick={() => edit((d) => void d.mcpServers.splice(i, 1))} aria-label="Remove">
-                    <Trash2 className="size-3.5" />
-                  </Button>
-                </div>
-                {st?.error && <p className="mt-2 text-xs text-danger">{st.error}</p>}
-                <div className="mt-4 space-y-3">
-                  <Segmented id={`t-${m.id}`} value={m.transport} onChange={(v) => set((x) => void (x.transport = v))} options={[{ value: 'stdio', label: 'Local command' }, { value: 'http', label: 'Remote URL' }]} />
-                  {m.transport === 'stdio' ? (
-                    <>
-                      <Field label="Command" hint="Runs on your server, e.g. npx, uvx or docker.">
-                        <Input value={m.command ?? ''} placeholder="npx" onChange={(e) => set((x) => void (x.command = e.target.value))} />
-                      </Field>
-                      <Field label="Arguments" hint="One per line.">
-                        <Textarea className="!min-h-14 font-mono text-xs" value={(m.args ?? []).join('\n')} placeholder={'-y\n@modelcontextprotocol/server-filesystem\n/path/to/notes'} onChange={(e) => set((x) => void (x.args = e.target.value.split('\n').filter(Boolean)))} />
-                      </Field>
-                      <Field label="Environment" hint="KEY=value, one per line. Secrets stay on the server.">
-                        <Textarea className="!min-h-14 font-mono text-xs" value={recordToLines(m.env, '=')} onChange={(e) => set((x) => void (x.env = linesToRecord(e.target.value, '=')))} />
-                      </Field>
-                    </>
-                  ) : (
-                    <>
-                      <Field label="URL">
-                        <Input value={m.url ?? ''} placeholder="https://mcp.example.com/mcp" onChange={(e) => set((x) => void (x.url = e.target.value))} />
-                      </Field>
-                      <Field label="Headers" hint="Name: value, one per line (e.g. Authorization: Bearer …).">
-                        <Textarea className="!min-h-14 font-mono text-xs" value={recordToLines(m.headers, ':')} onChange={(e) => set((x) => void (x.headers = linesToRecord(e.target.value, ':')))} />
-                      </Field>
-                    </>
-                  )}
-                </div>
-              </Card>
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-      <Button
-        onClick={() =>
-          edit((d) => {
-            let mid = 'connector';
-            let n = 2;
-            while (d.mcpServers.some((s) => s.id === mid)) mid = `connector${n++}`;
-            d.mcpServers.push({ id: mid, name: 'New connector', enabled: true, transport: 'stdio', command: 'npx', args: [], env: {} });
-          })
-        }
-      >
-        <Plus className="size-4" /> Add connector
-      </Button>
-    </Section>
-  );
-}
-
 const CHANNEL_TYPES = [
   { value: 'ntfy', label: 'ntfy', placeholder: 'https://ntfy.sh/your-secret-topic', hint: 'Free push app for iOS/Android, self-hostable. Use a hard-to-guess topic name.' },
   { value: 'discord', label: 'Discord', placeholder: 'https://discord.com/api/webhooks/…', hint: 'Channel → Edit → Integrations → Webhooks → New webhook → Copy URL.' },
@@ -929,17 +845,20 @@ export function SettingsView({ section }: { section?: string }) {
       return next;
     });
 
-  async function save() {
-    if (!draft) return;
+  async function save(override?: Settings, quiet = false): Promise<Settings | null> {
+    const body = override ?? draft;
+    if (!body) return null;
     setSaving(true);
     try {
-      const next = await api.put<Settings>('/settings', draft);
+      const next = await api.put<Settings>('/settings', body);
       modelCache.clear();
       setSettings(next);
       setDraft(structuredClone(next));
-      toast({ title: 'Settings saved', tone: 'success' });
+      if (!quiet) toast({ title: 'Settings saved', tone: 'success' });
+      return next;
     } catch (err) {
       toast({ title: 'Could not save', body: (err as Error).message, tone: 'error' });
+      return null;
     } finally {
       setSaving(false);
     }
@@ -975,7 +894,7 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'models' && <ModelsSection draft={draft} edit={edit} />}
                 {active === 'agents' && <AgentsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'permissions' && <PermissionsSection draft={draft} edit={edit} tools={tools} />}
-                {active === 'connectors' && <ConnectorsSection draft={draft} edit={edit} />}
+                {active === 'connectors' && <ConnectorsSection draft={draft} edit={edit} tools={tools} saveNow={(next) => save(next, true)} />}
                 {active === 'network' && <NetworkSection draft={draft} edit={edit} />}
                 {active === 'notifications' && <NotificationsSection draft={draft} edit={edit} />}
               </motion.div>

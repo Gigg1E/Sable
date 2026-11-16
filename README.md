@@ -247,18 +247,20 @@ If the model isn't installed yet, a **Download** button on the card pulls it thr
 2. **Settings → Sub-agents**: the **Coder** already uses *Claude · claude-opus-5-5* with file and script tools. Add more agents if you like, for example a second Ollama model for summaries.
 3. Ask: *"Write a script that renames my photos by date."* The main agent delegates to the Coder. You see the Coder's steps nested inside the delegation, and scripts still wait for your OK.
 
-### Example: a connector
+### Connecting accounts (Notion, Google, Outlook, GitHub…)
 
-**Settings → Connectors → Add connector**, local command:
+**Settings → Connectors → Connect an account.** Integrations use the [Model Context Protocol](https://modelcontextprotocol.io). Remote servers sign in with **OAuth on the provider's own page**: Sable handles discovery, dynamic client registration, PKCE and token refresh, and keeps tokens on your server only.
 
-```
-command:  npx
-args:     -y
-          @modelcontextprotocol/server-filesystem
-          /home/me/Notes
-```
+| Connector | Setup |
+|---|---|
+| **Notion** (official) | One click: *Connect* → approve in Notion → done |
+| **Linear** (official) | One click |
+| **Google Calendar / Gmail** (official, developer preview) | Google requires every self-hosted app to bring its own OAuth client. One-time setup: create a *Web application* client in Google Auth Platform, tick *“Use this client for an AI-powered agent”*, add the redirect URI Sable shows, add yourself as a test user, then paste the client ID and secret. After that it's one click, and the same client works for both. Gmail's official server reads, labels and drafts; it doesn't send. |
+| **Outlook & Microsoft 365** (open-source [Softeria server](https://github.com/Softeria/ms-365-mcp-server)) | Runs on your server via `npx`, with no app registration. Ask Sable to “log in to Microsoft 365” and enter the code it gives you at microsoft.com/devicelogin. Microsoft's own Outlook MCP servers currently require a Microsoft 365 Copilot license. |
+| **GitHub** (official) | Paste a fine-grained personal access token |
+| **Anything else** | *Custom*: any MCP server URL (OAuth sign-in or headers), or a local command |
 
-Save, then its tools appear under **Permissions**, set to *Ask* by default.
+The OAuth redirect URI is `<Public URL>/api/mcp/oauth/callback`, so set **Settings → Network → Public URL** first if you open Sable from more than one address. Connector actions ask for approval by default. **Allow read-only tools without asking** on a connector auto-approves the tools its server marks as read-only, so reading your calendar doesn't prompt every time, while anything that sends or changes data still asks.
 
 ## Architecture
 

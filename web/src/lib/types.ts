@@ -32,6 +32,9 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  auth?: 'headers' | 'oauth';
+  oauth?: { clientId?: string; clientSecret?: string; scope?: string };
+  preset?: string;
 }
 export interface Channel {
   id: string;

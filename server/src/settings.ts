@@ -41,6 +41,12 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   url?: string;
   headers?: Record<string, string>;
+  /** How a remote server authenticates: static headers, or "Connect account" via OAuth. */
+  auth?: 'headers' | 'oauth';
+  /** Optional pre-registered OAuth client (needed by providers without dynamic registration, e.g. Google). */
+  oauth?: { clientId?: string; clientSecret?: string; scope?: string };
+  /** Gallery preset this connector was created from. */
+  preset?: string;
 }
 
 export interface Channel {
@@ -179,6 +185,7 @@ export function publicSettings(): Settings {
   for (const m of s.mcpServers) {
     if (m.env) for (const k of Object.keys(m.env)) m.env[k] = m.env[k] ? MASK : '';
     if (m.headers) for (const k of Object.keys(m.headers)) m.headers[k] = m.headers[k] ? MASK : '';
+    if (m.oauth?.clientSecret) m.oauth.clientSecret = MASK;
   }
   return s;
 }
@@ -196,6 +203,7 @@ export function updateSettings(next: Settings): Settings {
   }
   for (const m of next.mcpServers ?? []) {
     const old = prev.mcpServers.find((x) => x.id === m.id);
+    if (m.oauth?.clientSecret === MASK) m.oauth.clientSecret = old?.oauth?.clientSecret ?? '';
     for (const field of ['env', 'headers'] as const) {
       const rec = m[field];
       if (!rec) continue;

@@ -266,7 +266,43 @@ function StatusBar() {
 
 // ───────────────────────── Mobile ─────────────────────────
 
-function MobileTabs({ onMore }: { onMore: () => void }) {
+const FIELD = 'input:not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit]):not([type=range]), textarea, select, [contenteditable="true"]';
+
+/**
+ * On touch devices: report whether the on-screen keyboard is (probably) open, and pin the app to
+ * the visual viewport so the layout sits above the keyboard instead of being scrolled behind it.
+ */
+function useTouchKeyboard() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!window.matchMedia('(pointer: coarse)').matches) return;
+    const isField = (el: Element | null) => !!el && el instanceof HTMLElement && el.matches(FIELD) && !(el as HTMLInputElement).readOnly;
+    const onIn = (e: FocusEvent) => isField(e.target as Element) && setOpen(true);
+    const onOut = () => setTimeout(() => setOpen(isField(document.activeElement)), 60);
+    document.addEventListener('focusin', onIn);
+    document.addEventListener('focusout', onOut);
+
+    const vv = window.visualViewport;
+    const root = document.documentElement;
+    const sync = () => {
+      if (!vv) return;
+      root.style.setProperty('--app-h', `${Math.round(vv.height)}px`);
+      root.style.setProperty('--app-top', `${Math.round(vv.offsetTop)}px`);
+    };
+    vv?.addEventListener('resize', sync);
+    vv?.addEventListener('scroll', sync);
+    sync();
+    return () => {
+      document.removeEventListener('focusin', onIn);
+      document.removeEventListener('focusout', onOut);
+      vv?.removeEventListener('resize', sync);
+      vv?.removeEventListener('scroll', sync);
+    };
+  }, []);
+  return open;
+}
+
+function MobileTabs({ onMore, hidden }: { onMore: () => void; hidden: boolean }) {
   const path = usePath();
   const approvals = useStore((s) => s.approvals.length);
   const unread = useStore((s) => s.unread);
@@ -278,7 +314,16 @@ function MobileTabs({ onMore }: { onMore: () => void }) {
   ];
   const moreActive = ['/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
   return (
-    <nav className="pb-safe z-30 shrink-0 border-t border-line bg-bg/90 backdrop-blur-md md:hidden">
+    <AnimatePresence initial={false}>
+      {!hidden && (
+    <motion.nav
+      key="tabs"
+      initial={{ height: 0, opacity: 0 }}
+      animate={{ height: 'auto', opacity: 1 }}
+      exit={{ height: 0, opacity: 0 }}
+      transition={{ duration: 0.16, ease: 'easeOut' }}
+      className="pb-safe z-30 shrink-0 overflow-hidden border-t border-line bg-bg/90 backdrop-blur-md md:hidden"
+    >
       <div className="grid h-14 grid-cols-5">
         {tabs.map((t) => (
           <button key={t.to} onClick={() => navigate(t.to)} className={cx('relative flex flex-col items-center justify-center gap-1 text-[10.5px] font-medium', t.active ? 'text-fg' : 'text-fg-3')}>
@@ -294,7 +339,9 @@ function MobileTabs({ onMore }: { onMore: () => void }) {
           More
         </button>
       </div>
-    </nav>
+    </motion.nav>
+      )}
+    </AnimatePresence>
   );
 }
 
@@ -305,6 +352,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
   const [more, setMore] = useState(false);
   const [palette, setPalette] = useState(false);
   const theme = useTheme();
+  const keyboard = useTouchKeyboard();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -319,7 +367,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
 
   return (
     <ShellContext.Provider value={{ openNav: () => setDrawer(true), openPalette: () => setPalette(true) }}>
-      <div className="flex h-dvh overflow-hidden bg-bg">
+      <div className="fixed inset-x-0 flex overflow-hidden bg-bg" style={{ top: 'var(--app-top, 0px)', height: 'var(--app-h, 100dvh)' }}>
         <aside className="hidden w-[244px] shrink-0 border-r border-line bg-sunken md:block">
           <SidebarContent onSearch={() => setPalette(true)} />
         </aside>
@@ -332,7 +380,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
             </AnimatePresence>
           </main>
           <StatusBar />
-          <MobileTabs onMore={() => setMore(true)} />
+          <MobileTabs onMore={() => setMore(true)} hidden={keyboard} />
         </div>
 
         <AnimatePresence>

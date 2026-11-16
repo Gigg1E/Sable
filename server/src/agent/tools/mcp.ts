@@ -1,6 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { auth, UnauthorizedError } from '@modelcontextprotocol/sdk/client/auth.js';
+import { oauthInfo, SableOAuthProvider } from './mcpAuth.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { WORKSPACE_DIR } from '../../config.js';
 import { emit } from '../../events.js';
@@ -18,8 +20,11 @@ import { registerTool, unregisterWhere } from './registry.js';
 export interface McpStatus {
   id: string;
   name: string;
-  state: 'connected' | 'error' | 'disabled' | 'connecting';
+  state: 'connected' | 'error' | 'disabled' | 'connecting' | 'needs_auth';
   error?: string;
+  /** Where to send the browser to sign in (OAuth connectors). */
+  authUrl?: string;
+  oauth?: boolean;
   tools: string[];
 }
 
@@ -41,7 +46,10 @@ async function connect(cfg: McpServerConfig) {
   let transport: Transport;
   if (cfg.transport === 'http') {
     if (!cfg.url) throw new Error('No URL configured');
-    transport = new StreamableHTTPClientTransport(new URL(cfg.url), { requestInit: { headers: cfg.headers ?? {} } });
+    transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
+      requestInit: { headers: cfg.headers ?? {} },
+      ...(cfg.auth === 'oauth' ? { authProvider: new SableOAuthProvider(cfg) } : {}),
+    });
   } else {
     if (!cfg.command) throw new Error('No command configured');
     transport = new StdioClientTransport({
@@ -53,7 +61,16 @@ async function connect(cfg: McpServerConfig) {
     });
   }
   const client = new Client({ name: 'sable', version: '0.1.0' });
-  await client.connect(transport);
+  try {
+    await client.connect(transport);
+  } catch (err) {
+    if (err instanceof UnauthorizedError || (cfg.auth === 'oauth' && /unauthori[sz]ed|401/i.test(String((err as Error).message)))) {
+      const info = oauthInfo(cfg.id);
+      status.set(cfg.id, { id: cfg.id, name: cfg.name, state: 'needs_auth', tools: [], authUrl: info.authUrl, oauth: true });
+      return;
+    }
+    throw err;
+  }
   clients.set(cfg.id, client);
 
   const { tools } = await client.listTools();
@@ -83,7 +100,7 @@ async function connect(cfg: McpServerConfig) {
       },
     });
   }
-  status.set(cfg.id, { id: cfg.id, name: cfg.name, state: 'connected', tools: names });
+  status.set(cfg.id, { id: cfg.id, name: cfg.name, state: 'connected', tools: names, oauth: cfg.auth === 'oauth' });
 }
 
 /** (Re)connect every enabled connector to match the current settings. */
@@ -104,4 +121,27 @@ export async function reloadMcp() {
       }),
   );
   emit({ type: 'mcp.changed' });
+}
+
+/** Finish an OAuth sign-in: exchange the code for tokens, then reconnect. */
+export async function completeOAuth(serverId: string, code: string) {
+  const cfg = getSettings().mcpServers.find((s) => s.id === serverId);
+  if (!cfg?.url) throw new Error('Unknown connector');
+  const result = await auth(new SableOAuthProvider(cfg), { serverUrl: cfg.url, authorizationCode: code, scope: cfg.oauth?.scope });
+  if (result !== 'AUTHORIZED') throw new Error('The provider did not authorize the connection');
+  await reloadMcp();
+}
+
+/** Start (or restart) sign-in for one connector and return the URL to open. */
+export async function beginOAuth(serverId: string): Promise<string | undefined> {
+  const cfg = getSettings().mcpServers.find((s) => s.id === serverId);
+  if (!cfg?.url) throw new Error('Unknown connector');
+  const provider = new SableOAuthProvider(cfg);
+  provider.invalidateCredentials('tokens');
+  const result = await auth(provider, { serverUrl: cfg.url, scope: cfg.oauth?.scope });
+  if (result === 'AUTHORIZED') {
+    await reloadMcp();
+    return undefined;
+  }
+  return oauthInfo(serverId).authUrl;
 }

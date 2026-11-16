@@ -99,6 +99,9 @@ export function kvGet<T>(key: string): T | undefined {
   const row = get<{ value: string }>('SELECT value FROM kv WHERE key = ?', key);
   return row ? (JSON.parse(row.value) as T) : undefined;
 }
+export function kvDel(key: string) {
+  run('DELETE FROM kv WHERE key = ?', key);
+}
 export function kvSet(key: string, value: unknown) {
   run('INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', key, JSON.stringify(value));
 }
