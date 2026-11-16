@@ -11,6 +11,7 @@ import { all, get, run } from './db.js';
 import { emit, sseHandler } from './events.js';
 import { providerFor } from './llm/index.js';
 import { pullOllamaModel } from './llm/pull.js';
+import { checkExitIp, proxyLabel } from './net.js';
 import { notify, removeSubscription, saveSubscription, vapidPublicKey } from './push.js';
 import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type ProviderConfig, type Settings } from './settings.js';
@@ -116,7 +117,7 @@ export function apiRouter() {
             } catch {
               /* keep label */
             }
-            return { ...tc, summary };
+            return { ...tc, summary, label: tool?.label ?? tc.name };
           }) ?? null,
         }));
       const activity = all<{ run_id: string; tool: string; status: string; summary: string }>(
@@ -362,6 +363,17 @@ export function apiRouter() {
     h(() =>
       listTools().map((t) => ({ name: t.name, label: t.label, group: t.group, description: t.description, risk: t.risk, source: t.source, defaultPolicy: t.defaultPolicy, policy: policyFor(t) })),
     ),
+  );
+  r.get('/network', h(() => ({ proxy: proxyLabel() })));
+  r.post(
+    '/network/check',
+    h(async () => {
+      try {
+        return { ok: true, ...(await checkExitIp()) };
+      } catch (err) {
+        return { ok: false, error: errorMessage(err), proxy: proxyLabel() };
+      }
+    }),
   );
   r.get('/mcp', h(() => mcpStatus()));
   r.post('/mcp/reload', h(async () => (await reloadMcp(), mcpStatus())));

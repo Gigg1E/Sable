@@ -1,4 +1,4 @@
-import { AGENT_USER_AGENT } from '../../config.js';
+import { agentFetch } from '../../net.js';
 import { getSettings } from '../../settings.js';
 import { truncate, untrusted } from '../../util.js';
 import { registerTool } from './registry.js';
@@ -47,16 +47,6 @@ export function htmlToText(html: string): { title: string; text: string } {
     .replace(/\n\s*\n\s*(\n\s*)+/g, '\n\n')
     .trim();
   return { title, text };
-}
-
-async function agentFetch(url: string, init: RequestInit = {}, signal?: AbortSignal) {
-  const timeout = AbortSignal.timeout(25_000);
-  return fetch(url, {
-    redirect: 'follow',
-    ...init,
-    headers: { 'User-Agent': AGENT_USER_AGENT, Accept: 'text/html,application/json,text/plain;q=0.9,*/*;q=0.5', ...(init.headers ?? {}) },
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-  });
 }
 
 async function readCapped(res: Response): Promise<string> {

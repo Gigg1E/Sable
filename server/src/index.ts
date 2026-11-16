@@ -11,6 +11,7 @@ import { DATA_DIR, HOST, PORT, WEB_DIST } from './config.js';
 import { initPush } from './push.js';
 import { apiRouter } from './routes.js';
 import { startScheduler } from './scheduler.js';
+import { proxyLabel } from './net.js';
 import { getSettings } from './settings.js';
 
 recoverRuns();
@@ -48,7 +49,8 @@ if (fs.existsSync(WEB_DIST)) {
 
 app.listen(PORT, HOST, () => {
   console.log(`\n  Sable is listening on http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
-  console.log(`  Data folder: ${DATA_DIR}\n`);
+  console.log(`  Data folder: ${DATA_DIR}`);
+  console.log(`  Agent web traffic: ${proxyLabel() ? `via proxy ${proxyLabel()}` : 'direct'}\n`);
   void reloadMcp();
   startScheduler();
 });

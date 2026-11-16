@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { WORKSPACE_DIR } from '../../config.js';
+import { proxyEnv } from '../../net.js';
 import { getSettings } from '../../settings.js';
 import { id, truncate } from '../../util.js';
 import { registerTool } from './registry.js';
@@ -118,7 +119,7 @@ registerTool({
         // A minimal environment: no API keys or other server secrets leak into scripts.
         const child = spawn(bin, [file], {
           cwd: WORKSPACE_DIR,
-          env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: WORKSPACE_DIR, LANG: 'C.UTF-8', TZ: process.env.TZ ?? '' },
+          env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: WORKSPACE_DIR, LANG: 'C.UTF-8', TZ: process.env.TZ ?? '', ...proxyEnv() },
           signal: ctx.signal,
         });
         let stdout = '';

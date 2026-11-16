@@ -1,13 +1,14 @@
+import * as Tooltip from '@radix-ui/react-tooltip';
 import { MotionConfig } from 'motion/react';
 import { useEffect } from 'react';
-import { Orb } from './components/Orb';
+import { Logo } from './components/Logo';
 import { Shell } from './components/Shell';
 import { match, navigate, usePath } from './lib/router';
 import { connectEvents, disconnectEvents, useStore } from './lib/store';
 import { ActivityView } from './views/Activity';
 import { AuthScreen } from './views/Auth';
 import { ChatHome, ChatView } from './views/Chat';
-import { GoalsView } from './views/Goals';
+import { GoalsView, RoutinesView } from './views/Goals';
 import { InboxView } from './views/Inbox';
 import { MemoryView } from './views/Memory';
 import { SettingsView } from './views/Settings';
@@ -18,6 +19,7 @@ function Routes() {
   let m: Record<string, string> | null;
   if ((m = match('/chat/:id', path))) return { key: `chat-${m.id}`, el: <ChatView id={m.id} /> };
   if (path === '/goals') return { key: 'goals', el: <GoalsView /> };
+  if (path === '/routines') return { key: 'routines', el: <RoutinesView /> };
   if (path === '/spaces') return { key: 'spaces', el: <SpacesList /> };
   if ((m = match('/spaces/:id', path))) return { key: `space-${m.id}`, el: <SpaceView id={m.id} /> };
   if (path === '/inbox') return { key: 'inbox', el: <InboxView /> };
@@ -57,13 +59,15 @@ export function App() {
 
   return (
     <MotionConfig reducedMotion="user">
+      <Tooltip.Provider delayDuration={350} skipDelayDuration={150}>
       {auth === 'loading' && (
-        <div className="flex h-dvh items-center justify-center">
-          <Orb size={48} state="working" />
+        <div className="flex h-dvh items-center justify-center bg-bg">
+          <Logo size={28} className="animate-pulse" />
         </div>
       )}
       {(auth === 'setup' || auth === 'login') && <AuthScreen mode={auth} />}
       {auth === 'ready' && <Shell routeKey={route.key}>{route.el}</Shell>}
+      </Tooltip.Provider>
     </MotionConfig>
   );
 }

@@ -1,12 +1,13 @@
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Bell, Brain, CalendarClock, Check, ChevronRight, FileText, Globe, Hourglass, LayoutGrid, ListChecks, Loader2, Plug, Search, ShieldOff, Terminal, Users, Webhook, X,
+  Ban, Bell, Brain, CalendarClock, Check, ChevronRight, FileText, Globe, LayoutGrid, ListChecks, Plug, Search, Terminal, Users, Webhook, X,
 } from 'lucide-react';
-import { useState } from 'react';
-import { cx } from '../lib/format';
+import { useEffect, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
+import { cx } from '../lib/format';
 import { useStore } from '../lib/store';
 import type { ToolCall, ToolState } from '../lib/types';
+import { Ticker } from './ui';
 
 export function toolIcon(name: string) {
   if (name.startsWith('memory_')) return Brain;
@@ -15,23 +16,30 @@ export function toolIcon(name: string) {
   if (name.startsWith('schedule_')) return CalendarClock;
   if (name.startsWith('file_')) return FileText;
   if (name.startsWith('mcp_')) return Plug;
-  return (
-    { web_search: Search, web_fetch: Globe, http_request: Webhook, run_script: Terminal, notify: Bell, delegate: Users } as Record<string, typeof Search>
-  )[name] ?? Plug;
+  return ({ web_search: Search, web_fetch: Globe, http_request: Webhook, run_script: Terminal, notify: Bell, delegate: Users } as Record<string, typeof Search>)[name] ?? Plug;
 }
 
-function StatusIcon({ status }: { status: ToolState['status'] }) {
-  const common = 'size-3.5';
+function useNow(active: boolean) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setNow(Date.now()), 100);
+    return () => clearInterval(t);
+  }, [active]);
+  return now;
+}
+
+const fmtMs = (ms: number) => (ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`);
+
+function Glyph({ status }: { status: ToolState['status'] }) {
   return (
-    <AnimatePresence mode="wait" initial={false}>
-      <motion.span key={status} initial={{ scale: 0.4, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.4, opacity: 0 }} transition={{ type: 'spring', stiffness: 500, damping: 25 }} className="flex">
-        {status === 'running' && <Loader2 className={cx(common, 'animate-spin text-accent')} />}
-        {status === 'waiting' && <Hourglass className={cx(common, 'text-warn')} />}
-        {status === 'ok' && <Check className={cx(common, 'text-ok')} />}
-        {status === 'error' && <X className={cx(common, 'text-danger')} />}
-        {(status === 'denied' || status === 'blocked') && <ShieldOff className={cx(common, 'text-danger')} />}
-      </motion.span>
-    </AnimatePresence>
+    <span className="flex size-4 shrink-0 items-center justify-center">
+      {status === 'running' && <Ticker className="text-info text-[13px]" />}
+      {status === 'waiting' && <span className="size-1.5 rounded-full bg-accent shadow-[0_0_0_3px_var(--accent-soft)]" />}
+      {status === 'ok' && <Check className="size-3.5 text-ok" strokeWidth={2.4} />}
+      {status === 'error' && <X className="size-3.5 text-danger" strokeWidth={2.4} />}
+      {(status === 'denied' || status === 'blocked') && <Ban className="size-3.5 text-danger" />}
+    </span>
   );
 }
 
@@ -43,56 +51,73 @@ function pretty(v: unknown) {
   }
 }
 
-/** One tool call: compact row that expands to show input, output and live progress. */
-export function ToolCallRow({ call, result, isError }: { call: ToolCall; result?: string; isError?: boolean }) {
+export function resolveStatus(live: ToolState | undefined, result: string | undefined, isError: boolean | undefined): ToolState['status'] {
+  if (live) return live.status;
+  if (result === undefined) return 'running';
+  if (!isError) return 'ok';
+  if (/denied/i.test(result)) return 'denied';
+  if (/^Blocked/.test(result)) return 'blocked';
+  return 'error';
+}
+
+function ToolRow({ call, result, isError, depth = 0 }: { call: ToolCall; result?: string; isError?: boolean; depth?: number }) {
   const live = useStore((s) => s.tools[call.id]);
   const children = useStore(useShallow((s) => Object.values(s.tools).filter((t) => t.parentCallId === call.id)));
   const [open, setOpen] = useState(false);
+  const status = resolveStatus(live, result, isError);
+  const now = useNow(status === 'running' || status === 'waiting');
   const Icon = toolIcon(call.name);
-
-  const status: ToolState['status'] =
-    live?.status ?? (result === undefined ? 'running' : isError ? (/denied/i.test(result) ? 'denied' : /Blocked/.test(result) ? 'blocked' : 'error') : 'ok');
-  const summary = live?.summary ?? call.summary ?? call.name.replace(/_/g, ' ');
+  const label = live?.label ?? call.label ?? call.name;
+  const summary = live?.summary ?? call.summary ?? '';
   const output = result ?? live?.preview;
-  const statusText = { running: '', waiting: 'Waiting for your OK', ok: '', error: 'Failed', denied: 'Denied', blocked: 'Blocked' }[status];
+  const elapsed = live ? (live.ended ?? now) - live.started : undefined;
 
   return (
-    <div className="relative">
-      <button onClick={() => setOpen((o) => !o)} className="group flex w-full items-center gap-2.5 py-1.5 text-left">
-        <span className={cx('relative z-10 flex size-6 shrink-0 items-center justify-center rounded-lg border transition-colors', status === 'waiting' ? 'border-warn/40 bg-warn/10 text-warn' : 'border-line bg-surface text-muted group-hover:text-fg')}>
-          <Icon className="size-3.5" />
-        </span>
-        <span className={cx('min-w-0 flex-1 truncate text-[13px]', status === 'running' ? 'shimmer' : 'text-muted group-hover:text-fg')}>{summary}</span>
-        {statusText && <span className={cx('text-[11px] font-medium', status === 'waiting' ? 'text-warn' : 'text-danger')}>{statusText}</span>}
-        <StatusIcon status={status} />
-        <motion.span animate={{ rotate: open ? 90 : 0 }} className="text-subtle">
+    <div>
+      <button onClick={() => setOpen((o) => !o)} className={cx('group flex h-8 w-full items-center gap-2.5 pr-3 text-left transition-colors hover:bg-panel-2/70', depth ? 'pl-8' : 'pl-3')}>
+        <Glyph status={status} />
+        <Icon className="size-3.5 shrink-0 text-fg-3" />
+        <span className="shrink-0 text-[13px] text-fg">{label}</span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-fg-3">{summary.replace(label, '').replace(/^[:\s]+/, '') || summary}</span>
+        {status === 'waiting' && <span className="text-[11.5px] font-medium text-accent">needs approval</span>}
+        {(status === 'denied' || status === 'blocked') && <span className="text-[11.5px] text-danger">{status}</span>}
+        {elapsed !== undefined && status !== 'waiting' && <span className="font-mono text-[11px] text-fg-3 tabular">{fmtMs(elapsed)}</span>}
+        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-fg-3 opacity-0 transition-opacity group-hover:opacity-100">
           <ChevronRight className="size-3.5" />
         </motion.span>
       </button>
-      {(live?.progress || children.length > 0) && !open && status === 'running' && (
-        <div className="ml-9 mb-1 max-h-20 overflow-hidden text-xs text-subtle font-mono whitespace-pre-wrap [mask-image:linear-gradient(to_bottom,transparent,black_40%)] flex flex-col justify-end">
-          {children.length > 0 && <div>{children.map((c) => `› ${c.summary}`).join('\n')}</div>}
-          {live?.progress?.slice(-300)}
+
+      {children.length > 0 && (
+        <div className="border-l border-line" style={{ marginLeft: 19 }}>
+          <div className="pl-3 pt-0.5 text-[11px] text-fg-3">{children[0].agent}</div>
+          {children.map((c) => (
+            <ToolRow key={c.callId} call={{ id: c.callId, name: c.name, args: c.args ?? {} }} depth={1} />
+          ))}
         </div>
       )}
+      {status === 'running' && live?.progress && !open && (
+        <pre className="mx-3 mb-2 ml-9 max-h-16 overflow-hidden whitespace-pre-wrap font-mono text-[11.5px] text-fg-3 [mask-image:linear-gradient(to_bottom,transparent,black_45%)]">{live.progress.slice(-400)}</pre>
+      )}
+
       <AnimatePresence initial={false}>
         {open && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 38 }} className="overflow-hidden">
-            <div className="ml-9 mb-2 space-y-2 text-xs">
-              {children.length > 0 && (
-                <div className="rounded-xl border border-line bg-surface/60 px-2.5 py-1">
-                  <div className="text-[11px] font-medium text-subtle pt-1">{children[0].agent}'s steps</div>
-                  {children.map((c) => (
-                    <ToolCallRow key={c.callId} call={{ id: c.callId, name: c.name, args: c.args ?? {} }} />
-                  ))}
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
+            <div className="space-y-2 px-3 pb-3 pl-9 text-[11.5px]">
+              <div>
+                <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-fg-3">Input</div>
+                <pre className="max-h-56 overflow-auto rounded-md border border-line bg-sunken p-2.5 font-mono text-fg-2">{pretty(call.args)}</pre>
+              </div>
+              {live?.progress && (
+                <div>
+                  <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-fg-3">Live output</div>
+                  <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-sunken p-2.5 font-mono text-fg-2">{live.progress}</pre>
                 </div>
               )}
-              <pre className="rounded-xl bg-surface-2 border border-line p-2.5 overflow-x-auto font-mono text-muted max-h-60">{pretty(call.args)}</pre>
-              {live?.progress && <pre className="rounded-xl bg-surface-2 border border-line p-2.5 overflow-x-auto font-mono text-muted max-h-60 whitespace-pre-wrap">{live.progress}</pre>}
               {output !== undefined && (
-                <pre className={cx('rounded-xl border p-2.5 overflow-x-auto font-mono max-h-72 whitespace-pre-wrap', isError || status === 'error' ? 'bg-danger/5 border-danger/20 text-danger' : 'bg-surface-2 border-line text-muted')}>
-                  {output}
-                </pre>
+                <div>
+                  <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-fg-3">Result</div>
+                  <pre className={cx('max-h-72 overflow-auto whitespace-pre-wrap rounded-md border p-2.5 font-mono', isError || status === 'error' ? 'border-danger/25 bg-danger/5 text-danger' : 'border-line bg-sunken text-fg-2')}>{output}</pre>
+                </div>
               )}
             </div>
           </motion.div>
@@ -102,15 +127,17 @@ export function ToolCallRow({ call, result, isError }: { call: ToolCall; result?
   );
 }
 
-export function ToolCallList({ calls, results }: { calls: ToolCall[]; results: Record<string, { content: string; isError: boolean }> }) {
+/** A run's tool calls as a compact, expandable trace. */
+export function ToolTrace({ calls, results }: { calls: ToolCall[]; results: Record<string, { content: string; isError: boolean }> }) {
   return (
-    <div className="relative my-1.5">
-      <div className="absolute left-3 top-3 bottom-3 w-px bg-line" />
-      {calls.map((c) => (
-        <motion.div key={c.id} initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 30 }}>
-          <ToolCallRow call={c} result={results[c.id]?.content} isError={results[c.id]?.isError} />
-        </motion.div>
-      ))}
+    <div className="my-3 overflow-hidden rounded-lg border border-line bg-panel shadow-1">
+      <div className="divide-y divide-line/70">
+        {calls.map((c) => (
+          <motion.div key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
+            <ToolRow call={c} result={results[c.id]?.content} isError={results[c.id]?.isError} />
+          </motion.div>
+        ))}
+      </div>
     </div>
   );
 }

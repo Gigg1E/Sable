@@ -1,125 +1,178 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { CalendarClock, Check, Circle, ListChecks, MessageCircle, Play, Plus, Trash2 } from 'lucide-react';
+import { CalendarClock, Check, ChevronRight, ListChecks, MessageSquare, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Empty, Field, Input, PageHeader, Segmented, Select, Sheet, Textarea, Toggle, listItem } from '../components/ui';
+import { Badge, Button, Card, Empty, Field, IconButton, Input, Page, PageIntro, Progress, Segmented, Select, Sheet, Textarea, Toggle, TopBar, listItem } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore } from '../lib/store';
 import type { Goal, GoalStep, Schedule } from '../lib/types';
 
-function StepIcon({ status }: { status: GoalStep['status'] }) {
+function StepMark({ status }: { status: GoalStep['status'] }) {
   if (status === 'done')
     return (
-      <motion.span initial={{ scale: 0.5 }} animate={{ scale: 1 }} className="flex size-5 items-center justify-center rounded-full bg-ok text-white">
+      <span className="flex size-4 items-center justify-center rounded-[5px] bg-fg text-bg">
         <svg viewBox="0 0 16 16" className="size-3">
-          <motion.path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.35 }} />
+          <motion.path d="M3.5 8.5l3 3 6-7" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 0.25 }} />
         </svg>
-      </motion.span>
+      </span>
     );
   if (status === 'in_progress')
     return (
-      <span className="relative flex size-5 items-center justify-center">
-        <motion.span className="absolute inset-0 rounded-full border-2 border-accent" animate={{ scale: [1, 1.25, 1], opacity: [1, 0.4, 1] }} transition={{ duration: 1.6, repeat: Infinity }} />
-        <span className="size-2 rounded-full bg-accent" />
+      <span className="flex size-4 items-center justify-center rounded-[5px] border border-info">
+        <motion.span className="size-1.5 rounded-full bg-info" animate={{ opacity: [1, 0.3, 1] }} transition={{ duration: 1.2, repeat: Infinity }} />
       </span>
     );
-  if (status === 'skipped') return <span className="flex size-5 items-center justify-center rounded-full bg-surface-3 text-[10px] text-subtle">–</span>;
-  return <Circle className="size-5 text-line-strong" />;
+  if (status === 'skipped') return <span className="flex size-4 items-center justify-center rounded-[5px] border border-line-strong text-[10px] text-fg-3">–</span>;
+  return <span className="size-4 rounded-[5px] border border-line-strong" />;
 }
 
-function GoalCard({ goal }: { goal: Goal }) {
+const STATUS_TONE = { active: 'info', done: 'ok', blocked: 'accent', cancelled: 'default' } as const;
+
+function GoalRow({ goal }: { goal: Goal }) {
   const done = goal.steps.filter((s) => s.status === 'done' || s.status === 'skipped').length;
-  const pct = goal.steps.length ? Math.round((done / goal.steps.length) * 100) : goal.status === 'done' ? 100 : 0;
-  const [open, setOpen] = useState(goal.status === 'active');
+  const pct = goal.steps.length ? (done / goal.steps.length) * 100 : goal.status === 'done' ? 100 : 0;
+  const [open, setOpen] = useState(false);
 
   async function toggleStep(i: number) {
     const steps = goal.steps.map((s, j) => (j === i ? { ...s, status: s.status === 'done' ? 'pending' : 'done' } : s)) as GoalStep[];
     await api.patch(`/goals/${goal.id}`, { steps });
   }
-  async function setStatus(status: Goal['status']) {
-    await api.patch(`/goals/${goal.id}`, { status });
-  }
 
   return (
-    <motion.div layout {...listItem}>
-      <Card className="overflow-hidden">
-        <button onClick={() => setOpen((o) => !o)} className="w-full p-4 text-left">
-          <div className="flex items-start gap-3">
-            <div className="relative size-11 shrink-0">
-              <svg viewBox="0 0 44 44" className="size-11 -rotate-90">
-                <circle cx="22" cy="22" r="18" fill="none" stroke="var(--surface-3)" strokeWidth="4" />
-                <motion.circle cx="22" cy="22" r="18" fill="none" stroke={goal.status === 'done' ? 'var(--ok)' : 'var(--accent)'} strokeWidth="4" strokeLinecap="round" initial={{ pathLength: 0 }} animate={{ pathLength: pct / 100 }} transition={{ type: 'spring', stiffness: 80, damping: 20 }} />
-              </svg>
-              <span className="absolute inset-0 flex items-center justify-center text-[11px] font-semibold">{pct}%</span>
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h3 className="truncate font-medium">{goal.title}</h3>
-                {goal.status !== 'active' && <Badge tone={goal.status === 'done' ? 'ok' : goal.status === 'blocked' ? 'warn' : 'default'}>{goal.status}</Badge>}
-              </div>
-              {goal.description && <p className="mt-0.5 line-clamp-2 text-sm text-muted">{goal.description}</p>}
-              <p className="mt-1 text-xs text-subtle">
-                {done}/{goal.steps.length} steps · updated {timeAgo(goal.updated_at)}
-              </p>
-            </div>
+    <motion.div layout {...listItem} className="border-b border-line last:border-0">
+      <button onClick={() => setOpen((o) => !o)} className="group flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-panel-2/50">
+        <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-fg-3">
+          <ChevronRight className="size-3.5" />
+        </motion.span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="truncate text-[13.5px] font-medium">{goal.title}</span>
+            <Badge tone={STATUS_TONE[goal.status]}>{goal.status}</Badge>
           </div>
-        </button>
-        <AnimatePresence initial={false}>
-          {open && (
-            <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
-              <div className="border-t border-line px-4 py-3">
-                <ol className="space-y-2">
-                  {goal.steps.map((s, i) => (
-                    <li key={i} className="flex items-start gap-3">
-                      <button onClick={() => void toggleStep(i)} className="mt-0.5" aria-label="Toggle step">
-                        <StepIcon status={s.status} />
-                      </button>
-                      <div className="min-w-0">
-                        <div className={cx('text-sm', s.status === 'done' && 'text-muted line-through decoration-subtle')}>{s.text}</div>
-                        {s.note && <div className="text-xs text-subtle">{s.note}</div>}
-                      </div>
-                    </li>
-                  ))}
-                </ol>
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {goal.conversation_id && (
-                    <Button size="sm" onClick={() => navigate(`/chat/${goal.conversation_id}`)}>
-                      <MessageCircle className="size-3.5" /> Open chat
-                    </Button>
-                  )}
-                  {goal.status !== 'done' ? (
-                    <Button size="sm" variant="ghost" onClick={() => void setStatus('done')}>
-                      <Check className="size-3.5" /> Mark done
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant="ghost" onClick={() => void setStatus('active')}>
-                      Reopen
-                    </Button>
-                  )}
-                  <Button size="sm" variant="ghost" className="ml-auto text-danger" onClick={() => void api.del(`/goals/${goal.id}`)}>
-                    <Trash2 className="size-3.5" />
+          {goal.description && <div className="mt-0.5 truncate text-[12.5px] text-fg-3">{goal.description}</div>}
+        </div>
+        <span className="hidden w-28 sm:block">
+          <Progress value={pct} tone={goal.status === 'done' ? 'ok' : 'fg'} />
+        </span>
+        <span className="w-10 text-right font-mono text-[11px] text-fg-3 tabular">
+          {done}/{goal.steps.length}
+        </span>
+        <span className="hidden w-16 text-right font-mono text-[11px] text-fg-3 md:block">{timeAgo(goal.updated_at)}</span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
+            <div className="pb-4 pl-11 pr-4">
+              <ol className="space-y-2">
+                {goal.steps.map((s, i) => (
+                  <li key={i} className="flex items-start gap-2.5">
+                    <button onClick={() => void toggleStep(i)} className="mt-0.5" aria-label="Toggle step">
+                      <StepMark status={s.status} />
+                    </button>
+                    <div className="min-w-0">
+                      <div className={cx('text-[13px]', s.status === 'done' && 'text-fg-3 line-through decoration-fg-3/50')}>{s.text}</div>
+                      {s.note && <div className="text-[12px] text-fg-3">{s.note}</div>}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+              <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                {goal.conversation_id && (
+                  <Button size="sm" onClick={() => navigate(`/chat/${goal.conversation_id}`)}>
+                    <MessageSquare className="size-3.5" /> Open chat
                   </Button>
-                </div>
+                )}
+                {goal.status !== 'done' ? (
+                  <Button size="sm" variant="ghost" onClick={() => void api.patch(`/goals/${goal.id}`, { status: 'done' })}>
+                    <Check className="size-3.5" /> Mark done
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="ghost" onClick={() => void api.patch(`/goals/${goal.id}`, { status: 'active' })}>
+                    <RotateCcw className="size-3.5" /> Reopen
+                  </Button>
+                )}
+                <span className="flex-1" />
+                <IconButton label="Delete goal" className="hover:text-danger" onClick={() => void api.del(`/goals/${goal.id}`)}>
+                  <Trash2 className="size-3.5" />
+                </IconButton>
               </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </Card>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
 
+export function GoalsView() {
+  const [goals, setGoals] = useState<Goal[] | null>(null);
+  const [tab, setTab] = useState<'active' | 'done' | 'all'>('active');
+  const load = useCallback(() => void api.get<Goal[]>('/goals').then(setGoals), []);
+  useEffect(() => {
+    load();
+    return onServerEvent((ev) => ev.type === 'goal.changed' && load());
+  }, [load]);
+
+  const shown = (goals ?? []).filter((g) => tab === 'all' || (tab === 'done' ? g.status === 'done' || g.status === 'cancelled' : g.status === 'active' || g.status === 'blocked'));
+  const counts = { active: (goals ?? []).filter((g) => g.status === 'active' || g.status === 'blocked').length, done: (goals ?? []).filter((g) => g.status === 'done').length };
+
+  return (
+    <>
+      <TopBar title="Goals" />
+      <Page width="lg">
+        <PageIntro
+          title="Goals"
+          description="Multi-step jobs the agent plans and works through. Expand one to see or tick off its steps."
+          actions={
+            <Segmented
+              id="goal-tab"
+              size="sm"
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'active', label: `Active ${counts.active || ''}` },
+                { value: 'done', label: 'Done' },
+                { value: 'all', label: 'All' },
+              ]}
+            />
+          }
+        />
+        {goals && !shown.length ? (
+          <Empty icon={<ListChecks className="size-4" />} title={tab === 'active' ? 'Nothing in progress' : 'No goals here'} body="Ask for something that takes a few steps, like planning a trip or comparing options, and the plan is tracked here." />
+        ) : (
+          <Card className="overflow-hidden">
+            <div className="hidden items-center gap-3 border-b border-line bg-panel-2/50 px-4 py-2 font-mono text-[10.5px] uppercase tracking-wider text-fg-3 sm:flex">
+              <span className="w-3.5" />
+              <span className="flex-1">Goal</span>
+              <span className="w-28">Progress</span>
+              <span className="w-10 text-right">Steps</span>
+              <span className="hidden w-16 text-right md:block">Updated</span>
+            </div>
+            <AnimatePresence initial={false}>
+              {shown.map((g) => (
+                <GoalRow key={g.id} goal={g} />
+              ))}
+            </AnimatePresence>
+          </Card>
+        )}
+      </Page>
+    </>
+  );
+}
+
+// ───────────────────────── Routines ─────────────────────────
+
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function describe(s: Schedule) {
-  if (s.kind === 'once') return `Once · ${s.spec.at ? clockTime(Date.parse(s.spec.at)) : ''}`;
+  if (s.kind === 'once') return `Once, ${s.spec.at ? clockTime(Date.parse(s.spec.at)) : ''}`;
   if (s.kind === 'interval') return `Every ${s.spec.every_minutes} min`;
   if (s.kind === 'daily') return `Daily at ${s.spec.time}`;
   return `${WEEKDAYS[s.spec.weekday ?? 1]}s at ${s.spec.time}`;
 }
 
-function NewSchedule({ open, onClose }: { open: boolean; onClose: () => void }) {
+function NewRoutine({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [form, setForm] = useState({ title: '', prompt: '', kind: 'daily' as Schedule['kind'], time: '08:00', weekday: 1, every_minutes: 60, at: '' });
   const [busy, setBusy] = useState(false);
   const toast = useStore((s) => s.toast);
@@ -128,6 +181,7 @@ function NewSchedule({ open, onClose }: { open: boolean; onClose: () => void }) 
     setBusy(true);
     try {
       await api.post('/schedules', { ...form, at: form.at ? new Date(form.at).toISOString() : undefined });
+      toast({ title: 'Routine scheduled', tone: 'success' });
       onClose();
     } catch (err) {
       toast({ title: 'Could not schedule', body: (err as Error).message, tone: 'error' });
@@ -136,16 +190,16 @@ function NewSchedule({ open, onClose }: { open: boolean; onClose: () => void }) 
     }
   }
   return (
-    <Sheet open={open} onClose={onClose} title="New routine">
+    <Sheet open={open} onClose={onClose} title="New routine" description="Runs in the background on the server, even when no device is open.">
       <div className="space-y-4">
         <Field label="Name">
           <Input value={form.title} onChange={(e) => set({ title: e.target.value })} placeholder="Morning briefing" />
         </Field>
-        <Field label="What should Sable do?" hint="Written like a message to your agent. Add “notify me” if you want to hear back.">
-          <Textarea value={form.prompt} onChange={(e) => set({ prompt: e.target.value })} placeholder="Check the weather and my goals, then notify me with a 3-line briefing." />
+        <Field label="Instruction" hint="Written as a message to the agent. Add “notify me” to get a push notification with the result.">
+          <Textarea value={form.prompt} onChange={(e) => set({ prompt: e.target.value })} placeholder="Check the weather and my open goals, then notify me with a three-line briefing." />
         </Field>
-        <Field label="When">
-          <Segmented id="kind" value={form.kind} onChange={(kind) => set({ kind })} options={[{ value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly' }, { value: 'interval', label: 'Every…' }, { value: 'once', label: 'Once' }]} />
+        <Field label="Schedule">
+          <Segmented id="kind" size="sm" value={form.kind} onChange={(kind) => set({ kind })} options={[{ value: 'daily', label: 'Daily' }, { value: 'weekly', label: 'Weekly' }, { value: 'interval', label: 'Interval' }, { value: 'once', label: 'Once' }]} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
           {(form.kind === 'daily' || form.kind === 'weekly') && (
@@ -165,108 +219,99 @@ function NewSchedule({ open, onClose }: { open: boolean; onClose: () => void }) 
             </Field>
           )}
           {form.kind === 'interval' && (
-            <Field label="Minutes">
+            <Field label="Every (minutes)">
               <Input type="number" min={5} value={form.every_minutes} onChange={(e) => set({ every_minutes: Number(e.target.value) })} />
             </Field>
           )}
           {form.kind === 'once' && (
-            <Field label="Date & time">
+            <Field label="Date and time">
               <Input type="datetime-local" value={form.at} onChange={(e) => set({ at: e.target.value })} />
             </Field>
           )}
         </div>
-        <Button variant="primary" className="w-full" loading={busy} disabled={!form.title || !form.prompt} onClick={() => void save()}>
-          Save routine
-        </Button>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button variant="primary" loading={busy} disabled={!form.title || !form.prompt} onClick={() => void save()}>
+            Create routine
+          </Button>
+        </div>
       </div>
     </Sheet>
   );
 }
 
-export function GoalsView() {
-  const [goals, setGoals] = useState<Goal[] | null>(null);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [tab, setTab] = useState<'active' | 'all'>('active');
+export function RoutinesView() {
+  const [schedules, setSchedules] = useState<Schedule[] | null>(null);
   const [creating, setCreating] = useState(false);
-
-  const load = useCallback(() => {
-    void api.get<Goal[]>('/goals').then(setGoals);
-    void api.get<Schedule[]>('/schedules').then(setSchedules);
-  }, []);
+  const load = useCallback(() => void api.get<Schedule[]>('/schedules').then(setSchedules), []);
   useEffect(() => {
     load();
-    return onServerEvent((ev) => {
-      if (ev.type === 'goal.changed' || ev.type === 'schedule.changed') load();
-    });
+    return onServerEvent((ev) => ev.type === 'schedule.changed' && load());
   }, [load]);
 
-  const shown = (goals ?? []).filter((g) => tab === 'all' || g.status === 'active' || g.status === 'blocked');
-
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-4 py-6 md:px-6 md:py-10">
-        <PageHeader title="Goals" subtitle="Multi-step jobs Sable is working through." actions={<Segmented id="goal-tab" value={tab} onChange={setTab} options={[{ value: 'active', label: 'Active' }, { value: 'all', label: 'All' }]} />} />
-        {goals && !shown.length ? (
-          <Empty icon={<ListChecks className="size-6" />} title={tab === 'active' ? 'Nothing in progress' : 'No goals yet'} body="Ask Sable for something that takes a few steps, like planning a trip or comparing options, and it'll track the plan here." />
-        ) : (
-          <div className="space-y-3">
-            <AnimatePresence>
-              {shown.map((g) => (
-                <GoalCard key={g.id} goal={g} />
-              ))}
-            </AnimatePresence>
-          </div>
-        )}
-
-        <div className="mt-12">
-          <PageHeader
-            title="Routines"
-            subtitle="Background tasks that run on a schedule, even when you're away."
-            actions={
+    <>
+      <TopBar
+        title="Routines"
+        actions={
+          <Button size="sm" variant="primary" onClick={() => setCreating(true)}>
+            <Plus className="size-3.5" /> New routine
+          </Button>
+        }
+      />
+      <Page width="lg">
+        <PageIntro title="Routines" description="Instructions that run on a schedule. Each routine keeps its own history chat so you can see every run." />
+        {schedules && !schedules.length ? (
+          <Empty
+            icon={<CalendarClock className="size-4" />}
+            title="No routines yet"
+            body="Create one here, or just ask in chat: “Every morning at 7, brief me on the weather and my open goals.”"
+            action={
               <Button size="sm" onClick={() => setCreating(true)}>
-                <Plus className="size-4" /> New
+                <Plus className="size-3.5" /> New routine
               </Button>
             }
           />
-          {!schedules.length ? (
-            <Empty icon={<CalendarClock className="size-6" />} title="No routines yet" body="Try asking: “Every morning at 7, give me a briefing with the weather and my open goals.”" />
-          ) : (
-            <div className="space-y-2.5">
-              <AnimatePresence>
-                {schedules.map((s) => (
-                  <motion.div key={s.id} layout {...listItem}>
-                    <Card className="flex items-center gap-3 p-4">
-                      <div className={cx('flex size-10 shrink-0 items-center justify-center rounded-xl', s.enabled ? 'bg-accent-soft text-accent' : 'bg-surface-2 text-subtle')}>
-                        <CalendarClock className="size-4.5" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">{s.title}</div>
-                        <div className="truncate text-xs text-muted">
-                          {describe(s)}
-                          {s.enabled && s.next_run ? ` · next ${clockTime(s.next_run)}` : ''}
-                        </div>
-                      </div>
-                      <Button size="sm" variant="ghost" aria-label="Run now" onClick={() => void api.post(`/schedules/${s.id}/run`).then((r: any) => r?.runId && s.conversation_id && navigate(`/chat/${s.conversation_id}`))}>
-                        <Play className="size-3.5" />
-                      </Button>
-                      {s.conversation_id && (
-                        <Button size="sm" variant="ghost" aria-label="Open history" onClick={() => navigate(`/chat/${s.conversation_id}`)}>
-                          <MessageCircle className="size-3.5" />
-                        </Button>
-                      )}
-                      <Toggle checked={s.enabled} onChange={(v) => void api.patch(`/schedules/${s.id}`, { enabled: v })} label="Enabled" />
-                      <Button size="sm" variant="ghost" className="text-danger" aria-label="Delete" onClick={() => void api.del(`/schedules/${s.id}`)}>
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </Card>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+        ) : (
+          <Card className="overflow-hidden">
+            <div className="hidden items-center gap-3 border-b border-line bg-panel-2/50 px-4 py-2 font-mono text-[10.5px] uppercase tracking-wider text-fg-3 md:flex">
+              <span className="flex-1">Routine</span>
+              <span className="w-36">Schedule</span>
+              <span className="w-36">Next run</span>
+              <span className="w-[132px] text-right">Actions</span>
             </div>
-          )}
-        </div>
-      </div>
-      <NewSchedule open={creating} onClose={() => setCreating(false)} />
-    </div>
+            <AnimatePresence initial={false}>
+              {(schedules ?? []).map((s) => (
+                <motion.div key={s.id} layout {...listItem} className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-3 last:border-0 md:flex-nowrap">
+                  <div className="min-w-0 flex-1 basis-full md:basis-auto">
+                    <div className={cx('truncate text-[13.5px] font-medium', !s.enabled && 'text-fg-3')}>{s.title}</div>
+                    <div className="truncate text-[12.5px] text-fg-3">{s.prompt}</div>
+                  </div>
+                  <span className="w-36 text-[12.5px] text-fg-2">{describe(s)}</span>
+                  <span className="w-36 font-mono text-[11.5px] text-fg-3">{s.enabled && s.next_run ? clockTime(s.next_run) : 'paused'}</span>
+                  <div className="ml-auto flex w-[132px] items-center justify-end gap-0.5">
+                    <IconButton label="Run now" onClick={() => void api.post<{ runId: string | null }>(`/schedules/${s.id}/run`).then(() => load())}>
+                      <Play className="size-3.5" />
+                    </IconButton>
+                    <IconButton label="Run history" disabled={!s.conversation_id} onClick={() => s.conversation_id && navigate(`/chat/${s.conversation_id}`)}>
+                      <MessageSquare className="size-3.5" />
+                    </IconButton>
+                    <IconButton label="Delete" className="hover:text-danger" onClick={() => void api.del(`/schedules/${s.id}`)}>
+                      <Trash2 className="size-3.5" />
+                    </IconButton>
+                    <span className="ml-1.5">
+                      <Toggle size="sm" checked={s.enabled} onChange={(v) => void api.patch(`/schedules/${s.id}`, { enabled: v })} label="Enabled" />
+                    </span>
+                  </div>
+                </motion.div>
+              ))}
+            </AnimatePresence>
+          </Card>
+        )}
+      </Page>
+      <NewRoutine open={creating} onClose={() => setCreating(false)} />
+    </>
   );
 }

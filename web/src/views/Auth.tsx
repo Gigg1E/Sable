@@ -1,6 +1,7 @@
 import { motion } from 'motion/react';
+import { ArrowRight, Lock } from 'lucide-react';
 import { useState } from 'react';
-import { Orb } from '../components/Orb';
+import { Logo } from '../components/Logo';
 import { Button, Input } from '../components/ui';
 import { api } from '../lib/api';
 import { useStore } from '../lib/store';
@@ -28,34 +29,30 @@ export function AuthScreen({ mode }: { mode: 'setup' | 'login' }) {
   }
 
   return (
-    <div className="aurora flex min-h-dvh items-center justify-center p-6">
-      <motion.form
-        onSubmit={submit}
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ type: 'spring', stiffness: 260, damping: 26 }}
-        className="relative z-10 w-full max-w-sm"
-      >
-        <div className="mb-8 flex flex-col items-center text-center">
-          <Orb size={64} />
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">{mode === 'setup' ? 'Welcome to Sable' : 'Welcome back'}</h1>
-          <p className="mt-1.5 text-sm text-muted">
-            {mode === 'setup' ? 'Your personal agent lives on this server. Choose a password to protect it.' : 'Sign in to your agent.'}
-          </p>
-        </div>
-        <div className="space-y-3">
-          <Input type="password" autoFocus autoComplete={mode === 'setup' ? 'new-password' : 'current-password'} placeholder="Password" value={password} onChange={(e) => setPassword(e.target.value)} />
-          {mode === 'setup' && <Input type="password" autoComplete="new-password" placeholder="Confirm password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />}
+    <div className="relative flex min-h-dvh items-center justify-center bg-bg p-6">
+      <div className="canvas-grid pointer-events-none absolute inset-x-0 top-0 h-[60vh]" />
+      <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }} className="relative w-full max-w-[360px]">
+        <Logo size={32} />
+        <h1 className="mt-6 text-[22px] font-semibold tracking-[-0.02em]">{mode === 'setup' ? 'Set up Sable' : 'Sign in to Sable'}</h1>
+        <p className="mt-1.5 text-[13.5px] leading-relaxed text-fg-2">
+          {mode === 'setup' ? 'Your agent runs on this server. Choose a password to protect it. You’ll use it on every device.' : 'Enter the password for this server.'}
+        </p>
+        <form onSubmit={submit} className="mt-6 space-y-2.5">
+          <Input type="password" autoFocus autoComplete={mode === 'setup' ? 'new-password' : 'current-password'} placeholder={mode === 'setup' ? 'Password (8+ characters)' : 'Password'} value={password} onChange={(e) => setPassword(e.target.value)} className="h-9" />
+          {mode === 'setup' && <Input type="password" autoComplete="new-password" placeholder="Confirm password" value={confirm} onChange={(e) => setConfirm(e.target.value)} className="h-9" />}
           {error && (
-            <motion.p initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: [0, -6, 6, -3, 0] }} className="text-sm text-danger">
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1, x: [0, -4, 4, -2, 0] }} className="text-[13px] text-danger">
               {error}
             </motion.p>
           )}
-          <Button type="submit" variant="primary" className="w-full" loading={busy}>
-            {mode === 'setup' ? 'Create password' : 'Sign in'}
+          <Button type="submit" variant="primary" className="h-9 w-full" loading={busy}>
+            {mode === 'setup' ? 'Create password' : 'Continue'} {!busy && <ArrowRight className="size-3.5" />}
           </Button>
-        </div>
-      </motion.form>
+        </form>
+        <p className="mt-6 flex items-center gap-1.5 text-xs text-fg-3">
+          <Lock className="size-3" /> Self-hosted. Your data stays on this machine.
+        </p>
+      </motion.div>
     </div>
   );
 }

@@ -1,0 +1,30 @@
+# Route the agent's outbound web traffic through a VPN.
+#
+#   cp .env.vpn.example .env.vpn   # fill in your VPN provider + keys
+#   docker compose -f docker-compose.yml -f docker-compose.vpn.yml up -d
+#
+# Only the agent's "reach-out" traffic (web search, page reads, HTTP requests,
+# scripts, local connectors) goes through the VPN. Model APIs and Ollama keep
+# using the normal network. If the VPN drops, agent web access fails closed.
+services:
+  vpn:
+    image: qmcgaw/gluetun:v3
+    restart: unless-stopped
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    env_file: .env.vpn
+    environment:
+      HTTPPROXY: "on"
+      HTTPPROXY_LISTENING_ADDRESS: ":8888"
+      HTTPPROXY_STEALTH: "on"   # don't add Via/X-Forwarded-For headers
+    # Not published to the host: only containers on this network can use the proxy.
+    # The image's built-in health check reports healthy once the tunnel is up.
+
+  sable:
+    environment:
+      SABLE_AGENT_PROXY: http://vpn:8888
+    depends_on:
+      vpn:
+        condition: service_healthy

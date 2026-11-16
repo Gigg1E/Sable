@@ -203,7 +203,7 @@ registerTool({
   label: 'Build space',
   group: 'Spaces',
   description:
-    'Build a Space: a small self-contained app (tracker, dashboard, planner, mood board, checklist…) the user can pin and reopen. Provide a complete HTML document body with inline <style> and <script>. Persist data with `await sable.get(key)` / `await sable.set(key, value)` (JSON values), read everything with `await sable.all()`, and ask the agent with `await sable.ask(prompt)` (returns text). Scripts may load libraries from cdn.jsdelivr.net or cdnjs.cloudflare.com; there is no other network access. Use the CSS variables --bg, --surface, --fg, --muted, --accent, --border, --radius for a look that matches the app, and make it responsive.',
+    'Build a Space: a small self-contained app (tracker, dashboard, planner, mood board, checklist…) the user can pin and reopen. Provide a complete HTML document body with inline <style> and <script>. Persist data with `await sable.get(key)` / `await sable.set(key, value)` (JSON values), read everything with `await sable.all()`, and ask the agent with `await sable.ask(prompt)` (returns text). Scripts may load libraries from cdn.jsdelivr.net or cdnjs.cloudflare.com; there is no other network access. Use the CSS variables --bg, --surface, --surface-2, --fg, --muted, --subtle, --accent, --ok, --danger, --border, --radius so it matches the app in light and dark mode. Aim for a calm, tool-like look: 1px borders, small radii, generous spacing, no gradients or emoji decoration, and make it responsive.',
   parameters: {
     type: 'object',
     properties: {

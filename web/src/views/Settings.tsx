@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Bell, Bot, CheckCircle2, Cpu, Download, Plug, Plus, RefreshCw, Shield, Trash2, User, XCircle } from 'lucide-react';
+import { BarChart3, Bell, Bot, CheckCircle2, Code2, Cpu, Download, Globe, Map as MapIcon, PenLine, Plug, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Badge, Button, Card, Field, Input, PageHeader, Segmented, Select, Spinner, Textarea, Toggle } from '../components/ui';
+import { Badge, Button, Card, Field, Input, Segmented, Select, Spinner, Textarea, Toggle, TopBar } from '../components/ui';
 import { AGENT_TEMPLATES } from '../lib/agentTemplates';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
@@ -16,6 +16,7 @@ const SECTIONS = [
   { id: 'agents', label: 'Sub-agents', icon: Bot },
   { id: 'permissions', label: 'Permissions', icon: Shield },
   { id: 'connectors', label: 'Connectors', icon: Plug },
+  { id: 'network', label: 'Network', icon: Globe },
   { id: 'notifications', label: 'Notifications', icon: Bell },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]['id'];
@@ -70,20 +71,20 @@ function OllamaPull({ providerId, model, onDone }: { providerId: string; model: 
   const pct = pull?.total ? Math.round(((pull.completed ?? 0) / pull.total) * 100) : 0;
   const busy = pull && pull.status !== 'error' && pull.status !== 'success';
   return (
-    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-2 rounded-xl border border-warn/25 bg-warn/5 p-3">
+    <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-2 rounded-md border border-accent/30 bg-accent-soft p-3">
       <div className="flex items-center gap-3">
         <div className="min-w-0 flex-1 text-xs">
-          <span className="font-medium text-warn">{model}</span> <span className="text-muted">isn't installed in Ollama yet.</span>
+          <span className="font-medium text-accent">{model}</span> <span className="text-fg-2">isn't installed in Ollama yet.</span>
           {pull?.status === 'error' && <div className="mt-0.5 text-danger">{pull.error}</div>}
-          {busy && <div className="mt-0.5 truncate text-subtle">{pull.detail ?? 'Starting…'}{pull.total ? ` · ${pct}%` : ''}</div>}
+          {busy && <div className="mt-0.5 truncate text-fg-3">{pull.detail ?? 'Starting…'}{pull.total ? ` · ${pct}%` : ''}</div>}
         </div>
         <Button size="sm" loading={!!busy} disabled={!!busy} onClick={() => void api.post(`/providers/${providerId}/pull`, { model }).catch((e) => setPull({ status: 'error', error: (e as Error).message }))}>
           {!busy && <Download className="size-3.5" />} {busy ? 'Downloading' : 'Download'}
         </Button>
       </div>
       {busy && (
-        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-surface-3">
-          <motion.div className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2" animate={{ width: `${pct}%` }} transition={{ type: 'spring', stiffness: 60, damping: 18 }} />
+        <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-panel-3">
+          <motion.div className="h-full rounded-full bg-gradient-to-r from-fg-2 to-fg" animate={{ width: `${pct}%` }} transition={{ type: 'spring', stiffness: 60, damping: 18 }} />
         </div>
       )}
     </motion.div>
@@ -124,7 +125,7 @@ function ModelPicker({ providerId, value, onChange, placeholder }: { providerId:
       {models.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {models.slice(0, 12).map((m) => (
-            <button key={m} type="button" onClick={() => onChange(m)} className={cx('rounded-lg border px-2 py-0.5 text-xs transition-colors', value === m ? 'border-accent/50 bg-accent-soft text-accent' : 'border-line text-muted hover:text-fg')}>
+            <button key={m} type="button" onClick={() => onChange(m)} className={cx('rounded-lg border px-2 py-0.5 text-xs transition-colors', value === m ? 'border-fg/30 bg-panel-3 text-fg' : 'border-line text-fg-2 hover:text-fg')}>
               {m}
             </button>
           ))}
@@ -154,11 +155,71 @@ function Tuning({ temperature, contextLength, onChange, showContext }: { tempera
 
 function Section({ title, description, children }: { title: string; description?: ReactNode; children: ReactNode }) {
   return (
-    <section className="mb-8">
-      <h2 className="text-[15px] font-semibold">{title}</h2>
-      {description && <p className="mt-0.5 text-sm text-muted">{description}</p>}
+    <section className="mb-10">
+      <h2 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h2>
+      {description && <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-fg-2">{description}</p>}
       <div className="mt-4 space-y-4">{children}</div>
     </section>
+  );
+}
+
+const TEMPLATE_ICONS = { code: Code2, search: Search, pen: PenLine, chart: BarChart3, map: MapIcon, zap: Zap };
+
+function NetworkSection() {
+  const [proxy, setProxy] = useState<string | null | undefined>(undefined);
+  const [check, setCheck] = useState<{ ok: boolean; ip?: string; viaProxy?: boolean; error?: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    void api.get<{ proxy: string | null }>('/network').then((r) => setProxy(r.proxy));
+  }, []);
+  return (
+    <Section
+      title="Outbound network"
+      description="Where the agent's own internet traffic goes: web search, page reads, HTTP requests, scripts and local connectors. Model APIs and Ollama are not affected."
+    >
+      <Card className="divide-y divide-line">
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          <Shield className={cx('size-4', proxy ? 'text-ok' : 'text-fg-3')} />
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium">{proxy === undefined ? 'Checking…' : proxy ? 'Routed through a VPN proxy' : 'Direct (server IP)'}</div>
+            <div className="text-xs text-fg-3">
+              {proxy ? (
+                <>
+                  Proxy <code className="font-mono">{proxy}</code>. If it goes down, agent web access stops instead of falling back to your IP.
+                </>
+              ) : (
+                <>
+                  Sites the agent visits see this server's IP address. Set <code className="font-mono">SABLE_AGENT_PROXY</code> to route through a VPN container (see the README).
+                </>
+              )}
+            </div>
+          </div>
+          <Badge tone={proxy ? 'ok' : 'default'}>{proxy ? 'protected' : 'direct'}</Badge>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium">Exit IP</div>
+            <div className="text-xs text-fg-3">Asks api.ipify.org which address the agent's requests come from.</div>
+          </div>
+          {check && (
+            <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={cx('font-mono text-[12px]', check.ok ? 'text-fg' : 'text-danger')}>
+              {check.ok ? check.ip : check.error}
+            </motion.span>
+          )}
+          <Button
+            size="sm"
+            loading={busy}
+            onClick={async () => {
+              setBusy(true);
+              setCheck(await api.post('/network/check'));
+              setBusy(false);
+            }}
+          >
+            Check exit IP
+          </Button>
+        </div>
+      </Card>
+    </Section>
   );
 }
 
@@ -216,7 +277,7 @@ function GeneralSection({ draft, edit }: { draft: Settings; edit: Edit }) {
           >
             Change password
           </Button>
-          {pwMsg && <span className="text-sm text-muted">{pwMsg}</span>}
+          {pwMsg && <span className="text-sm text-fg-2">{pwMsg}</span>}
         </div>
       </Section>
     </>
@@ -349,7 +410,7 @@ function ModelsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
         <Card className="flex items-center justify-between gap-4 p-4">
           <div>
             <div className="text-sm font-medium">Claude refusal fallback</div>
-            <div className="text-xs text-muted">If a Claude model declines a request, Anthropic retries it on a fallback model automatically.</div>
+            <div className="text-xs text-fg-2">If a Claude model declines a request, Anthropic retries it on a fallback model automatically.</div>
           </div>
           <Toggle checked={draft.anthropic.serverFallbacks} onChange={(v) => edit((d) => void (d.anthropic.serverFallbacks = v))} />
         </Card>
@@ -372,11 +433,11 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
             <motion.div key={i} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}>
               <Card data-agent-card className={cx('p-4 transition-opacity', !a.enabled && 'opacity-60')}>
                 <div className="flex items-center gap-3">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-accent-soft text-accent">
+                  <div className="flex size-9 items-center justify-center rounded-md bg-panel-2 text-fg-2 border border-line">
                     <Bot className="size-4.5" />
                   </div>
                   <Input className="!w-auto flex-1 !bg-transparent !border-transparent !px-0 font-medium !text-[15px] focus:!ring-0" value={a.name} onChange={(e) => set((x) => void (x.name = e.target.value))} />
-                  <code className="hidden text-xs text-subtle sm:block">{a.id}</code>
+                  <code className="hidden text-xs text-fg-3 sm:block">{a.id}</code>
                   <Toggle checked={a.enabled} onChange={(v) => set((x) => void (x.enabled = v))} label="Enabled" />
                   <Button size="sm" variant="ghost" className="text-danger" onClick={() => edit((d) => void d.subagents.splice(i, 1))} aria-label="Remove">
                     <Trash2 className="size-3.5" />
@@ -410,7 +471,7 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
                             type="button"
                             whileTap={{ scale: 0.94 }}
                             onClick={() => set((x) => void (x.tools = on ? x.tools.filter((n) => n !== t.name) : [...x.tools, t.name]))}
-                            className={cx('rounded-lg border px-2 py-1 text-xs transition-colors', on ? 'border-accent/50 bg-accent-soft text-accent' : 'border-line text-muted hover:text-fg')}
+                            className={cx('rounded-lg border px-2 py-1 text-xs transition-colors', on ? 'border-fg/30 bg-panel-3 text-fg' : 'border-line text-fg-2 hover:text-fg')}
                           >
                             {t.label}
                           </motion.button>
@@ -448,7 +509,7 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
       </AnimatePresence>
       <div className="pt-2">
         <h3 className="text-sm font-semibold">Add a local specialist</h3>
-        <p className="mt-0.5 text-xs text-muted">Purpose-built presets that run on Ollama, each with a model suggested for its job. Change anything after adding; a missing model can be downloaded from the card.</p>
+        <p className="mt-0.5 text-xs text-fg-2">Purpose-built presets that run on Ollama, each with a model suggested for its job. Change anything after adding; a missing model can be downloaded from the card.</p>
         <div className="mt-3 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
           {AGENT_TEMPLATES.map((t, i) => (
             <motion.button
@@ -468,15 +529,22 @@ function AgentsSection({ draft, edit, tools }: { draft: Settings; edit: Edit; to
                 });
                 setTimeout(() => [...document.querySelectorAll('[data-agent-card]')].pop()?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 80);
               }}
-              className="group flex items-start gap-3 rounded-2xl border border-line bg-surface p-3.5 text-left transition-colors hover:border-accent/40"
+              className="group flex items-start gap-3 rounded-lg border border-line bg-panel p-3.5 text-left transition-colors hover:border-line-strong hover:shadow-2"
             >
-              <span className="text-2xl leading-none">{t.emoji}</span>
+              {(() => {
+                const Icon = TEMPLATE_ICONS[t.icon];
+                return (
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-panel-2 text-fg-2">
+                    <Icon className="size-4" />
+                  </span>
+                );
+              })()}
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 text-sm font-medium">
-                  {t.name} <Plus className="size-3.5 text-subtle transition-colors group-hover:text-accent" />
+                  {t.name} <Plus className="size-3.5 text-fg-3 transition-colors group-hover:text-fg-2" />
                 </span>
-                <span className="mt-0.5 block text-xs text-muted">{t.blurb}</span>
-                <code className="mt-1.5 block truncate text-[11px] text-accent">{t.model}</code>
+                <span className="mt-0.5 block text-xs text-fg-2">{t.blurb}</span>
+                <code className="mt-1.5 block truncate text-[11px] text-fg-2">{t.model}</code>
               </span>
             </motion.button>
           ))}
@@ -523,7 +591,7 @@ function PermissionsSection({ draft, edit, tools }: { draft: Settings; edit: Edi
       >
         {groups.map(([group, list]) => (
           <Card key={group} className="divide-y divide-line">
-            <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-subtle">{group}</div>
+            <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-fg-3">{group}</div>
             {list.map((t) => {
               const policy = draft.policies[t.name] ?? t.defaultPolicy;
               return (
@@ -531,9 +599,9 @@ function PermissionsSection({ draft, edit, tools }: { draft: Settings; edit: Edi
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 text-sm font-medium">
                       {t.label}
-                      {t.risk === 'high' && <Badge tone="warn">sensitive</Badge>}
+                      {t.risk === 'high' && <Badge tone="accent">sensitive</Badge>}
                     </div>
-                    <div className="line-clamp-1 text-xs text-muted">{t.description}</div>
+                    <div className="line-clamp-1 text-xs text-fg-2">{t.description}</div>
                   </div>
                   <Segmented id={`p-${t.name}`} value={policy} options={POLICY_OPTIONS} onChange={(v) => edit((d) => void (d.policies[t.name] = v))} />
                 </div>
@@ -559,7 +627,7 @@ function PermissionsSection({ draft, edit, tools }: { draft: Settings; edit: Edi
         <Card className="flex items-center justify-between gap-4 p-4">
           <div>
             <div className="text-sm font-medium">Allow running scripts</div>
-            <div className="text-xs text-muted">Python, Node.js and Bash</div>
+            <div className="text-xs text-fg-2">Python, Node.js and Bash</div>
           </div>
           <Toggle checked={draft.scripts.enabled} onChange={(v) => edit((d) => void (d.scripts.enabled = v))} />
         </Card>
@@ -619,7 +687,7 @@ function ConnectorsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
             <motion.div key={m.id} layout initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}>
               <Card className="p-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex size-9 items-center justify-center rounded-xl bg-surface-2 text-muted">
+                  <div className="flex size-9 items-center justify-center rounded-md bg-panel-2 text-fg-2">
                     <Plug className="size-4" />
                   </div>
                   <Input className="!w-auto flex-1 !bg-transparent !border-transparent !px-0 font-medium !text-[15px] focus:!ring-0" value={m.name} onChange={(e) => set((x) => void (x.name = e.target.value))} />
@@ -690,12 +758,12 @@ function NotificationsSection() {
     <Section title="Push notifications" description="Get notified on this device when Sable needs your approval or finishes background work.">
       <Card className="p-4">
         {state === 'insecure' && (
-          <p className="text-sm text-muted">
+          <p className="text-sm text-fg-2">
             Push needs HTTPS (or localhost). Put Sable behind HTTPS, for example with <code>tailscale serve</code> or Caddy. See the README.
           </p>
         )}
-        {state === 'unsupported' && <p className="text-sm text-muted">This browser doesn't support web push. On iPhone, add Sable to your Home Screen first (Share → Add to Home Screen).</p>}
-        {state === 'denied' && <p className="text-sm text-muted">Notifications are blocked for this site in your browser settings.</p>}
+        {state === 'unsupported' && <p className="text-sm text-fg-2">This browser doesn't support web push. On iPhone, add Sable to your Home Screen first (Share → Add to Home Screen).</p>}
+        {state === 'denied' && <p className="text-sm text-fg-2">Notifications are blocked for this site in your browser settings.</p>}
         {(state === 'on' || state === 'off') && (
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex-1 text-sm">{state === 'on' ? 'On for this device' : 'Off for this device'}</div>
@@ -782,15 +850,17 @@ export function SettingsView({ section }: { section?: string }) {
     );
 
   return (
-    <div className="relative h-full overflow-y-auto">
-      <div className="mx-auto max-w-4xl px-4 py-6 md:px-6 md:py-10">
-        <PageHeader title="Settings" />
-        <div className="flex flex-col gap-6 md:flex-row md:gap-10">
-          <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 md:mx-0 md:w-48 md:shrink-0 md:flex-col md:px-0">
+    <>
+    <TopBar crumbs="Settings" title={SECTIONS.find((s) => s.id === active)?.label ?? 'Settings'} />
+    <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-10">
+        <div className="flex flex-col gap-6 md:flex-row md:gap-12">
+          <nav className="-mx-4 flex gap-1 overflow-x-auto px-4 md:sticky md:top-0 md:mx-0 md:w-44 md:shrink-0 md:flex-col md:self-start md:px-0">
+            <div className="mb-2 hidden px-2 text-[11px] font-medium text-fg-3 md:block">Settings</div>
             {SECTIONS.map((s) => (
-              <button key={s.id} onClick={() => navigate(`/settings/${s.id}`, { replace: true })} className={cx('relative flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors', active === s.id ? 'text-fg' : 'text-muted hover:text-fg')}>
-                {active === s.id && <motion.span layoutId="settings-active" className="absolute inset-0 rounded-xl bg-surface-2" transition={{ type: 'spring', stiffness: 500, damping: 40 }} />}
-                <s.icon className="relative size-4" />
+              <button key={s.id} onClick={() => navigate(`/settings/${s.id}`, { replace: true })} className={cx('relative flex h-8 shrink-0 items-center gap-2.5 rounded-md px-2 text-[13px] transition-colors', active === s.id ? 'text-fg' : 'text-fg-2 hover:text-fg')}>
+                {active === s.id && <motion.span layoutId="settings-active" className="absolute inset-0 rounded-md border border-line bg-panel shadow-1" transition={{ type: 'spring', stiffness: 600, damping: 45 }} />}
+                <s.icon className="relative size-[15px]" strokeWidth={1.8} />
                 <span className="relative">{s.label}</span>
               </button>
             ))}
@@ -803,6 +873,7 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'agents' && <AgentsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'permissions' && <PermissionsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'connectors' && <ConnectorsSection draft={draft} edit={edit} />}
+                {active === 'network' && <NetworkSection />}
                 {active === 'notifications' && <NotificationsSection />}
               </motion.div>
             </AnimatePresence>
@@ -811,8 +882,8 @@ export function SettingsView({ section }: { section?: string }) {
       </div>
       <AnimatePresence>
         {dirty && (
-          <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 32 }} className="sticky bottom-4 z-20 mx-auto flex w-fit items-center gap-3 rounded-2xl border border-line bg-surface/95 p-2 pl-4 shadow-soft backdrop-blur-xl">
-            <span className="text-sm text-muted">Unsaved changes</span>
+          <motion.div initial={{ y: 80, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 80, opacity: 0 }} transition={{ type: 'spring', stiffness: 400, damping: 32 }} className="sticky bottom-4 z-20 mx-auto flex w-fit items-center gap-3 rounded-lg border border-line bg-panel/95 p-2 pl-4 shadow-soft backdrop-blur-xl">
+            <span className="text-sm text-fg-2">Unsaved changes</span>
             <Button size="sm" variant="ghost" onClick={() => saved && setDraft(structuredClone(saved))}>
               Discard
             </Button>
@@ -823,5 +894,6 @@ export function SettingsView({ section }: { section?: string }) {
         )}
       </AnimatePresence>
     </div>
+    </>
   );
 }

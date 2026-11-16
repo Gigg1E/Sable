@@ -52,6 +52,7 @@ export interface ToolCall {
   name: string;
   args: Record<string, unknown>;
   summary?: string;
+  label?: string;
 }
 export interface Message {
   id: string;
@@ -104,6 +105,7 @@ export interface ToolState {
   progress: string;
   preview?: string;
   started: number;
+  ended?: number;
 }
 export interface GoalStep {
   text: string;

@@ -4,6 +4,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { WORKSPACE_DIR } from '../../config.js';
 import { emit } from '../../events.js';
+import { proxyEnv } from '../../net.js';
 import { getSettings, type McpServerConfig } from '../../settings.js';
 import { errorMessage, truncate, untrusted } from '../../util.js';
 import { registerTool, unregisterWhere } from './registry.js';
@@ -46,7 +47,7 @@ async function connect(cfg: McpServerConfig) {
     transport = new StdioClientTransport({
       command: cfg.command,
       args: cfg.args ?? [],
-      env: { ...getDefaultEnvironment(), ...(cfg.env ?? {}) },
+      env: { ...getDefaultEnvironment(), ...proxyEnv(), ...(cfg.env ?? {}) },
       cwd: WORKSPACE_DIR,
       stderr: 'ignore',
     });

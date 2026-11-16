@@ -1,5 +1,7 @@
+import { toast as sonner } from 'sonner';
 import { create } from 'zustand';
 import { api } from './api';
+import { navigate } from './router';
 import type { Approval, Conversation, Message, Notification, Settings, ToolState } from './types';
 
 export interface Streaming {
@@ -78,13 +80,10 @@ export const useStore = create<State>((set, get) => ({
   },
 
   toast(t) {
-    const id = Math.random().toString(36).slice(2);
-    set((s) => ({ toasts: [...s.toasts.slice(-3), { ...t, id }] }));
-    setTimeout(() => get().dismissToast(id), 5000);
+    const fn = t.tone === 'error' ? sonner.error : t.tone === 'success' ? sonner.success : sonner;
+    fn(t.title, { description: t.body, action: t.link ? { label: 'Open', onClick: () => navigate(t.link!) } : undefined });
   },
-  dismissToast(id) {
-    set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }));
-  },
+  dismissToast() {},
   setSettings(settings) {
     set({ settings });
   },
@@ -155,7 +154,7 @@ function handle(ev: any) {
           ? { ...cur, status: 'waiting' }
           : ev.type === 'tool.progress'
             ? { ...cur, status: cur.status === 'waiting' ? 'running' : cur.status, progress: (cur.progress + (ev.kind === 'tool' ? `\n› ${ev.text}\n` : ev.text)).slice(-4000) }
-            : { ...cur, status: ev.status, preview: ev.preview };
+            : { ...cur, status: ev.status, preview: ev.preview, ended: Date.now() };
       set((st) => ({ tools: { ...st.tools, [ev.callId]: next } }));
       break;
     }

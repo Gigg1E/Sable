@@ -2,22 +2,22 @@ import { motion } from 'motion/react';
 import { ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { api } from '../lib/api';
-import { cx } from '../lib/format';
+import { timeAgo } from '../lib/format';
 import { useStore } from '../lib/store';
 import type { Approval } from '../lib/types';
 import { toolIcon } from './ToolCall';
-import { Button } from './ui';
+import { Badge, Button } from './ui';
 
 function argPreview(a: Approval): string | null {
   const args = a.args as Record<string, any>;
   if (a.tool === 'run_script') return String(args.code ?? '');
-  if (a.tool === 'http_request') return `${args.method} ${args.url}${args.body ? `\n\n${args.body}` : ''}`;
+  if (a.tool === 'http_request') return `${args.method} ${args.url}${args.headers ? `\n${JSON.stringify(args.headers)}` : ''}${args.body ? `\n\n${args.body}` : ''}`;
   if (a.tool === 'web_fetch') return null;
   const json = JSON.stringify(args, null, 2);
   return json === '{}' ? null : json;
 }
 
-export function ApprovalCard({ approval, compact }: { approval: Approval; compact?: boolean }) {
+export function ApprovalCard({ approval, compact, context }: { approval: Approval; compact?: boolean; context?: string }) {
   const [busy, setBusy] = useState<string | null>(null);
   const toast = useStore((s) => s.toast);
   const Icon = toolIcon(approval.tool);
@@ -31,7 +31,6 @@ export function ApprovalCard({ approval, compact }: { approval: Approval; compac
       useStore.setState((s) => ({ approvals: s.approvals.filter((a) => a.id !== approval.id) }));
     } catch (err) {
       toast({ title: 'Could not record decision', body: (err as Error).message, tone: 'error' });
-    } finally {
       setBusy(null);
     }
   }
@@ -39,43 +38,44 @@ export function ApprovalCard({ approval, compact }: { approval: Approval; compac
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 16, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      exit={{ opacity: 0, y: 8, scale: 0.98 }}
-      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-      className="relative rounded-2xl p-[1px] overflow-hidden"
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, height: 0, marginTop: 0 }}
+      transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+      className="overflow-hidden rounded-lg border border-accent/35 bg-panel shadow-2"
     >
-      <motion.div
-        className="absolute inset-[-50%]"
-        style={{ background: 'conic-gradient(from 0deg, transparent 0 60%, var(--accent-2) 75%, var(--accent) 85%, transparent 100%)' }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-      />
-      <div className="relative rounded-[15px] bg-surface p-4">
+      <div className="flex items-center gap-2 border-b border-accent/20 bg-accent-soft px-3.5 py-2 text-[12px]">
+        <ShieldAlert className="size-3.5 text-accent" />
+        <span className="font-medium text-accent">Approval required</span>
+        <span className="text-fg-3">·</span>
+        <span className="text-fg-2">{approval.agent}</span>
+        <span className="flex-1" />
+        {approval.risk === 'high' && <Badge tone="danger">high impact</Badge>}
+        <span className="font-mono text-[11px] text-fg-3">{timeAgo(approval.created_at)}</span>
+      </div>
+      <div className="p-3.5">
         <div className="flex items-start gap-3">
-          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-warn/10 text-warn">
+          <div className="flex size-8 shrink-0 items-center justify-center rounded-md border border-line bg-panel-2 text-fg-2">
             <Icon className="size-4" />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-warn">
-              <ShieldAlert className="size-3.5" /> {approval.agent} wants to
+            <div className="break-words text-[14px] font-medium leading-snug">{approval.summary}</div>
+            <div className="mt-0.5 font-mono text-[11.5px] text-fg-3">
+              {approval.tool}
+              {context ? ` · ${context}` : ''}
             </div>
-            <div className="mt-0.5 font-medium text-[15px] leading-snug break-words">{approval.summary}</div>
-            {approval.risk === 'high' && <div className="mt-1 text-xs text-muted">This can change things outside Sable. Check it before you approve.</div>}
           </div>
         </div>
-        {preview && !compact && (
-          <pre className="mt-3 max-h-48 overflow-auto rounded-xl bg-surface-2 border border-line p-3 text-xs font-mono text-muted whitespace-pre-wrap">{preview}</pre>
-        )}
-        <div className={cx('mt-3.5 flex flex-wrap gap-2', compact && 'mt-3')}>
-          <Button variant="primary" size="sm" loading={busy === 'approvefalse'} onClick={() => decide('approve')}>
-            Approve
+        {preview && !compact && <pre className="mt-3 max-h-52 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-sunken p-3 font-mono text-[12px] text-fg-2">{preview}</pre>}
+        <div className="mt-3.5 flex flex-wrap items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" loading={busy === 'denyfalse'} onClick={() => void decide('deny')}>
+            Deny
           </Button>
-          <Button size="sm" loading={busy === 'approvetrue'} onClick={() => decide('approve', true)}>
+          <Button size="sm" loading={busy === 'approvetrue'} onClick={() => void decide('approve', true)}>
             {rememberLabel}
           </Button>
-          <Button variant="ghost" size="sm" loading={busy === 'denyfalse'} onClick={() => decide('deny')}>
-            Deny
+          <Button variant="primary" size="sm" loading={busy === 'approvefalse'} onClick={() => void decide('approve')}>
+            Approve
           </Button>
         </div>
       </div>

@@ -8,7 +8,7 @@ import type { AgentProfile } from './types';
 export interface AgentTemplate {
   id: string;
   name: string;
-  emoji: string;
+  icon: 'code' | 'search' | 'pen' | 'chart' | 'map' | 'zap';
   blurb: string;
   model: string;
   alternatives: string[];
@@ -19,7 +19,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'local-coder',
     name: 'Coder',
-    emoji: '💻',
+    icon: 'code',
     blurb: 'Writes and runs scripts, edits workspace files.',
     model: 'qwen2.5-coder:7b',
     alternatives: ['qwen3-coder:30b', 'qwen2.5-coder:14b', 'devstral:24b'],
@@ -36,7 +36,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'local-researcher',
     name: 'Researcher',
-    emoji: '🔎',
+    icon: 'search',
     blurb: 'Searches the web, reads sources, cites them.',
     model: 'qwen3:8b',
     alternatives: ['qwen3:14b', 'llama3.1:8b', 'gpt-oss:20b'],
@@ -53,7 +53,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'local-writer',
     name: 'Writer',
-    emoji: '✍️',
+    icon: 'pen',
     blurb: 'Drafts emails, posts and documents in your voice.',
     model: 'llama3.1:8b',
     alternatives: ['mistral-nemo:12b', 'qwen3:14b', 'gemma3:12b'],
@@ -70,7 +70,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'local-analyst',
     name: 'Analyst',
-    emoji: '📊',
+    icon: 'chart',
     blurb: 'Crunches numbers and data files with scripts.',
     model: 'qwen3:14b',
     alternatives: ['qwen3:8b', 'qwen2.5-coder:14b', 'gpt-oss:20b'],
@@ -87,7 +87,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'local-planner',
     name: 'Planner',
-    emoji: '🗺️',
+    icon: 'map',
     blurb: 'Breaks big jobs into goals, steps and routines.',
     model: 'qwen3:8b',
     alternatives: ['qwen3:14b', 'llama3.1:8b'],
@@ -103,7 +103,7 @@ export const AGENT_TEMPLATES: AgentTemplate[] = [
   {
     id: 'local-summarizer',
     name: 'Summarizer',
-    emoji: '⚡',
+    icon: 'zap',
     blurb: 'Fast, small model for digests and quick reads.',
     model: 'llama3.2:3b',
     alternatives: ['qwen3:4b', 'gemma3:4b', 'phi4-mini'],

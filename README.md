@@ -8,7 +8,9 @@ The web app installs on phones and desktops (PWA), with push notifications for a
 
 > Inspired by the feature set of Meta's Muse personal agent (see [`docs/muse-research.md`](docs/muse-research.md)). Sable is its own product with its own design, and is self-hosted by design.
 
-![Sable asking for approval before running a script](docs/screenshots/approval.png)
+![Sable home](docs/screenshots/home.png)
+
+![Approval before running a script](docs/screenshots/approval.png)
 
 ![Sable on a phone](docs/screenshots/mobile.png)
 
@@ -27,7 +29,7 @@ The web app installs on phones and desktops (PWA), with push notifications for a
 | **Spaces** | Ask for a tracker, dashboard, planner or board, and the agent builds a sandboxed mini-app that saves its own data and can ask the agent questions. |
 | **Connectors** | Plug in any **MCP server** (email, calendar, notes, GitHub, Home Assistant…). Connector actions ask for approval until you allow them. |
 | **Tools** | Web search (DuckDuckGo or your SearXNG), page reading, HTTP/API requests, a sandboxed workspace folder, Python/Node/Bash scripts, notifications, schedules, goals, memory, spaces, delegation. |
-| **Installable & animated** | PWA for iOS, Android and desktop. Smooth motion throughout, with light and dark themes. |
+| **Built like a tool** | A ⌘K command palette, a live status bar (connection, model, outbound route, running jobs), keyboard-first chat, and light and dark themes. Installs as an app on iOS, Android and desktop. |
 
 ## Lessons designed in
 
@@ -74,6 +76,69 @@ Data (database, workspace, keys) lives in the `sable-data` volume.
 npm run dev          # API on :8787 (auto-reload) + Vite on :5173 with HTTP proxying
 ```
 
+## Routing agent traffic through a VPN (Docker)
+
+When the agent searches, reads pages or calls APIs, those sites see the IP address of the machine Sable runs on. If that's your home connection or a server you'd rather not expose, send **only the agent's outreach traffic** through a VPN. The web UI, Ollama and the model APIs stay on the normal network.
+
+**What goes through the VPN:** `web_search`, `web_fetch`, `http_request`, and any scripts or local (stdio) connectors the agent runs (they get `HTTP_PROXY` / `HTTPS_PROXY` set).
+**What doesn't:** the Sable web app, Ollama / llama.cpp, Claude and OpenAI API calls, and remote (URL) connectors.
+
+It uses [gluetun](https://github.com/qdm12/gluetun), a VPN client container that supports most providers (Mullvad, ProtonVPN, IVPN, AirVPN, Windscribe, NordVPN, Surfshark, custom WireGuard and more). Gluetun connects to your VPN and exposes an HTTP proxy *inside* the Docker network. Sable sends agent traffic to that proxy.
+
+```
+             ┌────────────── docker network ──────────────┐
+ browser ──▶ │  sable ──(models, UI)──────────────────────┼──▶ Ollama / APIs   (normal network)
+             │    └──(agent web traffic)──▶ vpn:8888 ─────┼──▶ VPN tunnel ──▶ websites
+             └────────────────────────────────────────────┘
+```
+
+### Setup
+
+1. Copy the VPN settings and fill in your provider's details. For WireGuard, your provider's config file contains the private key and address.
+
+   ```bash
+   cp .env.vpn.example .env.vpn
+   $EDITOR .env.vpn
+   ```
+
+   See the [gluetun wiki](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) for your provider's exact variables.
+
+2. Start Sable with the VPN override:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.vpn.yml up -d
+   ```
+
+   Sable waits until the tunnel is healthy. Its log shows `Agent web traffic: via proxy http://vpn:8888`.
+
+3. Verify: open **Settings → Network** and press **Check exit IP**. It should show the VPN's address, not yours. The status bar also reads `egress via vpn proxy`.
+
+### How it protects you
+
+- **Fails closed.** If the VPN or proxy is down, agent web requests error out ("Request through the agent proxy failed… Is the VPN container up?"). Nothing falls back to your real IP. Gluetun's own firewall also blocks traffic outside the tunnel.
+- **No DNS leaks for web tools.** Requests are tunnelled with `CONNECT host:port`, so names are resolved by gluetun inside the VPN, not by your server's resolver.
+- **No identifying proxy headers.** `HTTPPROXY_STEALTH=on` stops gluetun from adding `Via` / `X-Forwarded-For`.
+- **Not exposed.** The proxy port isn't published to the host. Only containers on the compose network can use it.
+
+### Using an existing proxy or VPN
+
+Any HTTP(S) proxy works. Set the variable directly, with or without Docker:
+
+```bash
+SABLE_AGENT_PROXY=http://user:pass@10.0.0.2:8888 npm start
+```
+
+The credentials are never shown in the UI or logs. SOCKS proxies aren't supported. Put [gost](https://github.com/go-gost/gost) or privoxy in front if that's all you have.
+
+### Full tunnel (everything through the VPN)
+
+To also send model API traffic through the VPN, run Sable inside gluetun's network namespace instead. Remove `SABLE_AGENT_PROXY`, add `network_mode: "service:vpn"` to `sable`, and move its `ports:` to the `vpn` service. Ollama on the Docker network then needs `FIREWALL_OUTBOUND_SUBNETS` (e.g. `172.16.0.0/12`) in `.env.vpn` so gluetun lets that traffic out. This mode also covers scripts that ignore proxy variables.
+
+### Caveats
+
+- Scripts that open raw sockets, or tools that ignore `HTTP_PROXY`, can bypass the split-tunnel proxy. Use full-tunnel mode, or set *Run script* to *Off* in Permissions, if that matters.
+- Some sites block VPN IP ranges. Those requests fail instead of leaking. Switch servers with `SERVER_COUNTRIES` / `SERVER_CITIES`.
+
 ## Reaching it from your phone (HTTPS)
 
 Installing as an app and push notifications both require **HTTPS** (except on `localhost`). The easiest options:
@@ -98,6 +163,7 @@ Most things are set in the UI. Environment variables:
 | `SEARXNG_URL` | | Use your SearXNG for web search |
 | `TZ` | system | Time zone for routines |
 | `SABLE_TRUST_PROXY` | private ranges | Express `trust proxy` setting, for HTTPS detection behind a proxy |
+| `SABLE_AGENT_PROXY` | | HTTP(S) proxy for the agent's outbound web traffic (see [VPN routing](#routing-agent-traffic-through-a-vpn-docker)) |
 | `SABLE_VAPID_SUBJECT` | `mailto:sable-agent@example.com` | Contact for web push (VAPID) |
 
 ### Local specialists (all on Ollama)

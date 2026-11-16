@@ -1,25 +1,26 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Bell, CheckCheck, Inbox as InboxIcon, Trash2 } from 'lucide-react';
+import { Bell, CalendarClock, CheckCheck, Inbox as InboxIcon, MessageSquare, ShieldAlert, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ApprovalCard } from '../components/ApprovalCard';
-import { Button, Card, Empty, PageHeader, listItem } from '../components/ui';
+import { Button, Card, Empty, Page, PageIntro, SectionLabel, TopBar, listItem } from '../components/ui';
 import { api } from '../lib/api';
 import { cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore } from '../lib/store';
 import type { Notification } from '../lib/types';
 
+const KIND_ICON = { approval: ShieldAlert, schedule: CalendarClock, run: MessageSquare } as Record<string, typeof Bell>;
+
 export function InboxView() {
   const approvals = useStore((s) => s.approvals);
   const conversations = useStore((s) => s.conversations);
-  const [notes, setNotes] = useState<Notification[]>([]);
+  const [notes, setNotes] = useState<Notification[] | null>(null);
   const load = useCallback(() => void api.get<Notification[]>('/notifications').then(setNotes), []);
 
   useEffect(() => {
     load();
     const off = onServerEvent((ev) => ev.type === 'notification' && load());
-    // Opening the inbox marks everything read.
-    const t = setTimeout(() => void api.post('/notifications/read'), 1200);
+    const t = setTimeout(() => void api.post('/notifications/read'), 1500);
     return () => {
       off();
       clearTimeout(t);
@@ -27,23 +28,34 @@ export function InboxView() {
   }, [load]);
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="mx-auto max-w-3xl px-4 py-6 md:px-6 md:py-10">
-        <PageHeader title="Inbox" subtitle="Approvals waiting on you, and everything Sable told you." />
-
+    <>
+      <TopBar
+        title="Inbox"
+        actions={
+          !!notes?.length && (
+            <>
+              <Button size="sm" variant="ghost" onClick={() => void api.post('/notifications/read').then(load)}>
+                <CheckCheck className="size-3.5" /> Mark all read
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => void api.del('/notifications').then(load)}>
+                <Trash2 className="size-3.5" /> Clear
+              </Button>
+            </>
+          )
+        }
+      />
+      <Page width="md">
+        <PageIntro title="Inbox" description="Approvals waiting on you, and everything the agent reported while you were away." />
         <AnimatePresence>
           {approvals.length > 0 && (
-            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, height: 0 }} className="mb-10">
-              <h2 className="mb-3 text-[13px] font-medium uppercase tracking-wider text-warn">Needs your OK · {approvals.length}</h2>
+            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mb-10">
+              <SectionLabel>
+                <span className="text-accent">Needs your approval · {approvals.length}</span>
+              </SectionLabel>
               <div className="space-y-3">
                 <AnimatePresence>
                   {approvals.map((a) => (
-                    <div key={a.id}>
-                      <ApprovalCard approval={a} />
-                      <button onClick={() => navigate(`/chat/${a.conversation_id}`)} className="mt-1.5 pl-1 text-xs text-subtle hover:text-fg">
-                        in “{conversations.find((c) => c.id === a.conversation_id)?.title ?? 'chat'}” · {timeAgo(a.created_at)}
-                      </button>
-                    </div>
+                    <ApprovalCard key={a.id} approval={a} context={conversations.find((c) => c.id === a.conversation_id)?.title} />
                   ))}
                 </AnimatePresence>
               </div>
@@ -51,42 +63,34 @@ export function InboxView() {
           )}
         </AnimatePresence>
 
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-[13px] font-medium uppercase tracking-wider text-subtle">Notifications</h2>
-          {notes.length > 0 && (
-            <div className="flex gap-1">
-              <Button size="sm" variant="ghost" onClick={() => void api.post('/notifications/read').then(load)}>
-                <CheckCheck className="size-3.5" /> Read all
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => void api.del('/notifications').then(load)}>
-                <Trash2 className="size-3.5" /> Clear
-              </Button>
-            </div>
-          )}
-        </div>
-        {!notes.length && !approvals.length ? (
-          <Empty icon={<InboxIcon className="size-6" />} title="All clear" body="When Sable finishes background work or needs a decision, it shows up here and on your devices." />
-        ) : (
-          <div className="space-y-2">
+        <SectionLabel>Notifications</SectionLabel>
+        {notes && !notes.length && !approvals.length ? (
+          <Empty icon={<InboxIcon className="size-4" />} title="All caught up" body="Background results and approval requests show up here and as push notifications on your devices." />
+        ) : notes && notes.length ? (
+          <Card className="overflow-hidden">
             <AnimatePresence initial={false}>
-              {notes.map((n) => (
-                <motion.div key={n.id} layout {...listItem}>
-                  <Card className={cx('flex cursor-pointer items-start gap-3 p-4 transition-colors hover:border-line-strong', !n.read && 'border-accent/30')} onClick={() => navigate(n.link || '/')}>
-                    <div className={cx('mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl', n.read ? 'bg-surface-2 text-subtle' : 'bg-accent-soft text-accent')}>
-                      <Bell className="size-4" />
-                    </div>
+              {notes.map((n) => {
+                const Icon = KIND_ICON[n.kind] ?? Bell;
+                return (
+                  <motion.button key={n.id} layout {...listItem} onClick={() => navigate(n.link || '/')} className="flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left last:border-0 hover:bg-panel-2/50">
+                    <span className="relative mt-0.5">
+                      <Icon className="size-4 text-fg-3" />
+                      {!n.read && <span className="absolute -left-2.5 top-1 size-1.5 rounded-full bg-accent" />}
+                    </span>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium">{n.title}</div>
-                      {n.body && <div className="mt-0.5 line-clamp-3 text-sm text-muted">{n.body}</div>}
-                      <div className="mt-1 text-xs text-subtle">{timeAgo(n.created_at)}</div>
+                      <div className={cx('text-[13.5px]', !n.read ? 'font-medium' : 'text-fg-2')}>{n.title}</div>
+                      {n.body && <div className="mt-0.5 line-clamp-2 text-[12.5px] text-fg-3">{n.body}</div>}
                     </div>
-                  </Card>
-                </motion.div>
-              ))}
+                    <span className="shrink-0 font-mono text-[11px] text-fg-3">{timeAgo(n.created_at)}</span>
+                  </motion.button>
+                );
+              })}
             </AnimatePresence>
-          </div>
+          </Card>
+        ) : (
+          !approvals.length && null
         )}
-      </div>
-    </div>
+      </Page>
+    </>
   );
 }
