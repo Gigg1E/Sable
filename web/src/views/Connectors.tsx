@@ -57,7 +57,7 @@ function SetupSheet({ preset, onClose, onAdd }: { preset: ConnectorPreset | null
   const [callback, setCallback] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => {
-    if (preset) void api.get<{ callbackUrl: string }>('/mcp/oauth/info').then((r) => setCallback(r.callbackUrl));
+    if (preset) void api.get<{ callbackUrl: string }>(`/mcp/oauth/info?origin=${encodeURIComponent(location.origin)}`).then((r) => setCallback(r.callbackUrl));
     setClientId('');
     setClientSecret('');
     setToken('');
@@ -306,6 +306,12 @@ export function ConnectorsSection({ draft, edit, saveNow, tools }: { draft: Sett
                         <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden">
                           <div className="space-y-3.5 border-t border-line px-4 py-4">
                             {preset?.help && <p className="text-[12.5px] leading-relaxed text-fg-2">{preset.help}</p>}
+                            {m.auth === 'oauth' && (
+                              <div className="text-[12px] text-fg-3">
+                                Redirect URI (must match your OAuth client exactly):
+                                <code className="mt-1 block select-all break-all rounded-md border border-line bg-sunken px-2.5 py-1.5 font-mono text-fg">{location.origin}/api/mcp/oauth/callback</code>
+                              </div>
+                            )}
                             <div className="flex flex-wrap gap-1.5">
                               {st?.state === 'connected' && (
                                 <Button size="sm" onClick={() => void allowReadOnly(m.id)}>

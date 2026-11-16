@@ -65,6 +65,16 @@ function sameOriginOnly(req: Request, res: Response, next: NextFunction) {
 
 /** The address the user's browser reached this app at (honours X-Forwarded-* from a trusted proxy such as Tailscale). */
 function appOrigin(req: Request) {
+  // The browser's own origin is exact (proxies such as Tailscale serve or Docker can change Host or the scheme).
+  for (const v of [req.get('origin'), typeof req.query.origin === 'string' ? req.query.origin : undefined]) {
+    if (!v) continue;
+    try {
+      const u = new URL(v);
+      if ((u.protocol === 'https:' || u.protocol === 'http:') && u.origin === v.replace(/\/+$/, '')) return u.origin;
+    } catch {
+      /* ignore malformed */
+    }
+  }
   return `${req.protocol}://${req.host}`;
 }
 
