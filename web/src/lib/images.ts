@@ -59,11 +59,13 @@ export async function prepareImage(file: File): Promise<{ blob: Blob; width: num
   return { blob, width, height };
 }
 
-export async function uploadImage(blob: Blob, width: number, height: number): Promise<Uploaded> {
+export async function uploadImage(blob: Blob, width: number, height: number, name?: string): Promise<Uploaded> {
+  const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[blob.type] ?? 'jpg';
+  const fileName = name ? name.replace(/\.[^.]+$/, '') + '.' + ext : '';
   const res = await fetch('/api/uploads', {
     method: 'POST',
     credentials: 'same-origin',
-    headers: { 'Content-Type': blob.type || 'image/jpeg', 'X-Image-Width': String(width), 'X-Image-Height': String(height) },
+    headers: { 'Content-Type': blob.type || 'image/jpeg', 'X-Image-Width': String(width), 'X-Image-Height': String(height), ...(fileName ? { 'X-File-Name': encodeURIComponent(fileName) } : {}) },
     body: blob,
   });
   const data = await res.json().catch(() => ({}));
@@ -72,3 +74,16 @@ export async function uploadImage(blob: Blob, width: number, height: number): Pr
 }
 
 export const imageUrl = (id: string) => `/api/uploads/${id}`;
+
+/** Upload any other file (saved into the agent's workspace under uploads/). */
+export async function uploadFile(file: File): Promise<Uploaded & { name: string; size: number; kind: 'file' | 'image' }> {
+  const res = await fetch('/api/uploads', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': file.type || 'application/octet-stream', 'X-File-Name': encodeURIComponent(file.name) },
+    body: file,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error ?? (res.status === 413 ? 'That file is over 25 MB.' : `Upload failed (${res.status})`));
+  return data;
+}

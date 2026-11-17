@@ -153,8 +153,8 @@ export interface Message {
   tool_call_id: string | null;
   tool_name: string | null;
   is_error: boolean;
-  attachments?: { id: string; mime: string; width: number | null; height: number | null }[];
-  cards?: CommerceCard[];
+  attachments?: AttachmentInfo[];
+  cards?: AnyCard[];
   created_at: number;
 }
 export interface Conversation {
@@ -315,3 +315,44 @@ export interface CartLikeCard {
   handoffReason?: string;
 }
 export type CommerceCard = { type: 'products'; heading: string | null; items: OfferCard[]; source: string } | CartLikeCard;
+
+export interface AttachmentInfo {
+  id: string;
+  kind?: 'image' | 'file';
+  mime: string;
+  name?: string;
+  size?: number;
+  width: number | null;
+  height: number | null;
+  path?: string | null;
+}
+
+export interface FileCardData {
+  type: 'file';
+  path: string;
+  name: string;
+  size: number;
+  mime: string;
+  kind: 'text' | 'image' | 'other';
+  updated: number;
+}
+export interface LinkItem {
+  url: string;
+  site: string;
+  title: string;
+  description?: string;
+  image?: string;
+  price?: string;
+  note?: string;
+  ok: boolean;
+}
+export interface LinksCardData {
+  type: 'links';
+  title?: string;
+  items: LinkItem[];
+}
+export interface ImagesCardData {
+  type: 'images';
+  items: { url: string; caption?: string; source?: string; site: string }[];
+}
+export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData;

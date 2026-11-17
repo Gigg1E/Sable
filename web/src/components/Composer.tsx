@@ -1,14 +1,16 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, ArrowUp, ImagePlus, Square, X } from 'lucide-react';
+import { AlertCircle, ArrowUp, Paperclip, Square, X } from 'lucide-react';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { cx } from '../lib/format';
-import { prepareImage, uploadImage } from '../lib/images';
+import { prepareImage, uploadFile, uploadImage } from '../lib/images';
+import { FileGlyph, fmtBytes } from './Cards';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
 import { Kbd, Spinner, Tip } from './ui';
 
 const coarse = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
-const MAX_IMAGES = 8;
+const MAX_FILES = 8;
+const MAX_BYTES = 25 * 1024 * 1024;
 
 export interface ComposerHandle {
   setText: (t: string) => void;
@@ -17,7 +19,11 @@ export interface ComposerHandle {
 
 interface Attachment {
   key: string;
+  /** Object URL for images; empty for other files. */
   preview: string;
+  name: string;
+  size: number;
+  image: boolean;
   status: 'uploading' | 'ready' | 'error';
   id?: string;
   error?: string;
@@ -60,17 +66,26 @@ export const Composer = forwardRef<
   useEffect(() => () => files.forEach((f) => URL.revokeObjectURL(f.preview)), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   function addFiles(list: FileList | File[]) {
-    const images = [...list].filter((f) => f.type.startsWith('image/') || /\.(heic|heif)$/i.test(f.name));
-    if (!images.length) return toast({ title: 'Only images for now', body: 'Attach JPEG, PNG, WebP, GIF or HEIC photos.', tone: 'error' });
-    const room = MAX_IMAGES - files.length;
-    if (images.length > room) toast({ title: `Up to ${MAX_IMAGES} images per message` });
-    for (const file of images.slice(0, Math.max(0, room))) {
+    const all = [...list];
+    const tooBig = all.filter((f) => f.size > MAX_BYTES);
+    if (tooBig.length) toast({ title: `${tooBig.map((f) => f.name).join(', ')} ${tooBig.length === 1 ? 'is' : 'are'} over 25 MB`, tone: 'error' });
+    const accepted = all.filter((f) => f.size <= MAX_BYTES && f.size > 0);
+    const room = MAX_FILES - files.length;
+    if (accepted.length > room) toast({ title: `Up to ${MAX_FILES} files per message` });
+    for (const file of accepted.slice(0, Math.max(0, room))) {
       const key = Math.random().toString(36).slice(2);
-      setFiles((fs) => [...fs, { key, preview: URL.createObjectURL(file), status: 'uploading' }]);
+      // Photos are resized and converted (HEIC → JPEG) so every model can see them; everything else is sent as is.
+      const image = /^image\/(jpeg|png|webp|gif|heic|heif)$/.test(file.type) || /\.(heic|heif)$/i.test(file.name);
+      setFiles((fs) => [...fs, { key, preview: image ? URL.createObjectURL(file) : '', name: file.name, size: file.size, image, status: 'uploading' }]);
       void (async () => {
         try {
+          if (!image) {
+            const up = await uploadFile(file);
+            setFiles((fs) => fs.map((f) => (f.key === key ? { ...f, status: 'ready', id: up.id } : f)));
+            return;
+          }
           const { blob, width, height } = await prepareImage(file);
-          const up = await uploadImage(blob, width, height);
+          const up = await uploadImage(blob, width, height, file.name);
           setFiles((fs) => fs.map((f) => (f.key === key ? { ...f, status: 'ready', id: up.id } : f)));
         } catch (err) {
           setFiles((fs) => fs.map((f) => (f.key === key ? { ...f, status: 'error', error: (err as Error).message } : f)));
@@ -82,13 +97,13 @@ export const Composer = forwardRef<
   function remove(key: string) {
     setFiles((fs) => {
       const f = fs.find((x) => x.key === key);
-      if (f) URL.revokeObjectURL(f.preview);
+      if (f?.preview) URL.revokeObjectURL(f.preview);
       return fs.filter((x) => x.key !== key);
     });
   }
 
   function onPaste(e: ClipboardEvent<HTMLTextAreaElement>) {
-    const pasted = [...e.clipboardData.items].filter((i) => i.kind === 'file' && i.type.startsWith('image/')).map((i) => i.getAsFile()).filter((f): f is File => !!f);
+    const pasted = [...e.clipboardData.items].filter((i) => i.kind === 'file').map((i) => i.getAsFile()).filter((f): f is File => !!f);
     if (pasted.length) {
       e.preventDefault();
       addFiles(pasted);
@@ -109,7 +124,7 @@ export const Composer = forwardRef<
     if (!canSend) return;
     const t = text.trim();
     setText('');
-    files.forEach((f) => URL.revokeObjectURL(f.preview));
+    files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
     setFiles([]);
     await onSend(t, ready);
   }
@@ -129,7 +144,7 @@ export const Composer = forwardRef<
       <AnimatePresence>
         {dragging && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-panel/90 text-[13px] text-fg-2">
-            <ImagePlus className="mr-2 size-4 text-accent" /> Drop images to attach
+            <Paperclip className="mr-2 size-4 text-accent" /> Drop files to attach
           </motion.div>
         )}
       </AnimatePresence>
@@ -140,8 +155,18 @@ export const Composer = forwardRef<
             <div className="flex gap-2 overflow-x-auto px-3 pt-3">
               <AnimatePresence initial={false}>
                 {files.map((f) => (
-                  <motion.div key={f.key} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.15 }} className="group relative size-16 shrink-0">
-                    <img src={f.preview} alt="" className={cx('size-16 rounded-md border border-line object-cover', f.status !== 'ready' && 'opacity-50')} />
+                  <motion.div key={f.key} layout initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} transition={{ duration: 0.15 }} className={cx('group relative h-16 shrink-0', f.image ? 'w-16' : 'w-52')}>
+                    {f.image ? (
+                      <img src={f.preview} alt="" className={cx('size-16 rounded-md border border-line object-cover', f.status !== 'ready' && 'opacity-50')} />
+                    ) : (
+                      <div className={cx('flex h-16 items-center gap-2.5 rounded-md border border-line bg-panel-2 px-2.5', f.status !== 'ready' && 'opacity-60')}>
+                        <FileGlyph name={f.name} />
+                        <div className="min-w-0">
+                          <div className="truncate text-[12.5px] font-medium">{f.name}</div>
+                          <div className="font-mono text-[11px] text-fg-3">{fmtBytes(f.size)}</div>
+                        </div>
+                      </div>
+                    )}
                     {f.status === 'uploading' && (
                       <span className="absolute inset-0 flex items-center justify-center">
                         <Spinner className="text-fg" />
@@ -154,7 +179,7 @@ export const Composer = forwardRef<
                         </span>
                       </Tip>
                     )}
-                    <button onClick={() => remove(f.key)} aria-label="Remove image" className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-panel text-fg-2 shadow-1 hover:text-fg">
+                    <button onClick={() => remove(f.key)} aria-label={`Remove ${f.name}`} className="absolute -right-1.5 -top-1.5 flex size-5 items-center justify-center rounded-full border border-line bg-panel text-fg-2 shadow-1 hover:text-fg">
                       <X className="size-3" />
                     </button>
                   </motion.div>
@@ -181,15 +206,14 @@ export const Composer = forwardRef<
         className="block w-full resize-none bg-transparent px-3.5 pt-3 text-[14.5px] leading-6 outline-none placeholder:text-fg-3"
       />
       <div className="flex items-center gap-2 px-2.5 pb-2.5">
-        <Tip label="Attach images" kbd={coarse ? undefined : 'paste or drop'}>
-          <button onClick={() => picker.current?.click()} aria-label="Attach images" className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-panel-2 hover:text-fg">
-            <ImagePlus className="size-4" />
+        <Tip label="Attach files or photos" kbd={coarse ? undefined : 'paste or drop'}>
+          <button onClick={() => picker.current?.click()} aria-label="Attach files" className="flex size-7 items-center justify-center rounded-md text-fg-3 transition-colors hover:bg-panel-2 hover:text-fg">
+            <Paperclip className="size-4" />
           </button>
         </Tip>
         <input
           ref={picker}
           type="file"
-          accept="image/*"
           multiple
           hidden
           onChange={(e) => {

@@ -1,11 +1,14 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type express from 'express';
 import { WORKSPACE_DIR } from '../../config.js';
+import { emit } from '../../events.js';
+import { looksText } from '../../uploads.js';
 import { proxyEnv } from '../../net.js';
 import { getSettings } from '../../settings.js';
 import { id, truncate } from '../../util.js';
-import { registerTool } from './registry.js';
+import { registerTool, type Card } from './registry.js';
 
 /** Resolve a model-supplied path inside the workspace, refusing anything that escapes it. */
 async function safePath(p: string): Promise<string> {
@@ -21,6 +24,125 @@ async function safePath(p: string): Promise<string> {
   }
   return target;
 }
+
+const MIME: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', svg: 'image/svg+xml',
+  pdf: 'application/pdf', csv: 'text/csv', md: 'text/markdown', txt: 'text/plain', json: 'application/json', html: 'text/html', htm: 'text/html',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', zip: 'application/zip', mp3: 'audio/mpeg', wav: 'audio/wav', mp4: 'video/mp4',
+};
+export const mimeOf = (p: string) => MIME[path.extname(p).slice(1).toLowerCase()] ?? (looksText(p, '') ? 'text/plain' : 'application/octet-stream');
+/** Raster images that are safe to show inline (SVG can carry scripts, so it only downloads). */
+const INLINE_IMAGE = /^image\/(png|jpeg|gif|webp|avif)$/;
+
+const rel = (abs: string, root: string) => path.relative(root, abs).split(path.sep).join('/');
+
+/** A card that shows a workspace file in the chat: preview, live updates and download. */
+export async function fileCard(p: string): Promise<Card> {
+  const root = await fs.realpath(WORKSPACE_DIR);
+  const abs = await safePath(p);
+  const st = await fs.stat(abs);
+  if (!st.isFile()) throw new Error(`${p} is not a file.`);
+  const mime = mimeOf(abs);
+  return { type: 'file', path: rel(abs, root), name: path.basename(abs), size: st.size, mime, kind: INLINE_IMAGE.test(mime) ? 'image' : looksText(abs, mime) ? 'text' : 'other', updated: st.mtimeMs };
+}
+
+async function announce(p: string) {
+  try {
+    const card = await fileCard(p);
+    emit({ type: 'workspace.file', path: card.path, size: card.size, updated: card.updated });
+    return card;
+  } catch {
+    return null;
+  }
+}
+
+/** path → mtime for workspace files (hidden folders skipped, capped), to see what a script changed. */
+async function snapshot(): Promise<Map<string, number>> {
+  const root = await fs.realpath(WORKSPACE_DIR);
+  const out = new Map<string, number>();
+  const walk = async (dir: string, depth: number) => {
+    if (depth > 6 || out.size > 3000) return;
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.name === 'node_modules' || e.name === '__pycache__') continue;
+      const abs = path.join(dir, e.name);
+      if (e.isDirectory()) await walk(abs, depth + 1);
+      else if (e.isFile()) out.set(rel(abs, root), (await fs.stat(abs)).mtimeMs);
+    }
+  };
+  await walk(root, 0);
+  return out;
+}
+
+/** File routes for the chat's file cards (behind session auth). */
+export function workspaceRoutes(r: express.Router) {
+  r.get('/files/meta', async (req, res) => {
+    try {
+      const card = await fileCard(String(req.query.path ?? ''));
+      let text: string | undefined;
+      let truncated = false;
+      if (card.kind === 'text') {
+        const buf = await fs.readFile(await safePath(String(card.path)));
+        truncated = buf.length > 300_000;
+        text = buf.subarray(0, 300_000).toString('utf8');
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ ...card, text, truncated });
+    } catch (err) {
+      res.status(404).json({ error: (err as NodeJS.ErrnoException).code === 'ENOENT' ? 'This file no longer exists.' : (err as Error).message });
+    }
+  });
+  r.get('/files/raw', async (req, res) => {
+    try {
+      const card = await fileCard(String(req.query.path ?? ''));
+      const abs = await safePath(String(card.path));
+      res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'no-store');
+      // Only raster images are shown inline; everything else is a download, never rendered on this origin.
+      if (card.kind === 'image' && req.query.download !== '1') {
+        res.setHeader('Content-Type', String(card.mime));
+        return res.sendFile(abs);
+      }
+      res.attachment(String(card.name));
+      res.setHeader('Content-Type', 'application/octet-stream');
+      res.sendFile(abs);
+    } catch {
+      res.status(404).json({ error: 'File not found' });
+    }
+  });
+}
+
+registerTool({
+  name: 'show_file',
+  label: 'Show file',
+  group: 'Workspace',
+  description:
+    'Show the user one or more workspace files as cards in the chat, right where you call it: a live preview (text, code or image) with a download button. Use it to hand over anything you made or changed, e.g. a file a script produced. (file_write already shows the file it writes.)',
+  parameters: { type: 'object', properties: { paths: { type: 'array', items: { type: 'string' }, description: 'Workspace paths' } }, required: ['paths'] },
+  risk: 'low',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Show ${(a.paths ?? []).join(', ')}`,
+  async run(a) {
+    const cards: Card[] = [];
+    const missing: string[] = [];
+    for (const p of (Array.isArray(a.paths) ? a.paths : [a.paths]).slice(0, 8)) {
+      try {
+        cards.push(await fileCard(String(p)));
+      } catch {
+        missing.push(String(p));
+      }
+    }
+    const shown = cards.map((c) => c.path).join(', ');
+    return { content: `${shown ? `Shown to the user: ${shown}.` : 'Nothing shown.'}${missing.length ? ` Not found: ${missing.join(', ')}.` : ''}`, cards };
+  },
+});
 
 registerTool({
   name: 'file_list',
@@ -66,7 +188,7 @@ registerTool({
   name: 'file_write',
   label: 'Write file',
   group: 'Workspace',
-  description: 'Create or overwrite a text file in the workspace (parent folders are created). Set append to add to the end instead.',
+  description: 'Create or overwrite a text file in the workspace (parent folders are created). Set append to add to the end instead. The user sees the file live in the chat, with a download button, so write it here instead of pasting long documents into your reply.',
   parameters: {
     type: 'object',
     properties: { path: { type: 'string' }, content: { type: 'string' }, append: { type: 'boolean' } },
@@ -80,7 +202,8 @@ registerTool({
     await fs.mkdir(path.dirname(target), { recursive: true });
     if (a.append) await fs.appendFile(target, String(a.content));
     else await fs.writeFile(target, String(a.content));
-    return `Wrote ${String(a.content).length} characters to ${a.path}.`;
+    const card = await announce(a.path);
+    return { content: `Wrote ${String(a.content).length} characters to ${a.path}. The user sees it as a file card with a download button.`, cards: card ? [card] : [] };
   },
 });
 
@@ -114,8 +237,9 @@ registerTool({
     const file = path.join(dir, `${id()}.${ext}`);
     await fs.writeFile(file, String(a.code));
     const timeout = Math.min(Number(a.timeout_sec) || cfg.timeoutSec, 600) * 1000;
+    const before = await snapshot();
     try {
-      return await new Promise<string>((resolve) => {
+      const out = await new Promise<string>((resolve) => {
         // A minimal environment: no API keys or other server secrets leak into scripts.
         const child = spawn(bin, [file], {
           cwd: WORKSPACE_DIR,
@@ -141,6 +265,11 @@ registerTool({
           );
         });
       });
+      // Files the script created or changed: refresh any open file cards and tell the agent.
+      const after = await snapshot();
+      const changed = [...after].filter(([p, m]) => before.get(p) !== m).map(([p]) => p);
+      for (const p of changed.slice(0, 20)) void announce(p);
+      return changed.length ? `${out}\n\nFiles created or changed: ${changed.slice(0, 20).join(', ')}${changed.length > 20 ? ' …' : ''} (use show_file to hand them to the user)` : out;
     } finally {
       await fs.rm(file, { force: true });
     }

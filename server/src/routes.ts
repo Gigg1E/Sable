@@ -26,6 +26,7 @@ import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type CalendarFeed, type ProviderConfig, type Settings } from './settings.js';
 import { errorMessage, id, now, parseJson } from './util.js';
 import { getUpload, uploadRoutes } from './uploads.js';
+import { workspaceRoutes } from './agent/tools/workspace.js';
 import { beginAppLink, beginDeviceLink, completeAppLink, shopLinkStatus, unlinkShop } from './shop/auth.js';
 import { shopCall, shopErrorText } from './shop/client.js';
 
@@ -173,6 +174,7 @@ export function apiRouter() {
     }),
   );
   uploadRoutes(r);
+  workspaceRoutes(r);
 
   r.get(
     '/bootstrap',
@@ -361,7 +363,7 @@ export function apiRouter() {
     h((req) => {
       const text = String(req.body?.text ?? '').trim();
       const attachments = (Array.isArray(req.body?.attachments) ? req.body.attachments : []).map(String).slice(0, 8);
-      for (const a of attachments) if (!getUpload(a)) throw new HttpError(400, 'An attached image is missing. Try attaching it again.');
+      for (const a of attachments) if (!getUpload(a)) throw new HttpError(400, 'An attached file is missing. Try attaching it again.');
       if (!text && !attachments.length) throw new HttpError(400, 'Message is empty');
       return { runId: startRun(param(req, 'id'), text, 'user', attachments) };
     }),

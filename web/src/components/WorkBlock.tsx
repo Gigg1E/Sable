@@ -67,23 +67,34 @@ function plural(n: number, one: string, many = one + 's') {
   return `${n} ${n === 1 ? one : many}`;
 }
 
-/** "4 searches · 6 pages · 2 other steps" */
-function summarize(calls: ToolCall[]) {
-  const count = (pred: (c: ToolCall) => boolean) => calls.filter(pred).length;
-  const searches = count((c) => c.name === 'web_search' || c.name === 'shop_search');
-  const pages = count((c) => c.name === 'web_fetch' || c.name === 'http_request' || c.name === 'watch_test');
-  const scripts = count((c) => c.name === 'run_script');
-  const agents = count((c) => c.name === 'delegate');
-  const other = calls.length - searches - pages - scripts - agents;
-  return [
-    searches && plural(searches, 'search', 'searches'),
-    pages && plural(pages, 'page'),
-    scripts && plural(scripts, 'script'),
-    agents && plural(agents, 'hand-off'),
-    other && plural(other, searches + pages + scripts + agents ? 'other step' : 'step'),
-  ]
-    .filter(Boolean)
-    .join(' · ');
+/** "Searched the web, read 3 pages and wrote report.md" — what a finished work row did, in words. */
+function describeDone(calls: ToolCall[]) {
+  const n = (pred: (c: ToolCall) => boolean) => calls.filter(pred).length;
+  const parts: string[] = [];
+  const searches = n((c) => c.name === 'web_search');
+  const pages = n((c) => c.name === 'web_fetch' || c.name === 'http_request' || c.name === 'watch_test');
+  const shop = n((c) => c.name.startsWith('shop_') && c.name !== 'shop_show');
+  const scripts = n((c) => c.name === 'run_script');
+  const writes = calls.filter((c) => c.name === 'file_write').map((c) => String((c.args as { path?: string }).path ?? '').split('/').pop());
+  const reads = n((c) => c.name === 'file_read' || c.name === 'file_list');
+  const memory = n((c) => c.name.startsWith('memory_'));
+  const calendar = n((c) => c.name.startsWith('calendar_'));
+  const shows = n((c) => c.name.startsWith('show_') || c.name === 'shop_show');
+  const agents = calls.filter((c) => c.name === 'delegate').map((c) => String((c.args as { agent?: string }).agent ?? 'a sub-agent'));
+  if (searches) parts.push(searches === 1 ? 'searched the web' : `searched the web ${searches} times`);
+  if (pages) parts.push(`read ${plural(pages, 'page')}`);
+  if (shop) parts.push('checked stores');
+  if (calendar) parts.push('checked the calendar');
+  if (scripts) parts.push(scripts === 1 ? 'ran a script' : `ran ${scripts} scripts`);
+  if (writes.length) parts.push(writes.length <= 2 ? `wrote ${[...new Set(writes)].join(' and ')}` : `wrote ${plural(writes.length, 'file')}`);
+  if (reads) parts.push('looked through files');
+  if (memory) parts.push('checked memory');
+  if (agents.length) parts.push(`asked ${[...new Set(agents)].join(' and ')}`);
+  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows;
+  if (calls.length - known > 0) parts.push(known ? `${plural(calls.length - known, 'other step')}` : `took ${plural(calls.length, 'step')}`);
+  if (!parts.length && shows) parts.push('prepared what to show');
+  const text = parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts.join(' and ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 function fmtDuration(ms: number) {
@@ -141,7 +152,7 @@ export function WorkBlock({ steps, working, waiting, started, ended }: { steps: 
     ? current
     : thinkingOnly
       ? `Thought for ${fmtDuration(elapsed)}`
-      : `Worked for ${fmtDuration(elapsed)}`;
+      : describeDone(calls.map((c) => c.call)) || `Worked for ${fmtDuration(elapsed)}`;
 
   return (
     <div className="my-2">
@@ -172,7 +183,7 @@ export function WorkBlock({ steps, working, waiting, started, ended }: { steps: 
           </AnimatePresence>
         </span>
         <span className="hidden shrink-0 font-mono text-[11px] text-fg-3 sm:inline">
-          {!working && calls.length > 0 && summarize(calls.map((c) => c.call))}
+          {!working && calls.length > 0 && fmtDuration(elapsed)}
           {!working && problems > 0 && <span className="text-danger"> · {plural(problems, 'issue')}</span>}
           {working && `${calls.length ? `${plural(calls.length, 'step')} · ` : ''}${fmtDuration(elapsed)}`}
         </span>

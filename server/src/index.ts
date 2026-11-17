@@ -3,6 +3,7 @@ import path from 'node:path';
 import express from 'express';
 import './agent/tools/personal.js';
 import './agent/tools/web.js';
+import './agent/tools/present.js';
 import './agent/tools/workspace.js';
 import './shop/tools.js';
 import { resumeShopLink } from './shop/auth.js';

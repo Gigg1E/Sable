@@ -6,7 +6,7 @@ import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
-import { getUpload, readImage } from '../uploads.js';
+import { attachmentForModel, attachmentInfo, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
 
@@ -58,10 +58,7 @@ export interface MessageRow {
 
 export function messageJson(m: MessageRow) {
   const { raw: _raw, raw_model: _rawModel, ...rest } = m;
-  const attachments = parseJson<string[]>(m.attachments, []).map((aid) => {
-    const u = getUpload(aid);
-    return { id: aid, mime: u?.mime ?? 'image/jpeg', width: u?.width ?? null, height: u?.height ?? null };
-  });
+  const attachments = parseJson<string[]>(m.attachments, []).map(attachmentInfo);
   return { ...rest, tool_calls: parseJson<ToolCall[] | null>(m.tool_calls, null), is_error: !!m.is_error, attachments, cards: parseJson<Card[]>(m.cards, []) };
 }
 
@@ -102,7 +99,7 @@ function loadHistory(conversationId: string, limit: number): { messages: ChatMes
   }
   while (rows.length && rows[0].role !== 'user') rows.shift();
 
-  // Re-sending every image on every turn gets expensive, so only the newest few go to the model.
+  // Re-sending every image (or file text) on every turn gets expensive, so only the newest few go to the model in full.
   const imageRows = rows.filter((r) => r.role === 'user' && parseJson<string[]>(r.attachments, []).length).slice(-3).map((r) => r.id);
 
   const out: ChatMessage[] = [];
@@ -122,11 +119,17 @@ function loadHistory(conversationId: string, limit: number): { messages: ChatMes
     flush();
     if (r.role === 'user') {
       const ids = parseJson<string[]>(r.attachments, []);
-      if (ids.length && imageRows.includes(r.id)) {
-        const images = ids.map(readImage).filter((x): x is NonNullable<typeof x> => !!x);
-        out.push({ role: 'user', content: r.content, images });
+      const recent = imageRows.includes(r.id);
+      const infos = ids.map(attachmentInfo);
+      const files = ids.map((aid) => attachmentForModel(aid, recent)).filter((x): x is string => !!x);
+      const imageIds = infos.filter((a) => a.kind === 'image').map((a) => a.id);
+      const text = [r.content, ...files].filter(Boolean).join('\n\n');
+      if (imageIds.length && recent) {
+        const images = imageIds.map(readImage).filter((x): x is NonNullable<typeof x> => !!x);
+        out.push({ role: 'user', content: text, images });
       } else {
-        out.push({ role: 'user', content: ids.length ? `${r.content}\n[${ids.length} earlier image${ids.length > 1 ? 's' : ''} not shown]`.trim() : r.content });
+        const note = imageIds.length ? `\n[${imageIds.length} earlier image${imageIds.length > 1 ? 's' : ''} not shown]` : '';
+        out.push({ role: 'user', content: (text + note).trim() });
       }
     }
     else {
@@ -438,7 +441,7 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
     attachments: attachments.length ? JSON.stringify(attachments) : null,
   });
   if (conv.title === 'New chat') {
-    const title = text.split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, 60) || (attachments.length ? 'Image' : 'New chat');
+    const title = text.split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, 60) || (attachments.length ? attachmentInfo(attachments[0]).name : 'New chat');
     run('UPDATE conversations SET title = ? WHERE id = ?', title, conversationId);
     emit({ type: 'conversation.changed', id: conversationId });
   }

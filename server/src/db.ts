@@ -95,6 +95,8 @@ addColumn('messages', 'attachments', 'TEXT');
 addColumn('approvals', 'call_id', 'TEXT');
 addColumn('messages', 'cards', 'TEXT');
 addColumn('approvals', 'preview', 'TEXT');
+addColumn('uploads', 'name', 'TEXT');
+addColumn('uploads', 'path', 'TEXT');
 
 type Row = Record<string, unknown>;
 

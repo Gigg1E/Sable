@@ -20,7 +20,8 @@ The web app installs on phones and desktops (PWA), with push notifications for a
 
 | | |
 |---|---|
-| **Chat with goals** | Describe an outcome. The agent makes a plan (a *goal* with steps), works through it with tools, and reports back. Responses stream live, with collapsible reasoning and expandable tool steps. |
+| **Chat with goals** | Describe an outcome. The agent makes a plan (a *goal* with steps), works through it with tools, and reports back. Turns read top to bottom: what the agent says, a folded row for each batch of steps ("Searched the web and read 3 pages"), the cards it shows, then the answer. |
+| **Files, links and pictures** | Attach any file (up to 25 MB). Files the agent writes appear as **live file cards** that update as it edits them, with preview, copy and download. Link cards (title, picture, price) and pictures are read from the real pages and shown right where they come up. Sources appear as small chips, and code blocks, tool steps and answers have copy buttons. |
 | **Watchers & webhooks** | Track prices, restocks, pages or APIs on a schedule without spending model calls, and get one alert when your condition is met. Inbound webhook URLs let GitHub, Home Assistant and others notify you or wake the agent. Alerts can also go to ntfy, Discord or Slack. |
 | **Background work** | Runs live on the server, not in your browser tab. Close the app and the work continues. **Routines** run on a schedule (once, every N minutes, daily, weekly). |
 | **Approvals (the Sentinel)** | Every tool call goes through a policy check: *Auto*, *Ask* or *Off*, per tool. Web access is approved per domain ("Always allow example.com"). Approvals show up in the chat, in the Inbox and as push notifications. |
@@ -252,9 +253,11 @@ Sable talks to **[Shop MCP](https://shopify.dev/changelog/posts/add-shopping-and
 
 **Price watchers on Shop products** use the catalog directly (watcher type *shop* with the variant ID), so they read structured price and stock instead of scraping the page.
 
-### Images
+### Files and images
 
-Attach images with the **image button** in the message box, **paste** them (⌘V / Ctrl+V), or **drag and drop** them. On phones the button opens the photo library or camera. Images are resized in the browser (longest side 1600 px; screenshots stay PNG, photos become JPEG, HEIC is converted), stored in `data/uploads`, and sent to the model in each provider's native image format. The model gets the images from your three most recent image messages; older ones are mentioned but not re-sent.
+Attach files with the **paperclip** in the message box, **paste** them (⌘V / Ctrl+V), or **drag and drop** them, up to 8 per message and 25 MB each. Non-image files are saved into the workspace under `uploads/`. The agent sees the text of text files (CSV, Markdown, code, JSON…) directly, and can open or process anything else with its file and script tools. Files the agent creates or changes show up in the chat as cards with a download button. They're served as downloads only, never opened as web pages on Sable's address.
+
+Images: attach them the same way. On phones the button opens the photo library or camera. Images are resized in the browser (longest side 1600 px; screenshots stay PNG, photos become JPEG, HEIC is converted), stored in `data/uploads`, and sent to the model in each provider's native image format. The model gets the images from your three most recent image messages; older ones are mentioned but not re-sent.
 
 The main model must support vision. On Ollama, use something like `gemma3`, `qwen2.5vl`, `llama3.2-vision` or `mistral-small3.1`. With llama.cpp, start `llama-server` with the model's `--mmproj`. All current Claude and OpenAI models can read images.
 

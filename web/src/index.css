@@ -313,3 +313,38 @@
     font-size: 16px !important;
   }
 }
+
+/* Source citations: [tomshardware.com](https://…) renders as a small chip. */
+.prose-sable a.source-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  max-width: 14em;
+  vertical-align: 0.08em;
+  margin: 0 0.1em;
+  padding: 0.05em 0.55em 0.05em 0.2em;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--fg-2);
+  font-size: 0.74em;
+  line-height: 1.6;
+  text-decoration: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+.prose-sable a.source-chip:hover {
+  border-color: var(--line-strong);
+  color: var(--fg);
+}
+.prose-sable .source-chip-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35em;
+  height: 1.35em;
+  border-radius: 999px;
+  background: var(--panel-3);
+  font-size: 0.85em;
+  font-weight: 600;
+  text-transform: uppercase;
+}

@@ -7,13 +7,13 @@ import { Composer, type ComposerHandle } from '../components/Composer';
 import { Logo } from '../components/Logo';
 import { Markdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
-import { CommerceCardView } from '../components/CommerceCards';
+import { CardView, FileGlyph, fmtBytes } from '../components/Cards';
 import { Button, Card, CopyButton, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore, type Streaming } from '../lib/store';
-import type { Goal, Message, Schedule, Watcher } from '../lib/types';
+import type { AnyCard, Goal, Message, Schedule, Watcher } from '../lib/types';
 import { Sparkline } from '../components/Sparkline';
 import { ImageViewer } from '../components/ImageViewer';
 import { imageUrl } from '../lib/images';
@@ -200,7 +200,9 @@ export function ChatHome() {
 
 // ───────────────────────── Conversation ─────────────────────────
 
-type Segment = { kind: 'note'; id: string; text: string } | { kind: 'work'; id: string; steps: Step[]; start: number; end?: number };
+const SHOW_TOOLS = /^(show_links|show_images|show_file|shop_show)$/;
+
+type Segment = { kind: 'note'; id: string; text: string } | { kind: 'cards'; id: string; cards: AnyCard[] } | { kind: 'work'; id: string; steps: Step[]; start: number; end?: number };
 
 type Turn = { kind: 'user'; message: Message } | { kind: 'agent'; messages: Message[]; key: string };
 
@@ -232,9 +234,10 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
 
   // Split the turn, in order, into what the agent said along the way ("Let me look that up…"),
   // folded work rows (reasoning and tool calls between those notes) and the final answer.
-  const { segments, final, errors, cards } = useMemo(() => {
-    const results: Record<string, { content: string; isError: boolean }> = {};
-    for (const m of messages) if (m.role === 'tool' && m.tool_call_id) results[m.tool_call_id] = { content: m.content, isError: m.is_error };
+  const { segments, final, errors } = useMemo(() => {
+    const results: Record<string, { content: string; isError: boolean; cards: AnyCard[] }> = {};
+    for (const m of messages) if (m.role === 'tool' && m.tool_call_id) results[m.tool_call_id] = { content: m.content, isError: m.is_error, cards: m.cards ?? [] };
+    const shownFiles = new Set<string>();
     const assistant = messages.filter((m) => m.role === 'assistant');
     const lastMsg = assistant[assistant.length - 1];
     // The answer is the last assistant message once it stops calling tools (and nothing is still streaming).
@@ -255,10 +258,20 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
         if (last?.kind === 'work') last.end = m.created_at;
         segs.push({ kind: 'note', id: `n-${m.id}`, text: m.content });
       }
-      for (const c of m.tool_calls ?? []) work(m.created_at).steps.push({ kind: 'tool', id: c.id, call: c, result: results[c.id]?.content, isError: results[c.id]?.isError });
+      for (const c of m.tool_calls ?? []) {
+        work(m.created_at).steps.push({ kind: 'tool', id: c.id, call: c, result: results[c.id]?.content, isError: results[c.id]?.isError });
+        // What a tool shows (products, links, pictures, files) appears right after the step that made it.
+        // A file appears once per turn and stays live, so repeated edits don't pile up cards.
+        const cards = (results[c.id]?.cards ?? []).filter((card) => card.type !== 'file' || !shownFiles.has(card.path));
+        for (const card of cards) if (card.type === 'file') shownFiles.add(card.path);
+        if (cards.length) {
+          const last = segs[segs.length - 1];
+          if (last?.kind === 'work') last.end = m.created_at;
+          segs.push({ kind: 'cards', id: `c-${c.id}`, cards });
+        }
+      }
     }
-    const cards = messages.filter((m) => m.role === 'tool' && m.cards?.length).flatMap((m) => m.cards!.map((c, i) => ({ key: `${m.id}-${i}`, card: c })));
-    return { segments: segs, final: finalMsg, errors: messages.filter((m) => m.role === 'error'), cards };
+    return { segments: segs, final: finalMsg, errors: messages.filter((m) => m.role === 'error') };
   }, [messages, working]);
 
   const started = messages[0]?.created_at ?? since;
@@ -279,12 +292,12 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
         {live.map((seg, i) => {
           const isLast = i === live.length - 1;
           if (seg.kind === 'note') return <Markdown key={seg.id} text={seg.text} className="my-1.5" />;
+          if (seg.kind === 'cards') return <div key={seg.id}>{seg.cards.map((c, j) => <CardView key={j} card={c} />)}</div>;
           const active = working && isLast && !streaming?.text;
+          // A row that only prepared cards (show_links, show_file…) adds nothing: the cards are right below it.
+          if (!active && seg.steps.length && seg.steps.every((s) => s.kind === 'tool' && SHOW_TOOLS.test(s.call.name) && !s.isError)) return null;
           return <WorkBlock key={seg.id} steps={seg.steps} working={active} waiting={active && waiting} started={seg.start} ended={active ? undefined : (seg.end ?? ended)} />;
         })}
-        {cards.map((c) => (
-          <CommerceCardView key={c.key} card={c.card} />
-        ))}
         {final && (
           <div className="group/answer">
             <Markdown text={final.content} />
@@ -402,7 +415,16 @@ export function ChatView({ id }: { id: string }) {
                     <TurnHeader who={t.message.agent === 'Schedule' ? 'Routine' : 'You'} time={t.message.created_at} />
                     {!!t.message.attachments?.length && (
                       <div className="mb-2 ml-[26px] flex flex-wrap gap-2">
-                        {t.message.attachments.map((a) => (
+                        {t.message.attachments.map((a) =>
+                          a.kind === 'file' ? (
+                            <a key={a.id} href={imageUrl(a.id)} download={a.name} className="flex h-14 max-w-[260px] items-center gap-2.5 rounded-lg border border-line bg-panel-2 px-2.5 transition-colors hover:border-line-strong">
+                              <FileGlyph name={a.name ?? 'file'} />
+                              <span className="min-w-0">
+                                <span className="block truncate text-[13px] font-medium">{a.name}</span>
+                                <span className="block font-mono text-[11px] text-fg-3">{fmtBytes(a.size ?? 0)}</span>
+                              </span>
+                            </a>
+                          ) : (
                           <motion.button key={a.id} initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} onClick={() => setViewing(a.id)} className="block overflow-hidden rounded-lg border border-line bg-panel-2 transition-opacity hover:opacity-90">
                             <img
                               src={imageUrl(a.id)}
@@ -412,7 +434,8 @@ export function ChatView({ id }: { id: string }) {
                               style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}` } : undefined}
                             />
                           </motion.button>
-                        ))}
+                          ),
+                        )}
                       </div>
                     )}
                     {t.message.content && (
