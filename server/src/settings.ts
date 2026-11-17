@@ -136,7 +136,7 @@ export function defaultSettings(): Settings {
           'Writes, runs and debugs scripts (Python, Node, Bash) and edits files in the workspace. Use for programming, data wrangling and automation.',
         providerId: 'anthropic',
         model: 'claude-opus-5-5',
-        tools: ['file_list', 'file_read', 'file_write', 'run_script'],
+        tools: ['file_list', 'file_read', 'file_write', 'file_edit', 'show_file', 'run_script'],
         enabled: true,
         maxSteps: 16,
         effort: 'medium',

@@ -296,6 +296,36 @@ registerTool({
 });
 
 registerTool({
+  name: 'file_edit',
+  label: 'Edit file',
+  group: 'Workspace',
+  description:
+    "Change part of a text file in this chat's folder: replace `old` (exact text, which must appear once unless all is true) with `new`. Cheaper and safer than rewriting the whole file with file_write. Read the file first so `old` matches exactly.",
+  parameters: {
+    type: 'object',
+    properties: { path: { type: 'string' }, old: { type: 'string', description: 'Exact text to replace' }, new: { type: 'string', description: 'Replacement text' }, all: { type: 'boolean', description: 'Replace every occurrence' } },
+    required: ['path', 'old', 'new'],
+  },
+  risk: 'medium',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Edit ${a.path}`,
+  async run(a, ctx) {
+    const wrel = chatRel(ctx.conversationId, a.path);
+    const target = await chatPath(ctx.conversationId, a.path);
+    const text = await fs.readFile(target, 'utf8');
+    const old = String(a.old ?? '');
+    if (!old) return 'Give the exact text to replace in `old`.';
+    const count = text.split(old).length - 1;
+    if (!count) return `No exact match for that text in ${chatView(ctx.conversationId, wrel)}. Read the file and copy the text exactly (spaces and line breaks included).`;
+    if (count > 1 && !a.all) return `That text appears ${count} times. Include more surrounding text so it is unique, or set all to true.`;
+    await fs.writeFile(target, a.all ? text.split(old).join(String(a.new ?? '')) : text.replace(old, () => String(a.new ?? '')));
+    const card = await announce(wrel);
+    const shown = isOutput(ctx.conversationId, wrel);
+    return { content: `Edited ${chatView(ctx.conversationId, wrel)} (${a.all ? count : 1} change${(a.all ? count : 1) === 1 ? '' : 's'}).`, cards: shown && card ? [card] : [] };
+  },
+});
+
+registerTool({
   name: 'run_script',
   label: 'Run script',
   group: 'Workspace',

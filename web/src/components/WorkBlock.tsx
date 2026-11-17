@@ -37,6 +37,7 @@ export function describeCall(call: ToolCall, label?: string): string {
   if (n === 'http_request') return `Calling ${host(a.url)}`;
   if (n === 'run_script') return `Running a ${a.language ?? ''} script`.replace('  ', ' ');
   if (n === 'file_write') return `Writing ${a.path}`;
+  if (n === 'file_edit') return `Editing ${a.path}`;
   if (n === 'file_read') return `Reading ${a.path}`;
   if (n === 'file_list') return 'Looking through files';
   if (n === 'memory_save') return 'Saving to memory';
@@ -75,7 +76,7 @@ function describeDone(calls: ToolCall[]) {
   const pages = n((c) => c.name === 'web_fetch' || c.name === 'http_request' || c.name === 'watch_test');
   const shop = n((c) => c.name.startsWith('shop_') && c.name !== 'shop_show');
   const scripts = n((c) => c.name === 'run_script');
-  const writes = calls.filter((c) => c.name === 'file_write').map((c) => String((c.args as { path?: string }).path ?? '').split('/').pop());
+  const writes = calls.filter((c) => c.name === 'file_write' || c.name === 'file_edit').map((c) => String((c.args as { path?: string }).path ?? '').split('/').pop());
   const reads = n((c) => c.name === 'file_read' || c.name === 'file_list');
   const memory = n((c) => c.name.startsWith('memory_'));
   const calendar = n((c) => c.name.startsWith('calendar_'));
