@@ -22,3 +22,6 @@ export const UPLOAD_DIR = path.join(DATA_DIR, 'uploads');
 
 fs.mkdirSync(WORKSPACE_DIR, { recursive: true });
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+/** A chat's own folder inside the workspace, keyed by its permanent ID (never its title). */
+export const chatDir = (conversationId: string) => `chats/${conversationId.replace(/[^\w-]/g, '')}`;

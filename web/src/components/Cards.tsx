@@ -51,15 +51,18 @@ function ago(t: number) {
  */
 /** Files already shown as cards in this turn: a later mention becomes a compact download row, not a second card. */
 export const ShownFiles = createContext<Set<string>>(new Set());
+/** The chat a file mention belongs to, so a bare name finds that chat's file. */
+export const ChatId = createContext<string>('');
 
 export function FileRef({ path, inline }: { path: string; inline?: boolean }) {
   const shown = useContext(ShownFiles);
+  const chat = useContext(ChatId);
   const name = path.replace(/^(file|sandbox|attachment):\/*/i, '').split('/').pop() || path;
   const [state, setState] = useState<'loading' | 'ok' | 'missing'>('loading');
   const [resolved, setResolved] = useState<FileCardData | null>(null);
   useEffect(() => {
     let off = false;
-    void fetch(`/api/files/meta?path=${encodeURIComponent(path)}`, { credentials: 'same-origin' }).then(async (r) => {
+    void fetch(`/api/files/meta?path=${encodeURIComponent(path)}${chat ? `&chat=${encodeURIComponent(chat)}` : ''}`, { credentials: 'same-origin' }).then(async (r) => {
       if (off) return;
       if (!r.ok) return setState('missing');
       setResolved(await r.json());
@@ -68,7 +71,7 @@ export function FileRef({ path, inline }: { path: string; inline?: boolean }) {
     return () => {
       off = true;
     };
-  }, [path]);
+  }, [path, chat]);
   if (inline) {
     return state === 'ok' && resolved ? (
       <a href={fileUrl(resolved.path, true)} download={resolved.name} className="source-chip" title={`Download ${resolved.name}`}>

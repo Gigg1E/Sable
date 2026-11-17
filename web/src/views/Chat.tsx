@@ -7,7 +7,7 @@ import { Composer, type ComposerHandle } from '../components/Composer';
 import { Logo } from '../components/Logo';
 import { Markdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
-import { CardView, FileGlyph, fmtBytes, ShownFiles } from '../components/Cards';
+import { CardView, ChatId, FileGlyph, fmtBytes, ShownFiles } from '../components/Cards';
 import { Button, Card, CopyButton, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
@@ -286,6 +286,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
   }
 
   return (
+    <ChatId.Provider value={messages[0]?.conversation_id ?? ''}>
     <ShownFiles.Provider value={shownFiles}>
       <TurnHeader who={messages.find((m) => m.agent)?.agent ?? streaming?.agent ?? agentName} time={messages[0]?.created_at} agent />
       <div className="pl-[26px]">
@@ -317,6 +318,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
         ))}
       </div>
     </ShownFiles.Provider>
+    </ChatId.Provider>
   );
 }
 

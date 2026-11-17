@@ -6,7 +6,7 @@ import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
-import { attachmentForModel, attachmentInfo, readImage } from '../uploads.js';
+import { attachmentForModel, attachmentInfo, claimUploads, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
 
@@ -121,7 +121,7 @@ function loadHistory(conversationId: string, limit: number): { messages: ChatMes
       const ids = parseJson<string[]>(r.attachments, []);
       const recent = imageRows.includes(r.id);
       const infos = ids.map(attachmentInfo);
-      const files = ids.map((aid) => attachmentForModel(aid, recent)).filter((x): x is string => !!x);
+      const files = ids.map((aid) => attachmentForModel(aid, recent, r.conversation_id)).filter((x): x is string => !!x);
       const imageIds = infos.filter((a) => a.kind === 'image').map((a) => a.id);
       const text = [r.content, ...files].filter(Boolean).join('\n\n');
       if (imageIds.length && recent) {
@@ -434,6 +434,7 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
   if (activeRunFor(conversationId)) throw new HttpError(409, "I'm still working on the last request in this chat. Stop it or wait for it to finish.");
 
   const runId = id('r_');
+  if (attachments.length) claimUploads(conversationId, attachments);
   run('INSERT INTO runs (id, conversation_id, status, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', runId, conversationId, 'running', source, now(), now());
   insertMessage({
     id: id('msg_'), conversation_id: conversationId, run_id: runId, role: 'user', agent: source === 'schedule' ? 'Schedule' : null, content: text,

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express, { type Request, type Response } from 'express';
-import { UPLOAD_DIR, WORKSPACE_DIR } from './config.js';
+import { chatDir, UPLOAD_DIR, WORKSPACE_DIR } from './config.js';
 import { get, run } from './db.js';
 import type { ImagePart } from './llm/types.js';
 import { id, now, truncate, untrusted } from './util.js';
@@ -90,10 +90,12 @@ function fmtSize(n: number) {
  * What the model sees for an attached (non-image) file: where it is, and for text files the
  * contents themselves (when `inline`), marked as untrusted data.
  */
-export function attachmentForModel(uid: string, inline: boolean): string | null {
+export function attachmentForModel(uid: string, inline: boolean, conversationId?: string): string | null {
   const a = attachmentInfo(uid);
   if (a.kind === 'image') return null;
-  const where = a.path ? `workspace path "${a.path}"` : 'no longer available';
+  const home = conversationId ? chatDir(conversationId) + '/' : '';
+  const shown = a.path && home && a.path.startsWith(home) ? a.path.slice(home.length) : a.path;
+  const where = a.path ? `saved in this chat's folder as "${shown}"` : 'no longer available';
   let out = `[Attached file: ${a.name} (${fmtSize(a.size)}, ${a.mime}), ${where}]`;
   if (inline && a.path && looksText(a.name, a.mime) && a.size <= 400_000) {
     try {
@@ -118,16 +120,39 @@ function cleanName(raw: string) {
   return n || 'file';
 }
 
-/** Save into workspace/uploads without overwriting: "report.csv", "report (2).csv"… */
-function saveToWorkspace(name: string, body: Buffer): string {
-  const dir = path.join(WORKSPACE_DIR, 'uploads');
-  fs.mkdirSync(dir, { recursive: true });
+/** A free file name in `dir`: "report.csv", "report (2).csv"… */
+function freeName(dir: string, name: string) {
   const ext = path.extname(name);
   const base = name.slice(0, name.length - ext.length);
   let candidate = name;
   for (let i = 2; fs.existsSync(path.join(dir, candidate)); i++) candidate = `${base} (${i})${ext}`;
-  fs.writeFileSync(path.join(dir, candidate), body);
-  return `uploads/${candidate}`;
+  return candidate;
+}
+
+/** Uploads wait in workspace/.staging until the message is sent (the chat may not exist yet). */
+function saveToWorkspace(name: string, body: Buffer): string {
+  const dir = path.join(WORKSPACE_DIR, '.staging', id('u_'));
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, name), body);
+  return path.relative(WORKSPACE_DIR, path.join(dir, name)).split(path.sep).join('/');
+}
+
+/** Move a message's staged uploads into its chat's folder: chats/<id>/uploads/<name>. */
+export function claimUploads(conversationId: string, ids: string[]) {
+  for (const uid of ids) {
+    const u = getUpload(uid);
+    if (!u?.path?.startsWith('.staging/')) continue;
+    const dir = path.join(WORKSPACE_DIR, chatDir(conversationId), 'uploads');
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      const name = freeName(dir, path.basename(u.path));
+      fs.renameSync(path.join(WORKSPACE_DIR, u.path), path.join(dir, name));
+      fs.rmSync(path.join(WORKSPACE_DIR, path.dirname(u.path)), { recursive: true, force: true });
+      run('UPDATE uploads SET path = ? WHERE id = ?', `${chatDir(conversationId)}/uploads/${name}`, uid);
+    } catch (err) {
+      console.error('Could not move upload into the chat folder:', err);
+    }
+  }
 }
 
 /** Routes mounted behind session auth. */

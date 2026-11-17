@@ -255,7 +255,9 @@ Sable talks to **[Shop MCP](https://shopify.dev/changelog/posts/add-shopping-and
 
 ### Files and images
 
-Attach files with the **paperclip** in the message box, **paste** them (⌘V / Ctrl+V), or **drag and drop** them, up to 8 per message and 25 MB each. Non-image files are saved into the workspace under `uploads/`. The agent sees the text of text files (CSV, Markdown, code, JSON…) directly, and can open or process anything else with its file and script tools. Files the agent creates or changes show up in the chat as cards with a download button. They're served as downloads only, never opened as web pages on Sable's address.
+**Each chat has its own folder** on the server, `data/workspace/chats/<chat id>/`, named by the chat's permanent ID so renaming a chat never loses its files. The agent does scratch work anywhere in it. Anything saved under **`outputs/`** appears in the chat automatically as a file card with a download button, whether the agent wrote it or a script made it. Your attachments land in the chat's `uploads/`. `data/workspace/shared/` holds files meant for every chat (files from before this layout were moved there).
+
+Attach files with the **paperclip** in the message box, **paste** them (⌘V / Ctrl+V), or **drag and drop** them, up to 8 per message and 25 MB each. Non-image files are saved into the chat's `uploads/` folder. The agent sees the text of text files (CSV, Markdown, code, JSON…) directly, and can open or process anything else with its file and script tools. Files the agent creates or changes show up in the chat as cards with a download button. They're served as downloads only, never opened as web pages on Sable's address.
 
 Images: attach them the same way. On phones the button opens the photo library or camera. Images are resized in the browser (longest side 1600 px; screenshots stay PNG, photos become JPEG, HEIC is converted), stored in `data/uploads`, and sent to the model in each provider's native image format. The model gets the images from your three most recent image messages; older ones are mentioned but not re-sent.
 

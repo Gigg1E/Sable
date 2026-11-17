@@ -2,7 +2,9 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type express from 'express';
-import { WORKSPACE_DIR } from '../../config.js';
+import fsSync from 'node:fs';
+import { chatDir, WORKSPACE_DIR } from '../../config.js';
+import { kvGet, kvSet, run as dbRun } from '../../db.js';
 import { emit } from '../../events.js';
 import { looksText } from '../../uploads.js';
 import { proxyEnv } from '../../net.js';
@@ -24,6 +26,52 @@ async function safePath(p: string): Promise<string> {
   }
   return target;
 }
+
+// ───────────── Per-chat folders ─────────────
+// Every chat works in workspace/chats/<chat id>/ (the id never changes, so renaming a chat loses nothing).
+// workspace/shared/ is for things meant to be reused across chats. Files saved under outputs/ are
+// handed to the user automatically.
+
+/** One-time move of the old flat workspace into shared/. */
+(function migrateWorkspace() {
+  try {
+    if (kvGet<string>('workspace_layout') === 'chats') return;
+    const shared = path.join(WORKSPACE_DIR, 'shared');
+    const legacy = fsSync.readdirSync(WORKSPACE_DIR).filter((n) => !['chats', 'shared', '.staging', '.scripts'].includes(n));
+    if (legacy.length) {
+      fsSync.mkdirSync(shared, { recursive: true });
+      for (const n of legacy) {
+        let dest = path.join(shared, n);
+        for (let i = 2; fsSync.existsSync(dest); i++) dest = path.join(shared, `${n} (${i})`);
+        fsSync.renameSync(path.join(WORKSPACE_DIR, n), dest);
+      }
+      dbRun("UPDATE uploads SET path = 'shared/' || path WHERE path IS NOT NULL AND path NOT LIKE 'chats/%' AND path NOT LIKE 'shared/%' AND path NOT LIKE '.staging/%'");
+    }
+    kvSet('workspace_layout', 'chats');
+  } catch (err) {
+    console.error('Workspace migration failed:', err);
+  }
+})();
+
+/** A path the model gave → workspace-relative path inside this chat's folder (or shared/). */
+function chatRel(conversationId: string, p: unknown): string {
+  const q = String(p ?? '.').trim().replace(/^(file|sandbox|attachment):\/*/i, '').replace(/^\/+/, '').replace(/^(mnt\/data|workspace)\//i, '') || '.';
+  const home = chatDir(conversationId);
+  const norm = path.posix.normalize(/^shared(\/|$)/.test(q) ? q : `${home}/${q}`).replace(/\/$/, '');
+  const inside = norm === home || norm.startsWith(home + '/') || norm === 'shared' || norm.startsWith('shared/');
+  if (!inside) throw new Error(`"${p}" is outside this chat's folder. Use paths like "notes.md", "outputs/report.docx" or "shared/…".`);
+  return norm;
+}
+
+/** Absolute path for a model-supplied path in this chat, creating the chat folder on first use. */
+export async function chatPath(conversationId: string, p: unknown): Promise<string> {
+  await fs.mkdir(path.join(WORKSPACE_DIR, chatDir(conversationId), 'outputs'), { recursive: true });
+  return safePath(chatRel(conversationId, p));
+}
+
+/** Workspace-relative path → how the model and the user see it inside the chat. */
+export const chatView = (conversationId: string, wrel: string) => (wrel.startsWith(chatDir(conversationId) + '/') ? wrel.slice(chatDir(conversationId).length + 1) : wrel);
+const isOutput = (conversationId: string, wrel: string) => wrel.startsWith(chatDir(conversationId) + '/outputs/');
 
 const MIME: Record<string, string> = {
   png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', avif: 'image/avif', svg: 'image/svg+xml',
@@ -84,22 +132,31 @@ async function snapshot(): Promise<Map<string, number>> {
  * Find a file the way a model tends to name it: "file:Report.txt", "/workspace/out/report.txt",
  * or just the file name when it lives in a subfolder (newest match wins).
  */
-export async function resolveFile(raw: string): Promise<string> {
+export async function resolveFile(raw: string, chat?: string): Promise<string> {
   let p = raw.trim().replace(/^(file|sandbox|attachment):\/*/i, '').replace(/^\/?(mnt\/data|workspace)\//i, '');
   try {
     p = decodeURIComponent(p);
   } catch {
     /* already plain */
   }
-  try {
-    const st = await fs.stat(await safePath(p));
-    if (st.isFile()) return p;
-  } catch {
-    /* fall through to a name search */
+  // Inside a chat: its own folder first (and its outputs/), then the path as given.
+  const home = chat ? chatDir(chat) : '';
+  const candidates = chat ? [`${home}/${p}`, `${home}/outputs/${p}`, p] : [p];
+  for (const c of candidates) {
+    try {
+      const st = await fs.stat(await safePath(c));
+      if (st.isFile()) return c;
+    } catch {
+      /* try the next */
+    }
   }
+  // Then by name: newest match in this chat's folder or shared/ (anywhere, outside a chat).
   const want = path.basename(p).toLowerCase();
   let best: { path: string; mtime: number } | null = null;
-  for (const [rp, mtime] of await snapshot()) if (path.basename(rp).toLowerCase() === want && (!best || mtime > best.mtime)) best = { path: rp, mtime };
+  for (const [rp, mtime] of await snapshot()) {
+    if (chat && !rp.startsWith(home + '/') && !rp.startsWith('shared/')) continue;
+    if (path.basename(rp).toLowerCase() === want && (!best || mtime > best.mtime)) best = { path: rp, mtime };
+  }
   if (!best) throw Object.assign(new Error('This file no longer exists.'), { code: 'ENOENT' });
   return best.path;
 }
@@ -108,7 +165,7 @@ export async function resolveFile(raw: string): Promise<string> {
 export function workspaceRoutes(r: express.Router) {
   r.get('/files/meta', async (req, res) => {
     try {
-      const card = await fileCard(await resolveFile(String(req.query.path ?? '')));
+      const card = await fileCard(await resolveFile(String(req.query.path ?? ''), typeof req.query.chat === 'string' ? req.query.chat : undefined));
       let text: string | undefined;
       let truncated = false;
       if (card.kind === 'text') {
@@ -124,7 +181,7 @@ export function workspaceRoutes(r: express.Router) {
   });
   r.get('/files/raw', async (req, res) => {
     try {
-      const card = await fileCard(await resolveFile(String(req.query.path ?? '')));
+      const card = await fileCard(await resolveFile(String(req.query.path ?? ''), typeof req.query.chat === 'string' ? req.query.chat : undefined));
       const abs = await safePath(String(card.path));
       res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
       res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -148,22 +205,22 @@ registerTool({
   label: 'Show file',
   group: 'Workspace',
   description:
-    'Show the user one or more workspace files as cards in the chat, right where you call it: a live preview (text, code or image) with a download button. Use it to hand over anything you made or changed, e.g. a file a script produced. (file_write already shows the file it writes.)',
-  parameters: { type: 'object', properties: { paths: { type: 'array', items: { type: 'string' }, description: 'Workspace paths' } }, required: ['paths'] },
+    'Show the user files from this chat\'s folder as cards, right where you call it: a live preview (text, code or image) with a download button. Files in outputs/ are shown automatically; use this for anything else you want to hand over.',
+  parameters: { type: 'object', properties: { paths: { type: 'array', items: { type: 'string' }, description: 'Paths in this chat\'s folder' } }, required: ['paths'] },
   risk: 'low',
   defaultPolicy: 'auto',
   summarize: (a) => `Show ${(a.paths ?? []).join(', ')}`,
-  async run(a) {
+  async run(a, ctx) {
     const cards: Card[] = [];
     const missing: string[] = [];
     for (const p of (Array.isArray(a.paths) ? a.paths : [a.paths]).slice(0, 8)) {
       try {
-        cards.push(await fileCard(String(p)));
+        cards.push(await fileCard(chatRel(ctx.conversationId, p)));
       } catch {
         missing.push(String(p));
       }
     }
-    const shown = cards.map((c) => c.path).join(', ');
+    const shown = cards.map((c) => chatView(ctx.conversationId, String(c.path))).join(', ');
     return { content: `${shown ? `Shown to the user: ${shown}.` : 'Nothing shown.'}${missing.length ? ` Not found: ${missing.join(', ')}.` : ''}`, cards };
   },
 });
@@ -172,13 +229,13 @@ registerTool({
   name: 'file_list',
   label: 'List files',
   group: 'Workspace',
-  description: "List files in the agent's workspace folder (a sandboxed directory on the server).",
-  parameters: { type: 'object', properties: { path: { type: 'string', description: 'Folder inside the workspace (default root)' } } },
+  description: "List files in this chat's folder (or a subfolder, or shared/ for files kept across chats).",
+  parameters: { type: 'object', properties: { path: { type: 'string', description: 'Subfolder (default: the chat folder)' } } },
   risk: 'low',
   defaultPolicy: 'auto',
-  summarize: (a) => `List ${a.path || '/'}`,
-  async run(a) {
-    const dir = await safePath(a.path ?? '.');
+  summarize: (a) => `List ${a.path || 'files'}`,
+  async run(a, ctx) {
+    const dir = await chatPath(ctx.conversationId, a.path ?? '.');
     const entries = await fs.readdir(dir, { withFileTypes: true });
     const lines = await Promise.all(
       entries
@@ -197,13 +254,13 @@ registerTool({
   name: 'file_read',
   label: 'Read file',
   group: 'Workspace',
-  description: 'Read a text file from the workspace.',
+  description: "Read a text file from this chat's folder (or shared/).",
   parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
   risk: 'low',
   defaultPolicy: 'auto',
   summarize: (a) => `Read ${a.path}`,
-  async run(a) {
-    const text = await fs.readFile(await safePath(a.path), 'utf8');
+  async run(a, ctx) {
+    const text = await fs.readFile(await chatPath(ctx.conversationId, a.path), 'utf8');
     return truncate(text, 40_000);
   },
 });
@@ -212,7 +269,8 @@ registerTool({
   name: 'file_write',
   label: 'Write file',
   group: 'Workspace',
-  description: 'Create or overwrite a text file in the workspace (parent folders are created). Set append to add to the end instead. The user sees the file live in the chat, with a download button, so write it here instead of pasting long documents into your reply.',
+  description:
+    "Create or overwrite a text file in this chat's folder (parent folders are created; append adds to the end). Save finished files the user should get under outputs/ (e.g. outputs/essay-plan.md): they appear in the chat automatically as a live card with a download button. Use other paths for scratch work.",
   parameters: {
     type: 'object',
     properties: { path: { type: 'string' }, content: { type: 'string' }, append: { type: 'boolean' } },
@@ -221,13 +279,19 @@ registerTool({
   risk: 'medium',
   defaultPolicy: 'auto',
   summarize: (a) => `${a.append ? 'Append to' : 'Write'} ${a.path}`,
-  async run(a) {
-    const target = await safePath(a.path);
+  async run(a, ctx) {
+    const wrel = chatRel(ctx.conversationId, a.path);
+    const target = await chatPath(ctx.conversationId, a.path);
     await fs.mkdir(path.dirname(target), { recursive: true });
     if (a.append) await fs.appendFile(target, String(a.content));
     else await fs.writeFile(target, String(a.content));
-    const card = await announce(a.path);
-    return { content: `Wrote ${String(a.content).length} characters to ${a.path}. The user sees it as a file card with a download button.`, cards: card ? [card] : [] };
+    const card = await announce(wrel);
+    const shown = isOutput(ctx.conversationId, wrel);
+    const where = chatView(ctx.conversationId, wrel);
+    return {
+      content: `Wrote ${String(a.content).length} characters to ${where}. ${shown ? 'The user sees it as a file card with a download button.' : 'This is not shown to the user (it is not in outputs/); call show_file if they should get it.'}`,
+      cards: shown && card ? [card] : [],
+    };
   },
 });
 
@@ -261,12 +325,14 @@ registerTool({
     const file = path.join(dir, `${id()}.${ext}`);
     await fs.writeFile(file, String(a.code));
     const timeout = Math.min(Number(a.timeout_sec) || cfg.timeoutSec, 600) * 1000;
+    const cwd = await chatPath(ctx.conversationId, '.');
+    const home = chatDir(ctx.conversationId) + '/';
     const before = await snapshot();
     try {
       const out = await new Promise<string>((resolve) => {
         // A minimal environment: no API keys or other server secrets leak into scripts.
         const child = spawn(bin, [file], {
-          cwd: WORKSPACE_DIR,
+          cwd,
           env: { PATH: process.env.PATH ?? '/usr/bin:/bin', HOME: WORKSPACE_DIR, LANG: 'C.UTF-8', TZ: process.env.TZ ?? '', ...proxyEnv() },
           signal: ctx.signal,
         });
@@ -291,9 +357,17 @@ registerTool({
       });
       // Files the script created or changed: refresh any open file cards and tell the agent.
       const after = await snapshot();
-      const changed = [...after].filter(([p, m]) => before.get(p) !== m).map(([p]) => p);
-      for (const p of changed.slice(0, 20)) void announce(p);
-      return changed.length ? `${out}\n\nFiles created or changed: ${changed.slice(0, 20).join(', ')}${changed.length > 20 ? ' …' : ''} (use show_file to hand them to the user)` : out;
+      const changed = [...after].filter(([p, m]) => before.get(p) !== m && (p.startsWith(home) || p.startsWith('shared/'))).map(([p]) => p);
+      const cards: Card[] = [];
+      for (const p of changed.slice(0, 20)) {
+        const card = await announce(p);
+        if (card && isOutput(ctx.conversationId, p) && cards.length < 8) cards.push(card);
+      }
+      const names = changed.slice(0, 20).map((p) => chatView(ctx.conversationId, p));
+      const note = changed.length
+        ? `\n\nFiles created or changed: ${names.join(', ')}${changed.length > 20 ? ' …' : ''}${cards.length ? ` (files in outputs/ are now shown to the user)` : ' (save deliverables under outputs/ so the user gets them)'}`
+        : '';
+      return { content: out + note, cards };
     } finally {
       await fs.rm(file, { force: true });
     }
