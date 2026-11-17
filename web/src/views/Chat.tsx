@@ -8,7 +8,7 @@ import { Logo } from '../components/Logo';
 import { Markdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
 import { CommerceCardView } from '../components/CommerceCards';
-import { Button, Card, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
+import { Button, Card, CopyButton, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
@@ -200,6 +200,8 @@ export function ChatHome() {
 
 // ───────────────────────── Conversation ─────────────────────────
 
+type Segment = { kind: 'note'; id: string; text: string } | { kind: 'work'; id: string; steps: Step[]; start: number; end?: number };
+
 type Turn = { kind: 'user'; message: Message } | { kind: 'agent'; messages: Message[]; key: string };
 
 function groupTurns(messages: Message[]): Turn[] {
@@ -228,39 +230,71 @@ function TurnHeader({ who, time, agent }: { who: string; time?: number; agent?: 
 function AgentTurn({ messages, streaming, working, waiting, agentName }: { messages: Message[]; streaming?: Streaming; working: boolean; waiting: boolean; agentName: string }) {
   const [since] = useState(Date.now());
 
-  // Split the turn into the work (reasoning, interim notes, tool calls) and the final answer.
-  const { steps, final, errors, cards } = useMemo(() => {
+  // Split the turn, in order, into what the agent said along the way ("Let me look that up…"),
+  // folded work rows (reasoning and tool calls between those notes) and the final answer.
+  const { segments, final, errors, cards } = useMemo(() => {
     const results: Record<string, { content: string; isError: boolean }> = {};
     for (const m of messages) if (m.role === 'tool' && m.tool_call_id) results[m.tool_call_id] = { content: m.content, isError: m.is_error };
     const assistant = messages.filter((m) => m.role === 'assistant');
     const lastMsg = assistant[assistant.length - 1];
     // The answer is the last assistant message once it stops calling tools (and nothing is still streaming).
     const finalMsg = lastMsg && !lastMsg.tool_calls?.length && lastMsg.content ? lastMsg : null;
-    const out: Step[] = [];
+    const segs: Segment[] = [];
+    const work = (at: number) => {
+      const last = segs[segs.length - 1];
+      if (last?.kind === 'work') return last;
+      const seg: Segment = { kind: 'work', id: `w-${segs.length}`, steps: [], start: at };
+      segs.push(seg);
+      return seg;
+    };
     for (const m of assistant) {
-      if (m.thinking?.trim()) out.push({ kind: 'thinking', id: `th-${m.id}`, text: m.thinking });
+      if (m.thinking?.trim()) work(m.created_at).steps.push({ kind: 'thinking', id: `th-${m.id}`, text: m.thinking });
       if (m === finalMsg) continue;
-      if (m.content?.trim()) out.push({ kind: 'note', id: `n-${m.id}`, text: m.content });
-      for (const c of m.tool_calls ?? []) out.push({ kind: 'tool', id: c.id, call: c, result: results[c.id]?.content, isError: results[c.id]?.isError });
+      if (m.content?.trim()) {
+        const last = segs[segs.length - 1];
+        if (last?.kind === 'work') last.end = m.created_at;
+        segs.push({ kind: 'note', id: `n-${m.id}`, text: m.content });
+      }
+      for (const c of m.tool_calls ?? []) work(m.created_at).steps.push({ kind: 'tool', id: c.id, call: c, result: results[c.id]?.content, isError: results[c.id]?.isError });
     }
     const cards = messages.filter((m) => m.role === 'tool' && m.cards?.length).flatMap((m) => m.cards!.map((c, i) => ({ key: `${m.id}-${i}`, card: c })));
-    return { steps: out, final: finalMsg, errors: messages.filter((m) => m.role === 'error'), cards };
+    return { segments: segs, final: finalMsg, errors: messages.filter((m) => m.role === 'error'), cards };
   }, [messages, working]);
 
-  const liveSteps: Step[] = streaming?.thinking && !streaming.text ? [...steps, { kind: 'thinking', id: `live-${streaming.messageId}`, text: streaming.thinking, live: true }] : steps;
   const started = messages[0]?.created_at ?? since;
   const ended = messages[messages.length - 1]?.created_at;
-  const showBlock = liveSteps.length > 0 || (working && !streaming?.text);
+  // While working (and not streaming text), the newest segment must be a live work row.
+  const live: Segment[] = [...segments];
+  if (working && !streaming?.text) {
+    const last = live[live.length - 1];
+    const liveThought: Step[] = streaming?.thinking ? [{ kind: 'thinking', id: `live-${streaming.messageId}`, text: streaming.thinking, live: true }] : [];
+    if (last?.kind === 'work') live[live.length - 1] = { ...last, steps: [...last.steps, ...liveThought], end: undefined };
+    else live.push({ kind: 'work', id: `w-${live.length}`, steps: liveThought, start: ended ?? started });
+  }
 
   return (
     <div>
       <TurnHeader who={messages.find((m) => m.agent)?.agent ?? streaming?.agent ?? agentName} time={messages[0]?.created_at} agent />
       <div className="pl-[26px]">
-        {showBlock && <WorkBlock steps={liveSteps} working={working} waiting={waiting} started={started} ended={working ? undefined : ended} />}
+        {live.map((seg, i) => {
+          const isLast = i === live.length - 1;
+          if (seg.kind === 'note') return <Markdown key={seg.id} text={seg.text} className="my-1.5" />;
+          const active = working && isLast && !streaming?.text;
+          return <WorkBlock key={seg.id} steps={seg.steps} working={active} waiting={active && waiting} started={seg.start} ended={active ? undefined : (seg.end ?? ended)} />;
+        })}
         {cards.map((c) => (
           <CommerceCardView key={c.key} card={c.card} />
         ))}
-        {final && <Markdown text={final.content} />}
+        {final && (
+          <div className="group/answer">
+            <Markdown text={final.content} />
+            {!working && (
+              <div className="-ml-1.5 mt-1 flex opacity-100 transition-opacity sm:opacity-0 sm:group-hover/answer:opacity-100 sm:focus-within:opacity-100">
+                <CopyButton text={final.content} label="Copy answer" showLabel />
+              </div>
+            )}
+          </div>
+        )}
         {streaming?.text && <Markdown text={streaming.text} streaming />}
         {errors.map((m) => (
           <div key={m.id} className="my-2 flex items-start gap-2.5 rounded-lg border border-danger/25 bg-danger/5 px-3.5 py-3 text-[13px] text-danger">

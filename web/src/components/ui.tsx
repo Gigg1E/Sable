@@ -1,6 +1,6 @@
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { AnimatePresence, motion } from 'motion/react';
-import { ChevronDown, Loader2, Menu, X } from 'lucide-react';
+import { Check as CheckIcon, ChevronDown, Copy as CopyIcon, Loader2, Menu, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cx } from '../lib/format';
 
@@ -336,3 +336,47 @@ export const listItem = {
   exit: { opacity: 0, transition: { duration: 0.12 } },
   transition: { duration: 0.2, ease: [0.2, 0.8, 0.2, 1] as [number, number, number, number] },
 };
+
+/** Copy text to the clipboard; falls back to a hidden textarea where the Clipboard API isn't available (plain http). */
+export async function copyText(text: string) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
+
+export function CopyButton({ text, className, label = 'Copy', showLabel }: { text: string | (() => string); className?: string; label?: string; showLabel?: boolean }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={copied ? 'Copied' : label}
+      title={copied ? 'Copied' : label}
+      onClick={async (e) => {
+        e.stopPropagation();
+        if (await copyText(typeof text === 'function' ? text() : text)) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        }
+      }}
+      className={cx('inline-flex h-6 items-center gap-1 rounded-md px-1.5 text-[11.5px] text-fg-3 transition-colors hover:bg-panel-2 hover:text-fg', className)}
+    >
+      <AnimatePresence mode="popLayout" initial={false}>
+        <motion.span key={copied ? 'y' : 'n'} initial={{ scale: 0.6, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.6, opacity: 0 }} transition={{ duration: 0.12 }} className="inline-flex">
+          {copied ? <CheckIcon className="size-3.5 text-ok" /> : <CopyIcon className="size-3.5" />}
+        </motion.span>
+      </AnimatePresence>
+      {showLabel && <span>{copied ? 'Copied' : label}</span>}
+    </button>
+  );
+}
