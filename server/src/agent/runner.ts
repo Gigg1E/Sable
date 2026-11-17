@@ -441,9 +441,12 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
     attachments: attachments.length ? JSON.stringify(attachments) : null,
   });
   if (conv.title === 'New chat') {
-    const title = text.split('\n')[0].replace(/\s+/g, ' ').trim().slice(0, 60) || (attachments.length ? attachmentInfo(attachments[0]).name : 'New chat');
+    // A quick placeholder right away, then a real name ("Essay help") generated in the background.
+    const words = text.replace(/\s+/g, ' ').trim().split(' ');
+    const title = (words.slice(0, 6).join(' ') + (words.length > 6 ? '…' : '')).slice(0, 48) || (attachments.length ? attachmentInfo(attachments[0]).name : 'New chat');
     run('UPDATE conversations SET title = ? WHERE id = ?', title, conversationId);
     emit({ type: 'conversation.changed', id: conversationId });
+    if (text.trim()) void nameChat(conversationId, title, text);
   }
 
   const controller = new AbortController();
@@ -504,6 +507,25 @@ export function recoverRuns() {
 }
 
 /** A single tool-less completion with the main model (used by Spaces' sable.ask). */
+/** Give a chat a short, human name from its first message. Never overwrites a rename by the user. */
+async function nameChat(conversationId: string, placeholder: string, text: string) {
+  try {
+    const raw = await quickAnswer(
+      'You name chat conversations. Reply with only a short title of 2 to 5 words that says what the user wants help with, in sentence case, like "Essay help: Brian Christian", "Ryzen 5 5500 vs 5600" or "Weekly meal plan". No quotes, no emoji, no trailing period.',
+      `First message:\n${text.slice(0, 1500)}`,
+      AbortSignal.timeout(45_000),
+    );
+    const title = raw.replace(/<think>[\s\S]*?<\/think>/g, '').split('\n').map((l) => l.trim()).filter(Boolean).pop()?.replace(/^["'*#\s]+|["'*.\s]+$/g, '').replace(/^title:\s*/i, '').slice(0, 60);
+    if (!title || title.split(' ').length > 9) return;
+    const cur = get<{ title: string }>('SELECT title FROM conversations WHERE id = ?', conversationId);
+    if (cur?.title !== placeholder) return; // renamed meanwhile
+    run('UPDATE conversations SET title = ? WHERE id = ?', title, conversationId);
+    emit({ type: 'conversation.changed', id: conversationId });
+  } catch {
+    /* keep the placeholder */
+  }
+}
+
 export async function quickAnswer(system: string, prompt: string, signal?: AbortSignal): Promise<string> {
   const s = getSettings();
   const model = await resolveModel(s.main.providerId, s.main.model);
