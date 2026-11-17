@@ -17,6 +17,20 @@ x-sable: &sable
   networks: [internal]
   depends_on: [ollama]
 
+x-runner: &runner
+  build: ../runner
+  restart: unless-stopped
+  networks: [internal]
+  tmpfs:
+    - /tmp:size=512m
+  read_only: true
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  mem_limit: 2g
+  cpus: 2
+  pids_limit: 256
+
 services:
   caddy:
     image: caddy:2
@@ -46,6 +60,8 @@ services:
       OLLAMA_HOST: http://ollama:11434
       SABLE_PUBLIC_PORT: "8788" # public front, only reachable through Caddy
       SABLE_PUBLIC_URL: https://${FRONT_DOMAIN}/${SLUG_A}
+      SABLE_RUNNER_URL: http://runner-a:8790
+      SABLE_RUNNER_TOKEN: ${RUNNER_TOKEN_A:-}
       SABLE_PUBLIC_TITLE: ${FRONT_TITLE}
       TZ: ${TZ}
 
@@ -59,8 +75,36 @@ services:
       OLLAMA_HOST: http://ollama:11434
       SABLE_PUBLIC_PORT: "8788"
       SABLE_PUBLIC_URL: https://${FRONT_DOMAIN}/${SLUG_B}
+      SABLE_RUNNER_URL: http://runner-b:8790
+      SABLE_RUNNER_TOKEN: ${RUNNER_TOKEN_B:-}
       SABLE_PUBLIC_TITLE: ${FRONT_TITLE}
       TZ: ${TZ}
+
+  # Person A's script sandbox: sees only A's workspace (Docker Engine 26+ for subpath).
+  runner-a:
+    <<: *runner
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN_A:-}
+      TZ: ${TZ}
+    volumes:
+      - type: volume
+        source: sable-a
+        target: /workspace
+        volume:
+          subpath: workspace
+
+  # Person B's script sandbox: sees only B's workspace (Docker Engine 26+ for subpath).
+  runner-b:
+    <<: *runner
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN_B:-}
+      TZ: ${TZ}
+    volumes:
+      - type: volume
+        source: sable-b
+        target: /workspace
+        volume:
+          subpath: workspace
 
   ollama:
     image: ollama/ollama:latest

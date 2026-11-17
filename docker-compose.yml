@@ -11,6 +11,9 @@ services:
       - sable-data:/data
     environment:
       OLLAMA_HOST: http://ollama:11434
+      # Scripts run in the sandbox container below (remove these two lines to run them in this container instead).
+      SABLE_RUNNER_URL: http://runner:8790
+      SABLE_RUNNER_TOKEN: ${RUNNER_TOKEN:-}
       # SABLE_MODEL: qwen3:8b
       # TZ: Europe/Lisbon               (schedules use the server's time zone)
     security_opt:
@@ -20,6 +23,30 @@ services:
 
   # Remove this service if Ollama already runs on the host
   # (then set OLLAMA_HOST to http://host.docker.internal:11434).
+  # Sandbox for the agent's scripts: sees only the workspace (chat folders), never Sable's database or keys.
+  # Needs Docker Engine 26+ / Compose 2.30+ for volume subpath.
+  runner:
+    build: ./runner
+    restart: unless-stopped
+    environment:
+      RUNNER_TOKEN: ${RUNNER_TOKEN:-}
+      TZ: ${TZ:-UTC}
+    volumes:
+      - type: volume
+        source: sable-data
+        target: /workspace
+        volume:
+          subpath: workspace
+    tmpfs:
+      - /tmp:size=512m
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 2g
+    cpus: 2
+    pids_limit: 256
+
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped

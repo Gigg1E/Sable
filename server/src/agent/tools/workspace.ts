@@ -325,12 +325,53 @@ registerTool({
   },
 });
 
+/** Optional sandbox container (runner/): scripts run there, seeing only the workspace. */
+const RUNNER_URL = (process.env.SABLE_RUNNER_URL ?? '').replace(/\/+$/, '');
+const RUNNER_TOKEN = process.env.SABLE_RUNNER_TOKEN ?? '';
+export const sandboxed = () => !!RUNNER_URL;
+
+async function runInSandbox(job: { cwd: string; language: string; code: string; timeoutSec: number }, ctx: { signal?: AbortSignal; progress?: (t: string) => void }): Promise<string> {
+  let res: Response;
+  try {
+    res = await fetch(`${RUNNER_URL}/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(RUNNER_TOKEN ? { Authorization: `Bearer ${RUNNER_TOKEN}` } : {}) },
+      body: JSON.stringify(job),
+      signal: ctx.signal,
+    });
+  } catch (err) {
+    if (ctx.signal?.aborted) throw err;
+    return `The script sandbox (${RUNNER_URL}) can't be reached: ${(err as Error).message}. Is the runner container up?`;
+  }
+  if (!res.ok || !res.body) return `The script sandbox refused the job (HTTP ${res.status}${res.status === 401 ? ': check SABLE_RUNNER_TOKEN matches RUNNER_TOKEN' : ''}).`;
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  let exit: { code: unknown; stdout: string; stderr: string; timedOut: boolean } | null = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl);
+      buf = buf.slice(nl + 1);
+      if (!line.trim()) continue;
+      const msg = JSON.parse(line);
+      if (msg.type === 'out') ctx.progress?.(msg.text);
+      else if (msg.type === 'exit') exit = msg;
+    }
+  }
+  if (!exit) return 'The script sandbox stopped without a result.';
+  return `exit code: ${exit.code}${exit.timedOut ? ' (timed out)' : ''}\n\nstdout:\n${truncate(exit.stdout, 15_000) || '(empty)'}\n\nstderr:\n${truncate(exit.stderr, 6_000) || '(empty)'}`;
+}
+
 registerTool({
   name: 'run_script',
   label: 'Run script',
   group: 'Workspace',
   description:
-    'Run a Python, Node.js or Bash script on the server, with the workspace as the working directory. Returns exit code, stdout and stderr. API keys and server secrets are not available to scripts.',
+    `Run a Python, Node.js or Bash script with this chat's folder as the working directory. Returns exit code, stdout and stderr. Save results the user should get under outputs/ (they appear automatically).${RUNNER_URL ? ' Runs in an isolated sandbox with python-docx, openpyxl, matplotlib, pandas, pypdf, reportlab, Pillow, requests and BeautifulSoup installed (pip install --user works too).' : ' API keys and server secrets are not available to scripts.'}`,
   parameters: {
     type: 'object',
     properties: {
@@ -340,8 +381,9 @@ registerTool({
     },
     required: ['language', 'code'],
   },
-  risk: 'high',
-  defaultPolicy: 'ask',
+  risk: RUNNER_URL ? 'medium' : 'high',
+  // Sealed off in the sandbox container, scripts can run without asking; on the server itself they ask first.
+  defaultPolicy: RUNNER_URL ? 'auto' : 'ask',
   summarize: (a) => `Run ${a.language} script (${String(a.code).split('\n').length} lines)`,
   async run(a, ctx) {
     const cfg = getSettings().scripts;
@@ -359,7 +401,9 @@ registerTool({
     const home = chatDir(ctx.conversationId) + '/';
     const before = await snapshot();
     try {
-      const out = await new Promise<string>((resolve) => {
+      const out = RUNNER_URL
+        ? await runInSandbox({ cwd: chatDir(ctx.conversationId), language: lang, code: String(a.code), timeoutSec: timeout / 1000 }, ctx)
+        : await new Promise<string>((resolve) => {
         // A minimal environment: no API keys or other server secrets leak into scripts.
         const child = spawn(bin, [file], {
           cwd,
