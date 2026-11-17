@@ -16,6 +16,8 @@ interface ActiveRun {
   runId: string;
   conversationId: string;
   controller: AbortController;
+  /** Messages the user slipped in while this run works; picked up at the next step. */
+  inbox: string[];
 }
 const active = new Map<string, ActiveRun>();
 
@@ -25,6 +27,17 @@ export function activeRunFor(conversationId: string): ActiveRun | undefined {
 export function activeRuns() {
   return [...active.values()].map((r) => ({ runId: r.runId, conversationId: r.conversationId }));
 }
+/** Add a message to the chat's running task at its next step; starts a new run if nothing is running. */
+export function interject(conversationId: string, text: string): { runId: string; interjected: boolean } {
+  const run = activeRunFor(conversationId);
+  if (run && !run.controller.signal.aborted) {
+    run.inbox.push(text);
+    emit({ type: 'run.interject', conversationId, runId: run.runId, text });
+    return { runId: run.runId, interjected: true };
+  }
+  return { runId: startRun(conversationId, text), interjected: false };
+}
+
 export function cancelRun(runId: string) {
   active.get(runId)?.controller.abort();
 }
@@ -172,6 +185,16 @@ async function agentLoop(o: LoopOptions): Promise<string> {
 
   for (let step = 0; step < o.maxSteps; step++) {
     if (o.signal.aborted) throw new Error('aborted');
+    // Interjections: the user's new messages join the conversation between steps, without stopping the run.
+    const inbox = o.persist ? active.get(o.runId)?.inbox : undefined;
+    while (inbox?.length) {
+      const text = inbox.shift()!;
+      insertMessage({
+        id: id('msg_'), conversation_id: o.conversationId, run_id: o.runId, role: 'user', agent: null, content: text,
+        thinking: null, tool_calls: null, tool_call_id: null, tool_name: null, is_error: 0, raw: null, raw_model: null,
+      });
+      o.messages.push({ role: 'user', content: `${text}\n\n(Sent while you were working. Take it into account and carry on.)` });
+    }
     const messageId = id('msg_');
     if (o.persist) emit({ type: 'stream.start', conversationId: o.conversationId, runId: o.runId, messageId, agent: o.agent.name });
 
@@ -233,7 +256,11 @@ async function agentLoop(o: LoopOptions): Promise<string> {
       });
     }
 
-    if (!final.toolCalls?.length) return final.content;
+    if (!final.toolCalls?.length) {
+      // Something was slipped in while this answer was being written: answer it in the same run.
+      if (o.persist && active.get(o.runId)?.inbox.length) continue;
+      return final.content;
+    }
 
     for (const call of final.toolCalls) {
       const result = await executeTool(call, o);
@@ -451,7 +478,7 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
   }
 
   const controller = new AbortController();
-  active.set(runId, { runId, conversationId, controller });
+  active.set(runId, { runId, conversationId, controller, inbox: [] });
   emit({ type: 'run.status', runId, conversationId, status: 'running' });
   void execute(runId, conversationId, controller, source);
   return runId;

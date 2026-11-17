@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, ArrowDown, ArrowRight, CalendarClock, ChevronRight, LayoutGrid, ListChecks, Plane, Search, Square } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowRight, CalendarClock, ChevronRight, LayoutGrid, ListChecks, Plane, Search, Square, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ApprovalCard } from '../components/ApprovalCard';
@@ -13,6 +13,7 @@ import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore, type Streaming } from '../lib/store';
+import { useQueue } from '../lib/queue';
 import type { AnyCard, Goal, Message, Schedule, Watcher } from '../lib/types';
 import { Sparkline } from '../components/Sparkline';
 import { ImageViewer } from '../components/ImageViewer';
@@ -359,6 +360,28 @@ export function ChatView({ id }: { id: string }) {
       toast({ title: 'Could not send', body: (err as Error).message, tone: 'error' });
     }
   }
+  const queue = useQueue((s) => s.queues[id]) ?? [];
+  const queueAdd = useQueue((s) => s.add);
+  const queueRemove = useQueue((s) => s.remove);
+  async function interjectNow(text: string) {
+    try {
+      setPinned(true);
+      const r = await api.post<{ interjected: boolean }>(`/conversations/${id}/interject`, { text });
+      if (r.interjected) toast({ title: 'Added to the current task', body: "It'll be picked up after the current step." });
+    } catch (err) {
+      toast({ title: 'Could not send', body: (err as Error).message, tone: 'error' });
+    }
+  }
+  // Queued messages go out one at a time, each after the previous run fully finishes.
+  const sendingQueued = useRef(false);
+  useEffect(() => {
+    if (running || !queue.length || sendingQueued.current) return;
+    const next = useQueue.getState().take(id);
+    if (!next) return;
+    sendingQueued.current = true;
+    void send(next.text, next.attachments).finally(() => setTimeout(() => (sendingQueued.current = false), 400));
+  }, [running, queue.length, id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function stop() {
     if (runState) await api.post(`/runs/${runState.runId}/cancel`).catch(() => {});
   }
@@ -481,7 +504,41 @@ export function ChatView({ id }: { id: string }) {
 
           <ImageViewer id={viewing} onClose={() => setViewing(null)} />
           <div className={cx('mx-auto w-full max-w-3xl px-3 pb-3 md:px-8 md:pb-5')}>
-            <Composer onSend={send} onStop={stop} running={running} autoFocus placeholder={running ? 'Working… you can stop it at any time' : 'Reply or give a new instruction…'} />
+            <AnimatePresence initial={false}>
+              {queue.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} className="mb-2 overflow-hidden rounded-lg border border-line bg-panel shadow-1">
+                  <div className="flex items-center justify-between border-b border-line px-3 py-1.5 text-[11.5px] text-fg-3">
+                    <span>
+                      Queued · sends {running ? 'when this task finishes' : 'now'}
+                    </span>
+                    <span className="font-mono">{queue.length}</span>
+                  </div>
+                  {queue.map((q, i) => (
+                    <motion.div key={q.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="group flex items-center gap-2 px-3 py-1.5 text-[13px]">
+                      <span className="w-4 shrink-0 font-mono text-[11px] text-fg-3">{i + 1}</span>
+                      <span className="min-w-0 flex-1 truncate text-fg-2">{q.text || `${q.attachments.length} attachment${q.attachments.length === 1 ? '' : 's'}`}</span>
+                      {running && q.text && !q.attachments.length && (
+                        <button onClick={() => (queueRemove(id, q.id), void interjectNow(q.text))} className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] text-fg-3 opacity-100 transition-opacity hover:bg-panel-2 hover:text-fg sm:opacity-0 sm:group-hover:opacity-100">
+                          Interject now
+                        </button>
+                      )}
+                      <button onClick={() => queueRemove(id, q.id)} aria-label="Remove from queue" className="shrink-0 rounded p-0.5 text-fg-3 hover:bg-panel-2 hover:text-fg">
+                        <X className="size-3.5" />
+                      </button>
+                    </motion.div>
+                  ))}
+                </motion.div>
+              )}
+            </AnimatePresence>
+            <Composer
+              onSend={send}
+              onStop={stop}
+              onQueue={(text, attachments) => queueAdd(id, { text, attachments })}
+              onInterject={(text) => void interjectNow(text)}
+              running={running}
+              autoFocus
+              placeholder={running ? 'Queue a follow-up… (Ctrl+Enter adds it to the current task)' : 'Reply or give a new instruction…'}
+            />
           </div>
         </div>
       )}

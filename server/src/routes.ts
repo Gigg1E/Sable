@@ -1,5 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { activeRunFor, activeRuns, cancelRun, createConversation, HttpError, messageJson, quickAnswer, startRun, type MessageRow } from './agent/runner.js';
+import { activeRunFor, activeRuns, cancelRun, createConversation, HttpError, interject, messageJson, quickAnswer, startRun, type MessageRow } from './agent/runner.js';
 import { decideApproval, pendingApprovals, policyFor } from './agent/sentinel.js';
 import { beginOAuth, completeOAuth, mcpStatus, reloadMcp } from './agent/tools/mcp.js';
 import { clearState, forgetOAuth, oauthCallbackUrl, serverForState } from './agent/tools/mcpAuth.js';
@@ -366,6 +366,14 @@ export function apiRouter() {
       for (const a of attachments) if (!getUpload(a)) throw new HttpError(400, 'An attached file is missing. Try attaching it again.');
       if (!text && !attachments.length) throw new HttpError(400, 'Message is empty');
       return { runId: startRun(param(req, 'id'), text, 'user', attachments) };
+    }),
+  );
+  r.post(
+    '/conversations/:id/interject',
+    h((req) => {
+      const text = String(req.body?.text ?? '').trim();
+      if (!text) throw new HttpError(400, 'Message is empty');
+      return interject(param(req, 'id'), text.slice(0, 20_000));
     }),
   );
   r.post('/runs/:id/cancel', h((req) => cancelRun(param(req, 'id'))));

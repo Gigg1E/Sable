@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, ArrowUp, Paperclip, Square, X } from 'lucide-react';
+import { AlertCircle, ArrowUp, CornerDownRight, ListPlus, Paperclip, Square, X } from 'lucide-react';
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState, type ClipboardEvent, type DragEvent } from 'react';
 import { cx } from '../lib/format';
 import { prepareImage, uploadFile, uploadImage } from '../lib/images';
@@ -31,8 +31,19 @@ interface Attachment {
 
 export const Composer = forwardRef<
   ComposerHandle,
-  { onSend: (text: string, attachments: string[]) => Promise<void> | void; onStop?: () => void; running?: boolean; autoFocus?: boolean; placeholder?: string; minRows?: number }
->(function Composer({ onSend, onStop, running, autoFocus, placeholder, minRows = 1 }, handle) {
+  {
+    onSend: (text: string, attachments: string[]) => Promise<void> | void;
+    onStop?: () => void;
+    /** While running: Enter queues the message for when the run finishes… */
+    onQueue?: (text: string, attachments: string[]) => void;
+    /** …and Ctrl/⌘+Enter slips it into the running task at its next step. */
+    onInterject?: (text: string) => void;
+    running?: boolean;
+    autoFocus?: boolean;
+    placeholder?: string;
+    minRows?: number;
+  }
+>(function Composer({ onSend, onStop, onQueue, onInterject, running, autoFocus, placeholder, minRows = 1 }, handle) {
   const [text, setText] = useState('');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -118,15 +129,24 @@ export const Composer = forwardRef<
 
   const uploading = files.some((f) => f.status === 'uploading');
   const ready = files.filter((f) => f.status === 'ready' && f.id).map((f) => f.id!);
-  const canSend = !running && !uploading && (text.trim().length > 0 || ready.length > 0);
+  const hasContent = text.trim().length > 0 || ready.length > 0;
+  const queueing = !!running && !!onQueue;
+  const canSend = !uploading && hasContent && (!running || queueing);
 
-  async function send() {
+  async function send(mode: 'send' | 'interject' = 'send') {
     if (!canSend) return;
     const t = text.trim();
+    // Interjecting is text-only; with attachments it falls back to the queue.
+    if (running && mode === 'interject' && onInterject && t && !ready.length) {
+      setText('');
+      onInterject(t);
+      return;
+    }
     setText('');
     files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
     setFiles([]);
-    await onSend(t, ready);
+    if (running) onQueue?.(t, ready);
+    else await onSend(t, ready);
   }
 
   return (
@@ -199,7 +219,7 @@ export const Composer = forwardRef<
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
             e.preventDefault();
-            void send();
+            void send(e.ctrlKey || e.metaKey ? 'interject' : 'send');
           }
         }}
         placeholder={placeholder ?? `Describe a task for ${settings?.persona.name ?? 'Sable'}…`}
@@ -229,10 +249,34 @@ export const Composer = forwardRef<
           </button>
         </Tip>
         <span className="flex-1" />
-        {!coarse && !running && (
+        {!coarse && (
           <span className="hidden items-center gap-1 text-[11px] text-fg-3 lg:flex">
-            <Kbd>↵</Kbd> send <Kbd className="ml-1">⇧↵</Kbd> new line
+            {queueing ? (
+              <>
+                <Kbd>↵</Kbd> queue <Kbd className="ml-1">{/Mac|iPhone|iPad/.test(navigator.platform) ? '⌘↵' : 'Ctrl ↵'}</Kbd> interject
+              </>
+            ) : (
+              <>
+                <Kbd>↵</Kbd> send <Kbd className="ml-1">⇧↵</Kbd> new line
+              </>
+            )}
           </span>
+        )}
+        {queueing && hasContent && (
+          <>
+            {onInterject && text.trim() && !ready.length && (
+              <Tip label="Interject: add to the current task at its next step">
+                <button onClick={() => void send('interject')} aria-label="Interject" className="flex size-7 items-center justify-center rounded-md border border-line-strong text-fg-2 transition-all hover:bg-panel-2 hover:text-fg active:scale-95">
+                  <CornerDownRight className="size-3.5" />
+                </button>
+              </Tip>
+            )}
+            <Tip label="Queue: send when the current task finishes">
+              <button onClick={() => void send('send')} aria-label="Queue message" disabled={!canSend} className="flex size-7 items-center justify-center rounded-md bg-fg text-bg transition-all active:scale-95">
+                {uploading ? <Spinner className="size-3.5" /> : <ListPlus className="size-4" />}
+              </button>
+            </Tip>
+          </>
         )}
         <button
           onClick={() => (running ? onStop?.() : void send())}
