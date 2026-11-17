@@ -80,6 +80,9 @@ function SetupSheet({ preset, onClose, onAdd }: { preset: ConnectorPreset | null
       <div className="space-y-4 text-[13px]">
         {google && (
           <>
+            <p className="rounded-md border border-line bg-sunken px-3 py-2 leading-relaxed text-fg-2">
+              <b className="text-fg">Personal Gmail account?</b> {preset.name === 'Gmail' ? "Google's Gmail connector needs a Workspace account for now." : 'Use Calendar feeds (iCal) at the top of this page instead. Read-only, no Google Cloud setup.'} The steps below need a Google Workspace account.
+            </p>
             <ol className="list-decimal space-y-2 pl-5 leading-relaxed text-fg-2">
               <li>
                 Google's MCP servers are in developer preview: your Cloud project must be enrolled in the{' '}

@@ -36,6 +36,13 @@ export interface McpServerConfig {
   oauth?: { clientId?: string; clientSecret?: string; scope?: string };
   preset?: string;
 }
+export interface CalendarFeed {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+}
+
 export interface Channel {
   id: string;
   name: string;
@@ -122,6 +129,7 @@ export interface Settings {
   mcpServers: McpServerConfig[];
   anthropic: { serverFallbacks: boolean };
   channels: Channel[];
+  calendars: CalendarFeed[];
   publicUrl: string;
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Field, Input, Segmented, Select, Spinner, Textarea, Toggle, TopBar } from '../components/ui';
 import { AGENT_TEMPLATES } from '../lib/agentTemplates';
 import { ConnectorsSection } from './Connectors';
+import { CalendarFeedsSection } from './Calendars';
 import { ShoppingSection } from './Shopping';
 import { SecuritySection } from './Security';
 import { api } from '../lib/api';
@@ -899,7 +900,12 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'models' && <ModelsSection draft={draft} edit={edit} />}
                 {active === 'agents' && <AgentsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'permissions' && <PermissionsSection draft={draft} edit={edit} tools={tools} />}
-                {active === 'connectors' && <ConnectorsSection draft={draft} edit={edit} tools={tools} saveNow={(next) => save(next, true)} />}
+                {active === 'connectors' && (
+                  <>
+                    <CalendarFeedsSection draft={draft} edit={edit} />
+                    <ConnectorsSection draft={draft} edit={edit} tools={tools} saveNow={(next) => save(next, true)} />
+                  </>
+                )}
                 {active === 'security' && <SecuritySection />}
                 {active === 'shopping' && <ShoppingSection draft={draft} edit={edit} />}
                 {active === 'network' && <NetworkSection draft={draft} edit={edit} />}

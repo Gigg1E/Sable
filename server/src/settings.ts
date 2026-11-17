@@ -61,6 +61,15 @@ export interface Channel {
   events: 'all' | 'important';
 }
 
+/** A read-only calendar subscription (iCal / ICS "secret address"). */
+export interface CalendarFeed {
+  id: string;
+  name: string;
+  /** Secret: anyone with this address can read the calendar. */
+  url: string;
+  enabled: boolean;
+}
+
 export interface Settings {
   persona: { name: string; style: string; about: string };
   providers: ProviderConfig[];
@@ -76,6 +85,8 @@ export interface Settings {
   anthropic: { serverFallbacks: boolean };
   /** Outbound notification channels (ntfy, Discord, Slack, generic webhooks). */
   channels: Channel[];
+  /** Read-only calendar feeds the agent can read. */
+  calendars: CalendarFeed[];
   /** Public base URL of this Sable server, used to build inbound webhook URLs. */
   publicUrl: string;
   shopping: {
@@ -149,6 +160,7 @@ export function defaultSettings(): Settings {
     mcpServers: [],
     anthropic: { serverFallbacks: true },
     channels: [],
+    calendars: [],
     publicUrl: env.SABLE_PUBLIC_URL ?? '',
     shopping: { enabled: true, purchases: false, maxOrder: 200, country: 'US', currency: 'USD' },
   };
@@ -196,6 +208,7 @@ export function publicSettings(): Settings {
     c.token = c.token ? MASK : '';
     c.url = maskUrl(c.url);
   }
+  for (const c of s.calendars ?? []) c.url = maskUrl(c.url);
   for (const m of s.mcpServers) {
     if (m.env) for (const k of Object.keys(m.env)) m.env[k] = m.env[k] ? MASK : '';
     if (m.headers) for (const k of Object.keys(m.headers)) m.headers[k] = m.headers[k] ? MASK : '';
@@ -216,6 +229,9 @@ export function updateSettings(next: Settings): Settings {
     const old = prev.channels.find((x) => x.id === c.id);
     if (c.token === MASK) c.token = old?.token ?? '';
     if (c.url?.includes(MASK)) c.url = old?.url ?? '';
+  }
+  for (const c of next.calendars ?? []) {
+    if (c.url?.includes(MASK)) c.url = prev.calendars?.find((x) => x.id === c.id)?.url ?? '';
   }
   for (const m of next.mcpServers ?? []) {
     const old = prev.mcpServers.find((x) => x.id === m.id);

@@ -289,6 +289,7 @@ If the model isn't installed yet, a **Download** button on the card pulls it thr
 |---|---|
 | **Notion** (official) | One click: *Connect* → approve in Notion → done |
 | **Linear** (official) | One click |
+| **Calendar feeds (iCal)** | Paste the private iCal address from Google Calendar, Outlook or iCloud. Read-only (events + free time), works with personal accounts, no developer setup. Repeating events and time zones are handled. |
 | **Google Calendar / Gmail** (official, developer preview) | One-time setup, **step by step in [docs/google-connectors.md](docs/google-connectors.md)**: enroll your Cloud project in Google's Workspace Developer Preview (needs a Google Workspace account), enable the API *and* the MCP API, create a *Web application* client with *“Use this client for an AI-powered agent”* and the redirect URI Sable shows, then paste the client ID and secret. The same client works for both. Gmail's official server reads, labels and drafts; it doesn't send. |
 | **Outlook & Microsoft 365** (open-source [Softeria server](https://github.com/Softeria/ms-365-mcp-server)) | Runs on your server via `npx`, with no app registration. Ask Sable to “log in to Microsoft 365” and enter the code it gives you at microsoft.com/devicelogin. Microsoft's own Outlook MCP servers currently require a Microsoft 365 Copilot license. |
 | **GitHub** (official) | Paste a fine-grained personal access token |

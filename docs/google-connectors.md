@@ -2,6 +2,8 @@
 
 Sable uses **Google's official MCP servers** for Calendar and Gmail. Google still has them in **Developer Preview**, so setup takes more steps than most connectors. It's a one-time job.
 
+> **Just want Sable to read your calendar?** Use **Settings → Connectors → Calendar feeds (iCal)**. Paste the *Secret address in iCal format* from Google Calendar (Settings → your calendar → Integrate calendar). It works with personal Gmail, needs no Google Cloud setup, and lets Sable read events and find free time. The only limit is that it's read-only: Sable can't add or change events through it. The rest of this page is for the official connectors, which can also make changes.
+
 > **Check first: what kind of Google account do you have?**
 > Google's preview program asks for a **Google Workspace account**: a work, school or paid Google account on your own domain. Google doesn't say personal `@gmail.com` accounts qualify. If you only have a personal Gmail, read [No Workspace account?](#no-workspace-account) before spending time on the rest.
 
@@ -104,9 +106,10 @@ Then try: *"What's on my calendar this week?"*
 
 If you only have a personal `@gmail.com` account, Google's official preview servers probably won't work for you yet. Your options:
 
-1. **Use a Google Workspace account** if you have one (work, school, or a paid Workspace plan on your own domain). Workspace for Education accounts are eligible too.
-2. **Wait for general availability.** Once Google releases these servers publicly, enrollment shouldn't be needed. Steps 2 to 6 stay the same.
-3. **Use a community MCP server** that talks to the regular Google Calendar API, which works with personal accounts. Add it as a **Custom** connector that runs a command on your server. It uses its own OAuth client (usually type *Desktop app*) and its own sign-in step. Follow that project's README, and review the code before running it, since it gets access to your calendar.
+1. **Calendar feeds (iCal), recommended for reading.** Settings → Connectors → Calendar feeds → Add calendar, then paste Google's *Secret address in iCal format*. Treat that address like a password, and if it leaks, use *Reset* on the same Google page. Feeds are read-only, and Google can take a few hours to show changes in them.
+2. **Use a Google Workspace account** if you have one (work, school, or a paid Workspace plan on your own domain). Workspace for Education accounts are eligible too.
+3. **Wait for general availability.** Once Google releases these servers publicly, enrollment shouldn't be needed. Steps 2 to 6 stay the same.
+4. **Use a community MCP server** that talks to the regular Google Calendar API, which works with personal accounts. Add it as a **Custom** connector that runs a command on your server. It uses its own OAuth client (usually type *Desktop app*) and its own sign-in step. Follow that project's README, and review the code before running it, since it gets access to your calendar.
 
 ## Removing access
 

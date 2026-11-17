@@ -9,6 +9,7 @@ import { resumeShopLink } from './shop/auth.js';
 import { recoverRuns } from './agent/runner.js';
 import { expireStaleApprovals } from './agent/sentinel.js';
 import { reloadMcp } from './agent/tools/mcp.js';
+import { syncCalendarTools } from './agent/tools/calendar.js';
 import { DATA_DIR, HOST, PORT, WEB_DIST } from './config.js';
 import { initPush } from './push.js';
 import { apiRouter } from './routes.js';
@@ -105,6 +106,7 @@ app.listen(PORT, HOST, () => {
   console.log(`  Data folder: ${DATA_DIR}`);
   console.log(`  Agent web traffic: ${proxyLabel() ? `via proxy ${proxyLabel()}` : 'direct'}\n`);
   void reloadMcp();
+  syncCalendarTools();
   startScheduler();
   startWatchers();
   resumeShopLink();

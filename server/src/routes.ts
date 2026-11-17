@@ -5,6 +5,7 @@ import { beginOAuth, completeOAuth, mcpStatus, reloadMcp } from './agent/tools/m
 import { clearState, forgetOAuth, oauthCallbackUrl, serverForState } from './agent/tools/mcpAuth.js';
 import { computeNextRun, goalJson, type GoalRow, type ScheduleKind, type ScheduleSpec } from './agent/tools/personal.js';
 import { getTool, listTools } from './agent/tools/registry.js';
+import { syncCalendarTools, testFeed } from './agent/tools/calendar.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
   recordFailedLogin, recoveryCodesLeft, requireAuth, sessionCount, setPassword, twoFactorEnabled,
@@ -22,7 +23,7 @@ import crypto from 'node:crypto';
 import { kvSet } from './db.js';
 import { notify, removeSubscription, saveSubscription, sendToChannel, vapidPublicKey } from './push.js';
 import { fireSchedule } from './scheduler.js';
-import { getSettings, publicSettings, updateSettings, type ProviderConfig, type Settings } from './settings.js';
+import { getSettings, publicSettings, updateSettings, type CalendarFeed, type ProviderConfig, type Settings } from './settings.js';
 import { errorMessage, id, now, parseJson } from './util.js';
 import { getUpload, uploadRoutes } from './uploads.js';
 import { beginAppLink, beginDeviceLink, completeAppLink, shopLinkStatus, unlinkShop } from './shop/auth.js';
@@ -563,6 +564,7 @@ export function apiRouter() {
       const before = JSON.stringify(getSettings().mcpServers);
       updateSettings(req.body as Settings);
       if (JSON.stringify(getSettings().mcpServers) !== before) void reloadMcp();
+      syncCalendarTools();
       emit({ type: 'settings.changed' });
       return publicSettings();
     }),
@@ -655,6 +657,21 @@ export function apiRouter() {
       back(`shop_error=${encodeURIComponent(errorMessage(err))}`);
     }
   });
+
+  r.post(
+    '/calendars/test',
+    h(async (req) => {
+      const body = req.body as CalendarFeed;
+      const stored = getSettings().calendars.find((c) => c.id === body.id);
+      const url = !body.url || body.url.includes('••••') ? (stored?.url ?? '') : body.url;
+      if (!url) return { ok: false, error: 'Paste the calendar address first.' };
+      try {
+        return await testFeed({ id: `test:${body.id}`, name: body.name || 'Calendar', url, enabled: true });
+      } catch (err) {
+        return { ok: false, error: errorMessage(err) };
+      }
+    }),
+  );
 
   r.get('/mcp', h(() => mcpStatus()));
   r.post('/mcp/reload', h(async () => (await reloadMcp(), mcpStatus())));
