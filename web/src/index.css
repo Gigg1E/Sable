@@ -256,7 +256,8 @@
   border: 0;
   border-top: 1px solid var(--line);
 }
-.streaming > :last-child::after {
+.streaming > :last-child::after,
+.streaming > .prose-sable:last-child > :last-child::after {
   content: '';
   display: inline-block;
   width: 7px;
@@ -347,4 +348,16 @@
   font-size: 0.85em;
   font-weight: 600;
   text-transform: uppercase;
+}
+
+/* Streamed replies are rendered block by block; keep normal paragraph spacing between blocks. */
+.streaming > .prose-sable + .prose-sable {
+  margin-top: 0.8em;
+}
+.streaming > .prose-sable:not(:last-child)::after,
+.streaming > .prose-sable:not(:last-child) > :last-child::after {
+  content: none;
+}
+.streaming > .prose-sable:last-child::after {
+  content: none;
 }

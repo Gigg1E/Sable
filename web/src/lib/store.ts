@@ -107,11 +107,32 @@ function refreshConversationsSoon() {
   refreshTimer = setTimeout(() => void useStore.getState().loadConversations(), 250);
 }
 
+// Streamed tokens arrive dozens of times a second. Applying each one re-renders the chat, so
+// they're buffered and applied at most every ~60 ms (one render per frame batch).
+const pending = new Map<string, { messageId: string; text: string; thinking: string }>();
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
+function flushStream() {
+  flushTimer = undefined;
+  if (!pending.size) return;
+  const batch = [...pending];
+  pending.clear();
+  useStore.setState((st) => {
+    const streaming = { ...st.streaming };
+    for (const [cid, d] of batch) {
+      const cur = streaming[cid];
+      if (!cur || cur.messageId !== d.messageId) continue;
+      streaming[cid] = { ...cur, text: cur.text + d.text, thinking: cur.thinking + d.thinking };
+    }
+    return { streaming };
+  });
+}
+
 function handle(ev: any) {
   const set = useStore.setState;
   const s = useStore.getState();
   switch (ev.type) {
     case 'message': {
+      if (pending.size) flushStream();
       const m: Message = ev.message;
       const list = s.messages[m.conversation_id];
       set((st) => ({
@@ -123,14 +144,18 @@ function handle(ev: any) {
       break;
     }
     case 'stream.start':
+      pending.delete(ev.conversationId);
       set((st) => ({ streaming: { ...st.streaming, [ev.conversationId]: { messageId: ev.messageId, agent: ev.agent, text: '', thinking: '' } } }));
       break;
     case 'stream.text':
     case 'stream.thinking': {
       const cur = s.streaming[ev.conversationId];
       if (!cur || cur.messageId !== ev.messageId) break;
-      const next = ev.type === 'stream.text' ? { ...cur, text: cur.text + ev.text } : { ...cur, thinking: cur.thinking + ev.text };
-      set((st) => ({ streaming: { ...st.streaming, [ev.conversationId]: next } }));
+      let p = pending.get(ev.conversationId);
+      if (!p || p.messageId !== ev.messageId) pending.set(ev.conversationId, (p = { messageId: ev.messageId, text: '', thinking: '' }));
+      if (ev.type === 'stream.text') p.text += ev.text;
+      else p.thinking += ev.text;
+      flushTimer ??= setTimeout(flushStream, 60);
       break;
     }
     case 'tool.start':

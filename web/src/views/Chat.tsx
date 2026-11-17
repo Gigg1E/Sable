@@ -5,7 +5,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { ApprovalCard } from '../components/ApprovalCard';
 import { Composer, type ComposerHandle } from '../components/Composer';
 import { Logo } from '../components/Logo';
-import { Markdown } from '../components/Markdown';
+import { Markdown, StreamingMarkdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
 import { CardView, ChatId, FileGlyph, fmtBytes, ShownFiles } from '../components/Cards';
 import { Button, Card, CopyButton, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
@@ -309,7 +309,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
             )}
           </div>
         )}
-        {streaming?.text && <Markdown text={streaming.text} streaming />}
+        {streaming?.text && <StreamingMarkdown text={streaming.text} />}
         {errors.map((m) => (
           <div key={m.id} className="my-2 flex items-start gap-2.5 rounded-lg border border-danger/25 bg-danger/5 px-3.5 py-3 text-[13px] text-danger">
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />

@@ -80,3 +80,40 @@ export const Markdown = memo(function Markdown({ text, className, streaming }: {
     </div>
   );
 });
+
+/**
+ * Split streamed Markdown into finished blocks (separated by blank lines, never inside a code
+ * fence) and the block still being written. Finished blocks are memoized, so each update only
+ * re-parses the last paragraph instead of the whole reply.
+ */
+function splitBlocks(text: string): string[] {
+  const out: string[] = [];
+  let cur: string[] = [];
+  let fence = false;
+  for (const line of text.split('\n')) {
+    if (/^\s*(```|~~~)/.test(line)) fence = !fence;
+    if (!fence && !line.trim() && cur.length) {
+      out.push(cur.join('\n'));
+      cur = [];
+    } else cur.push(line);
+  }
+  if (cur.length) out.push(cur.join('\n'));
+  return out;
+}
+
+export function StreamingMarkdown({ text, className }: { text: string; className?: string }) {
+  const blocks = splitBlocks(text);
+  // Lists and tables span blank lines less often than paragraphs; merging consecutive list items
+  // keeps numbering right in most replies.
+  const merged: string[] = [];
+  for (const b of blocks) {
+    const prev = merged[merged.length - 1];
+    if (prev !== undefined && /^\s*([-*+]|\d+[.)])\s/.test(b) && /^\s*([-*+]|\d+[.)])\s/m.test(prev)) merged[merged.length - 1] = prev + '\n\n' + b;
+    else merged.push(b);
+  }
+  return (
+    <div className={cx('streaming', className)}>
+      {merged.map((b, i) => (i === merged.length - 1 ? <Markdown key={`live-${i}`} text={b} /> : <Markdown key={`b-${i}`} text={b} />))}
+    </div>
+  );
+}
