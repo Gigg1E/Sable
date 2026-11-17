@@ -3,6 +3,7 @@ import { ChevronDown, Download, ExternalLink, File, FileCode2, FileImage, FileSp
 import { createContext, useContext, useEffect, useState } from 'react';
 import { cx } from '../lib/format';
 import { onServerEvent } from '../lib/store';
+import { usePanel } from '../lib/panel';
 import type { AnyCard, CommerceCard, FileCardData, ImagesCardData, LinkItem, LinksCardData } from '../lib/types';
 import { CommerceCardView } from './CommerceCards';
 import { Markdown } from './Markdown';
@@ -144,7 +145,9 @@ export function FileCard({ card }: { card: FileCardData }) {
       <div className="flex items-center gap-3 px-3.5 py-3">
         <FileGlyph name={m.name} />
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-medium">{m.name}</div>
+          <button onClick={() => usePanel.getState().show('files', m.path)} className="block max-w-full truncate text-left text-[13.5px] font-medium hover:underline hover:decoration-line-strong hover:underline-offset-2" title="Open in the side panel">
+            {m.name}
+          </button>
           <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap font-mono text-[11px] text-fg-3">
             {gone ? <span className="text-danger">deleted</span> : <span className="shrink-0">{fmtBytes(m.size)}</span>}
             <span className="shrink-0">·</span>
@@ -153,7 +156,7 @@ export function FileCard({ card }: { card: FileCardData }) {
                 {flash ? 'updated' : `edited ${ago(m.updated)}`}
               </motion.span>
             </AnimatePresence>
-            {m.path !== m.name && <span className="hidden min-w-0 truncate sm:inline">· {m.path.split('/').slice(0, -1).join('/')}/</span>}
+            {m.path.replace(/^chats\/[^/]+\//, '') !== m.name && <span className="hidden min-w-0 truncate sm:inline">· {m.path.replace(/^chats\/[^/]+\//, '').split('/').slice(0, -1).join('/')}/</span>}
           </div>
         </div>
         {!gone && meta?.text !== undefined && <CopyButton text={() => meta?.text ?? ''} label="Copy contents" />}

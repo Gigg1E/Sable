@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, ArrowDown, ArrowRight, CalendarClock, ChevronRight, LayoutGrid, ListChecks, Plane, Search, Square, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowRight, CalendarClock, ChevronRight, LayoutGrid, ListChecks, Plane, PanelRightClose, PanelRightOpen, Search, Square, X } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ApprovalCard } from '../components/ApprovalCard';
@@ -8,12 +8,14 @@ import { Logo } from '../components/Logo';
 import { Markdown, StreamingMarkdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
 import { CardView, ChatId, FileGlyph, fmtBytes, ShownFiles } from '../components/Cards';
-import { Button, Card, CopyButton, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
+import { Button, Card, CopyButton, IconButton, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore, type Streaming } from '../lib/store';
 import { useQueue } from '../lib/queue';
+import { usePanel } from '../lib/panel';
+import { SidePanel, usePanelAutoOpen } from '../components/SidePanel';
 import type { AnyCard, Goal, Message, Schedule, Watcher } from '../lib/types';
 import { Sparkline } from '../components/Sparkline';
 import { ImageViewer } from '../components/ImageViewer';
@@ -360,6 +362,9 @@ export function ChatView({ id }: { id: string }) {
       toast({ title: 'Could not send', body: (err as Error).message, tone: 'error' });
     }
   }
+  const panelOpen = usePanel((s) => s.open);
+  const setPanel = usePanel((s) => s.set);
+  usePanelAutoOpen(id);
   const queue = useQueue((s) => s.queues[id]) ?? [];
   const queueAdd = useQueue((s) => s.add);
   const queueRemove = useQueue((s) => s.remove);
@@ -402,11 +407,16 @@ export function ChatView({ id }: { id: string }) {
         title={conversation?.title ?? 'Chat'}
         crumbs={conversation?.kind === 'schedule' ? 'Routines' : 'Chats'}
         actions={
-          running && (
-            <Button size="sm" onClick={() => void stop()}>
-              <Square className="size-3 fill-current" /> Stop
-            </Button>
-          )
+          <>
+            {running && (
+              <Button size="sm" onClick={() => void stop()}>
+                <Square className="size-3 fill-current" /> Stop
+              </Button>
+            )}
+            <IconButton label={panelOpen ? 'Hide files, spaces and reminders' : 'Files, spaces and reminders'} onClick={() => setPanel({ open: !panelOpen, full: false })} className={cx(panelOpen && 'text-tint')}>
+              {panelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
+            </IconButton>
+          </>
         }
       >
         {status}
@@ -419,7 +429,8 @@ export function ChatView({ id }: { id: string }) {
           </Button>
         </div>
       ) : (
-        <div className="relative flex min-h-0 flex-1 flex-col">
+        <div className="relative flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
           <div
             ref={scroller}
             onScroll={(e) => {
@@ -540,6 +551,8 @@ export function ChatView({ id }: { id: string }) {
               placeholder={running ? 'Queue a follow-up… (Ctrl+Enter adds it to the current task)' : 'Reply or give a new instruction…'}
             />
           </div>
+        </div>
+        <SidePanel conversationId={id} messages={messages ?? []} />
         </div>
       )}
     </>

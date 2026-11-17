@@ -388,7 +388,7 @@ export function createWatcher(input: { title: string; url: string; extract: Extr
     wid, input.title, input.url, JSON.stringify(input.extract), JSON.stringify(input.condition), JSON.stringify(input.actions),
     Math.max(5, Math.round(input.interval_min || 60)), now(), input.conversationId ?? null, now(),
   );
-  emit({ type: 'watcher.changed', id: wid });
+  emit({ type: 'watcher.changed', id: wid, conversationId: input.conversationId });
   void checkWatcher(wid);
   return wid;
 }

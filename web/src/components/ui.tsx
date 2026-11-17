@@ -1,6 +1,6 @@
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { AnimatePresence, motion } from 'motion/react';
-import { Check as CheckIcon, ChevronDown, Copy as CopyIcon, Loader2, Menu, X } from 'lucide-react';
+import { Check as CheckIcon, ChevronDown, Copy as CopyIcon, Loader2, Menu, PanelLeftOpen, X } from 'lucide-react';
 import { createContext, useContext, useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import { cx } from '../lib/format';
 
@@ -200,17 +200,24 @@ export function Progress({ value, tone = 'fg' }: { value: number; tone?: 'fg' | 
 
 // ───────────────────────── Page chrome ─────────────────────────
 
-export const ShellContext = createContext<{ openNav: () => void; openPalette: () => void }>({ openNav: () => {}, openPalette: () => {} });
+export const ShellContext = createContext<{ openNav: () => void; openPalette: () => void; navCollapsed?: boolean; toggleNav?: () => void }>({ openNav: () => {}, openPalette: () => {} });
 
 /** The bar at the top of every page: title / breadcrumb on the left, actions on the right. */
 export function TopBar({ title, crumbs, actions, children }: { title: ReactNode; crumbs?: ReactNode; actions?: ReactNode; children?: ReactNode }) {
-  const { openNav } = useContext(ShellContext);
+  const { openNav, navCollapsed, toggleNav } = useContext(ShellContext);
   return (
     <header className="pt-safe sticky top-0 z-20 shrink-0 border-b border-line bg-bg/85 backdrop-blur-md">
       <div className="flex h-12 items-center gap-2 px-3 md:px-5">
         <button onClick={openNav} className="-ml-1 inline-flex size-8 items-center justify-center rounded-md text-fg-2 hover:bg-panel-2 md:hidden" aria-label="Open navigation">
           <Menu className="size-[18px]" />
         </button>
+        {navCollapsed && (
+          <Tip label="Show sidebar" kbd="Ctrl \\" side="bottom">
+            <button onClick={toggleNav} className="-ml-1 hidden size-8 items-center justify-center rounded-md text-fg-2 hover:bg-panel-2 hover:text-fg md:inline-flex" aria-label="Show sidebar">
+              <PanelLeftOpen className="size-[17px]" />
+            </button>
+          </Tip>
+        )}
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-[13px]">
           {crumbs && <span className="hidden shrink-0 text-fg-3 sm:inline">{crumbs}</span>}
           {crumbs && <span className="hidden text-fg-3 sm:inline">/</span>}

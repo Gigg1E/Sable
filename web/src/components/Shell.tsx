@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, Pencil, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Webhook,
+  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, PanelLeftClose, Pencil, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -9,6 +9,7 @@ import { api } from '../lib/api';
 import { cx } from '../lib/format';
 import { navigate, usePath } from '../lib/router';
 import { useStore } from '../lib/store';
+import { usePanel } from '../lib/panel';
 import { getTheme, resolvedTheme, setTheme, type Theme } from '../lib/theme';
 import { CommandPalette } from './CommandPalette';
 import { Logo } from './Logo';
@@ -151,7 +152,7 @@ function AccountMenu() {
   );
 }
 
-function SidebarContent({ onNavigate, onSearch }: { onNavigate?: () => void; onSearch: () => void }) {
+function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () => void; onSearch: () => void; onCollapse?: () => void }) {
   const path = usePath();
   const name = useStore((s) => s.settings?.persona.name ?? 'Sable');
   const conversations = useStore((s) => s.conversations);
@@ -176,6 +177,11 @@ function SidebarContent({ onNavigate, onSearch }: { onNavigate?: () => void; onS
       <div className="flex h-12 items-center gap-2.5 px-3">
         <Logo size={22} live={anyRunning} />
         <span className="flex-1 truncate text-[14px] font-semibold tracking-[-0.01em]">{name}</span>
+        {onCollapse && (
+          <IconButton label="Hide sidebar" kbd="Ctrl \\" side="bottom" onClick={onCollapse}>
+            <PanelLeftClose className="size-4" />
+          </IconButton>
+        )}
         <IconButton
           label="New task"
           side="bottom"
@@ -365,12 +371,33 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  const navCollapsed = usePanel((s) => s.navCollapsed);
+  const setPanel = usePanel((s) => s.set);
+  const toggleNav = () => setPanel({ navCollapsed: !usePanel.getState().navCollapsed });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '\\') {
+        e.preventDefault();
+        setPanel({ navCollapsed: !usePanel.getState().navCollapsed });
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [setPanel]);
+
   return (
-    <ShellContext.Provider value={{ openNav: () => setDrawer(true), openPalette: () => setPalette(true) }}>
+    <ShellContext.Provider value={{ openNav: () => setDrawer(true), openPalette: () => setPalette(true), navCollapsed, toggleNav }}>
       <div className="fixed inset-x-0 flex overflow-hidden bg-bg" style={{ top: 'var(--app-top, 0px)', height: 'var(--app-h, 100dvh)' }}>
-        <aside className="hidden w-[244px] shrink-0 border-r border-side-line bg-side md:block">
-          <SidebarContent onSearch={() => setPalette(true)} />
-        </aside>
+        <motion.aside
+          initial={false}
+          animate={{ width: navCollapsed ? 0 : 244, borderRightWidth: navCollapsed ? 0 : 1 }}
+          transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+          className="hidden shrink-0 overflow-hidden border-side-line bg-side md:block"
+        >
+          <div className="h-full w-[244px]">
+            <SidebarContent onSearch={() => setPalette(true)} onCollapse={toggleNav} />
+          </div>
+        </motion.aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <main className="relative min-h-0 flex-1">
             <AnimatePresence mode="popLayout" initial={false}>

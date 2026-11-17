@@ -224,7 +224,7 @@ registerTool({
       'INSERT INTO spaces (id, title, description, icon, html, data, pinned, conversation_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)',
       sid, String(a.title), String(a.description ?? ''), String(a.icon ?? '✨'), String(a.html), JSON.stringify(a.data ?? {}), ctx.conversationId, now(), now(),
     );
-    emit({ type: 'space.changed', id: sid });
+    emit({ type: 'space.changed', id: sid, conversationId: ctx.conversationId });
     return `Space ${sid} created. The user can open it from Spaces.`;
   },
 });
@@ -248,7 +248,7 @@ registerTool({
   risk: 'low',
   defaultPolicy: 'auto',
   summarize: (a) => `Update space ${a.id}`,
-  async run(a) {
+  async run(a, ctx) {
     const s = get<{ id: string; data: string }>('SELECT id, data FROM spaces WHERE id = ?', String(a.id));
     if (!s) return 'No space with that id.';
     const data = { ...parseJson<Record<string, unknown>>(s.data, {}), ...((a.data as object) ?? {}) };
@@ -256,7 +256,7 @@ registerTool({
       'UPDATE spaces SET title = COALESCE(?, title), description = COALESCE(?, description), html = COALESCE(?, html), data = ?, updated_at = ? WHERE id = ?',
       (a.title as string) ?? null, (a.description as string) ?? null, (a.html as string) ?? null, JSON.stringify(data), now(), s.id,
     );
-    emit({ type: 'space.changed', id: s.id });
+    emit({ type: 'space.changed', id: s.id, conversationId: ctx.conversationId });
     return 'Space updated.';
   },
 });
@@ -362,7 +362,7 @@ registerTool({
   risk: 'medium',
   defaultPolicy: 'ask',
   summarize: (a) => `Schedule “${a.title}” (${a.kind}${a.time ? ' ' + a.time : ''}${a.at ? ' ' + a.at : ''}${a.every_minutes ? ' every ' + a.every_minutes + 'm' : ''})`,
-  async run(a) {
+  async run(a, ctx) {
     const spec: ScheduleSpec = { at: a.at, every_minutes: a.every_minutes, time: a.time, weekday: a.weekday };
     const next = computeNextRun(a.kind, spec);
     if (next == null) return 'That time is in the past or invalid; nothing scheduled.';
@@ -371,7 +371,7 @@ registerTool({
       'INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
       sid, String(a.title), String(a.prompt), String(a.kind), JSON.stringify(spec), next, now(),
     );
-    emit({ type: 'schedule.changed' });
+    emit({ type: 'schedule.changed', conversationId: ctx.conversationId });
     return `Scheduled ${sid}; next run ${new Date(next).toString()}.`;
   },
 });

@@ -163,6 +163,24 @@ export async function resolveFile(raw: string, chat?: string): Promise<string> {
 
 /** File routes for the chat's file cards (behind session auth). */
 export function workspaceRoutes(r: express.Router) {
+  // Everything in a chat's folder, for the side panel: outputs first, then uploads, then the rest.
+  r.get('/conversations/:id/files', async (req, res) => {
+    const home = chatDir(String(req.params.id));
+    const rank = (p: string) => (p.startsWith(home + '/outputs/') ? 0 : p.startsWith(home + '/uploads/') ? 1 : 2);
+    const files: Card[] = [];
+    for (const [p] of await snapshot()) {
+      if (!p.startsWith(home + '/') || files.length >= 500) continue;
+      try {
+        files.push({ ...(await fileCard(p)), view: p.slice(home.length + 1) });
+      } catch {
+        /* vanished */
+      }
+    }
+    files.sort((a, b) => rank(String(a.path)) - rank(String(b.path)) || Number(b.updated) - Number(a.updated));
+    res.setHeader('Cache-Control', 'no-store');
+    res.json(files);
+  });
+
   r.get('/files/meta', async (req, res) => {
     try {
       const card = await fileCard(await resolveFile(String(req.query.path ?? ''), typeof req.query.chat === 'string' ? req.query.chat : undefined));

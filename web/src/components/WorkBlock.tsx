@@ -81,6 +81,8 @@ function describeDone(calls: ToolCall[]) {
   const memory = n((c) => c.name.startsWith('memory_'));
   const calendar = n((c) => c.name.startsWith('calendar_'));
   const shows = n((c) => c.name.startsWith('show_') || c.name === 'shop_show');
+  const spaces = n((c) => c.name.startsWith('space_'));
+  const reminders = n((c) => c.name.startsWith('schedule_') || c.name.startsWith('watch_create'));
   const agents = calls.filter((c) => c.name === 'delegate').map((c) => String((c.args as { agent?: string }).agent ?? 'a sub-agent'));
   if (searches) parts.push(searches === 1 ? 'searched the web' : `searched the web ${searches} times`);
   if (pages) parts.push(`read ${plural(pages, 'page')}`);
@@ -90,8 +92,10 @@ function describeDone(calls: ToolCall[]) {
   if (writes.length) parts.push(writes.length <= 2 ? `wrote ${[...new Set(writes)].join(' and ')}` : `wrote ${plural(writes.length, 'file')}`);
   if (reads) parts.push('looked through files');
   if (memory) parts.push('checked memory');
+  if (spaces) parts.push(calls.some((c) => c.name === 'space_create') ? 'built a space' : 'updated a space');
+  if (reminders) parts.push(reminders === 1 ? 'set a reminder' : `set ${reminders} reminders`);
   if (agents.length) parts.push(`asked ${[...new Set(agents)].join(' and ')}`);
-  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows;
+  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows + spaces + reminders;
   if (calls.length - known > 0) parts.push(known ? `${plural(calls.length - known, 'other step')}` : `took ${plural(calls.length, 'step')}`);
   if (!parts.length && shows) parts.push('prepared what to show');
   const text = parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts.join(' and ');

@@ -78,19 +78,21 @@ export function SpacesList() {
   );
 }
 
-export function SpaceView({ id }: { id: string }) {
+/** Load a space and keep it fresh as the agent changes it. */
+export function useSpace(id: string, onGone?: () => void) {
   const [space, setSpace] = useState<Space | null>(null);
-  const [nonce, setNonce] = useState(0);
-  const frame = useRef<HTMLIFrameElement>(null);
-  const toast = useStore((s) => s.toast);
-
-  const load = useCallback(() => void api.get<Space>(`/spaces/${id}`).then(setSpace).catch(() => navigate('/spaces', { replace: true })), [id]);
+  const load = useCallback(() => void api.get<Space>(`/spaces/${id}`).then(setSpace).catch(() => onGone?.()), [id]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     load();
-    return onServerEvent((ev) => ev.type === 'space.changed' && ev.id === id && (ev.deleted ? navigate('/spaces') : load()));
-  }, [id, load]);
+    return onServerEvent((ev) => ev.type === 'space.changed' && ev.id === id && (ev.deleted ? onGone?.() : load()));
+  }, [id, load]); // eslint-disable-line react-hooks/exhaustive-deps
+  return { space, load };
+}
 
-  // The bridge between the sandboxed space and Sable.
+/** The sandboxed space itself, with the bridge to Sable (data and questions). Used full-page and in the side panel. */
+export function SpaceFrame({ space, nonce = 0, className }: { space: Space; nonce?: number; className?: string }) {
+  const frame = useRef<HTMLIFrameElement>(null);
+  const id = space.id;
   const dataRef = useRef<Record<string, unknown>>({});
   useEffect(() => {
     if (space) dataRef.current = { ...space.data };
@@ -120,7 +122,25 @@ export function SpaceView({ id }: { id: string }) {
   }, [id]);
 
   // Served by the server with a sandbox CSP (opaque origin, no network); reloads when the space changes.
-  const src = space ? `/api/spaces/${space.id}/frame?theme=${resolvedTheme()}&v=${space.updated_at}-${nonce}` : '';
+  const src = `/api/spaces/${space.id}/frame?theme=${resolvedTheme()}&v=${space.updated_at}-${nonce}`;
+  return (
+    <motion.iframe
+      key={nonce}
+      ref={frame}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      title={space.title}
+      sandbox="allow-scripts allow-forms allow-modals allow-popups"
+      src={src}
+      className={cx('min-h-0 w-full flex-1 border-0 bg-bg', className)}
+    />
+  );
+}
+
+export function SpaceView({ id }: { id: string }) {
+  const { space, load } = useSpace(id, () => navigate('/spaces', { replace: true }));
+  const [nonce, setNonce] = useState(0);
+  const toast = useStore((s) => s.toast);
 
   if (!space)
     return (
@@ -164,16 +184,7 @@ export function SpaceView({ id }: { id: string }) {
           </>
         }
       />
-      <motion.iframe
-        key={nonce}
-        ref={frame}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        title={space.title}
-        sandbox="allow-scripts allow-forms allow-modals allow-popups"
-        src={src}
-        className="min-h-0 w-full flex-1 border-0 bg-bg"
-      />
+      <SpaceFrame space={space} nonce={nonce} />
     </div>
   );
 }
