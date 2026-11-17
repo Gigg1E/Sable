@@ -139,7 +139,7 @@ export const Composer = forwardRef<
       }}
       onDragLeave={(e) => e.currentTarget.contains(e.relatedTarget as Node) || setDragging(false)}
       onDrop={onDrop}
-      className={cx('relative rounded-xl border bg-panel shadow-2 transition-colors', dragging ? 'border-accent/60' : 'border-line focus-within:border-line-strong')}
+      className={cx('relative rounded-xl border bg-panel shadow-2 transition-colors', dragging ? 'border-accent/60' : 'border-line-strong focus-within:border-tint/45 focus-within:shadow-[0_0_0_3px_var(--tint-soft)]')}
     >
       <AnimatePresence>
         {dragging && (

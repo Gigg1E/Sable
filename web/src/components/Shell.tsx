@@ -41,10 +41,10 @@ function NavItem({ to, label, icon: Icon, count, active, onNavigate }: { to: str
         navigate(to);
         onNavigate?.();
       }}
-      className={cx('group relative flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] transition-colors', active ? 'text-fg' : 'text-fg-2 hover:bg-panel-2/60 hover:text-fg')}
+      className={cx('group relative flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] transition-colors', active ? 'text-fg' : 'text-fg-2 hover:bg-side-active/70 hover:text-fg')}
     >
-      {active && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-md border border-line bg-panel shadow-1" transition={{ type: 'spring', stiffness: 600, damping: 45 }} />}
-      <Icon className={cx('relative size-[15px]', active ? 'text-fg' : 'text-fg-3 group-hover:text-fg-2')} strokeWidth={1.8} />
+      {active && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-md border border-side-line bg-side-active shadow-1 before:absolute before:inset-y-1.5 before:-left-[9px] before:w-[3px] before:rounded-full before:bg-tint" transition={{ type: 'spring', stiffness: 600, damping: 45 }} />}
+      <Icon className={cx('relative size-[15px]', active ? 'text-tint' : 'text-fg-3 group-hover:text-fg-2')} strokeWidth={1.8} />
       <span className="relative flex-1 text-left">{label}</span>
       {!!count && <span className="relative rounded bg-accent-soft px-1.5 font-mono text-[11px] font-medium text-accent tabular">{count}</span>}
     </button>
@@ -235,7 +235,7 @@ function StatusBar() {
   }, []);
   const provider = settings?.providers.find((p) => p.id === settings.main.providerId);
   return (
-    <div className="hidden h-7 shrink-0 items-center gap-4 border-t border-line bg-sunken px-4 font-mono text-[11px] text-fg-3 md:flex">
+    <div className="hidden h-7 shrink-0 items-center gap-4 border-t border-side-line bg-side px-4 font-mono text-[11px] text-fg-3 md:flex">
       <span className="flex items-center gap-1.5">
         <StatusDot state={connected ? 'ok' : 'waiting'} className="scale-75" />
         {connected ? 'connected' : 'reconnecting'}
@@ -368,7 +368,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
   return (
     <ShellContext.Provider value={{ openNav: () => setDrawer(true), openPalette: () => setPalette(true) }}>
       <div className="fixed inset-x-0 flex overflow-hidden bg-bg" style={{ top: 'var(--app-top, 0px)', height: 'var(--app-h, 100dvh)' }}>
-        <aside className="hidden w-[244px] shrink-0 border-r border-line bg-sunken md:block">
+        <aside className="hidden w-[244px] shrink-0 border-r border-side-line bg-side md:block">
           <SidebarContent onSearch={() => setPalette(true)} />
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
@@ -396,7 +396,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
                 dragConstraints={{ left: 0, right: 0 }}
                 dragElastic={{ left: 0.4, right: 0 }}
                 onDragEnd={(_, info) => info.offset.x < -70 && setDrawer(false)}
-                className="pt-safe pb-safe absolute inset-y-0 left-0 w-[82%] max-w-[300px] border-r border-line bg-sunken"
+                className="pt-safe pb-safe absolute inset-y-0 left-0 w-[82%] max-w-[300px] border-r border-side-line bg-side"
               >
                 <SidebarContent onNavigate={() => setDrawer(false)} onSearch={() => (setDrawer(false), setPalette(true))} />
               </motion.aside>

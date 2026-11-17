@@ -441,7 +441,7 @@ export function ChatView({ id }: { id: string }) {
                       </div>
                     )}
                     {t.message.content && (
-                      <div className="ml-[26px] whitespace-pre-wrap break-words rounded-lg border border-line bg-panel-2/60 px-3.5 py-2.5 text-[14.5px] leading-relaxed">
+                      <div className="ml-[26px] whitespace-pre-wrap break-words rounded-lg border border-tint/15 bg-tint-soft px-3.5 py-2.5 text-[14.5px] leading-relaxed">
                         {t.message.content.replace(/^\[Scheduled task: [^\]]*\]\n/, '')}
                       </div>
                     )}
