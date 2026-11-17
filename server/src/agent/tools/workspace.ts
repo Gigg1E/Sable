@@ -80,11 +80,35 @@ async function snapshot(): Promise<Map<string, number>> {
   return out;
 }
 
+/**
+ * Find a file the way a model tends to name it: "file:Report.txt", "/workspace/out/report.txt",
+ * or just the file name when it lives in a subfolder (newest match wins).
+ */
+export async function resolveFile(raw: string): Promise<string> {
+  let p = raw.trim().replace(/^(file|sandbox|attachment):\/*/i, '').replace(/^\/?(mnt\/data|workspace)\//i, '');
+  try {
+    p = decodeURIComponent(p);
+  } catch {
+    /* already plain */
+  }
+  try {
+    const st = await fs.stat(await safePath(p));
+    if (st.isFile()) return p;
+  } catch {
+    /* fall through to a name search */
+  }
+  const want = path.basename(p).toLowerCase();
+  let best: { path: string; mtime: number } | null = null;
+  for (const [rp, mtime] of await snapshot()) if (path.basename(rp).toLowerCase() === want && (!best || mtime > best.mtime)) best = { path: rp, mtime };
+  if (!best) throw Object.assign(new Error('This file no longer exists.'), { code: 'ENOENT' });
+  return best.path;
+}
+
 /** File routes for the chat's file cards (behind session auth). */
 export function workspaceRoutes(r: express.Router) {
   r.get('/files/meta', async (req, res) => {
     try {
-      const card = await fileCard(String(req.query.path ?? ''));
+      const card = await fileCard(await resolveFile(String(req.query.path ?? '')));
       let text: string | undefined;
       let truncated = false;
       if (card.kind === 'text') {
@@ -100,7 +124,7 @@ export function workspaceRoutes(r: express.Router) {
   });
   r.get('/files/raw', async (req, res) => {
     try {
-      const card = await fileCard(String(req.query.path ?? ''));
+      const card = await fileCard(await resolveFile(String(req.query.path ?? '')));
       const abs = await safePath(String(card.path));
       res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
       res.setHeader('X-Content-Type-Options', 'nosniff');

@@ -7,7 +7,7 @@ import { Composer, type ComposerHandle } from '../components/Composer';
 import { Logo } from '../components/Logo';
 import { Markdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
-import { CardView, FileGlyph, fmtBytes } from '../components/Cards';
+import { CardView, FileGlyph, fmtBytes, ShownFiles } from '../components/Cards';
 import { Button, Card, CopyButton, Page, Progress, SectionLabel, Spinner, StatusDot, Ticker, TopBar } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
@@ -234,7 +234,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
 
   // Split the turn, in order, into what the agent said along the way ("Let me look that up…"),
   // folded work rows (reasoning and tool calls between those notes) and the final answer.
-  const { segments, final, errors } = useMemo(() => {
+  const { segments, final, errors, shownFiles } = useMemo(() => {
     const results: Record<string, { content: string; isError: boolean; cards: AnyCard[] }> = {};
     for (const m of messages) if (m.role === 'tool' && m.tool_call_id) results[m.tool_call_id] = { content: m.content, isError: m.is_error, cards: m.cards ?? [] };
     const shownFiles = new Set<string>();
@@ -271,7 +271,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
         }
       }
     }
-    return { segments: segs, final: finalMsg, errors: messages.filter((m) => m.role === 'error') };
+    return { segments: segs, final: finalMsg, errors: messages.filter((m) => m.role === 'error'), shownFiles };
   }, [messages, working]);
 
   const started = messages[0]?.created_at ?? since;
@@ -286,7 +286,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
   }
 
   return (
-    <div>
+    <ShownFiles.Provider value={shownFiles}>
       <TurnHeader who={messages.find((m) => m.agent)?.agent ?? streaming?.agent ?? agentName} time={messages[0]?.created_at} agent />
       <div className="pl-[26px]">
         {live.map((seg, i) => {
@@ -316,7 +316,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
           </div>
         ))}
       </div>
-    </div>
+    </ShownFiles.Provider>
   );
 }
 

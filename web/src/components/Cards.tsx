@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, Download, ExternalLink, File, FileCode2, FileImage, FileSpreadsheet, FileText, FileArchive, Globe } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState } from 'react';
 import { cx } from '../lib/format';
 import { onServerEvent } from '../lib/store';
 import type { AnyCard, CommerceCard, FileCardData, ImagesCardData, LinkItem, LinksCardData } from '../lib/types';
@@ -45,6 +45,64 @@ function ago(t: number) {
   return new Date(t).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
+/**
+ * A file the agent mentioned by name in its text. Shows the real file card when the file exists,
+ * and says plainly when it doesn't (the model claimed a file it never saved).
+ */
+/** Files already shown as cards in this turn: a later mention becomes a compact download row, not a second card. */
+export const ShownFiles = createContext<Set<string>>(new Set());
+
+export function FileRef({ path, inline }: { path: string; inline?: boolean }) {
+  const shown = useContext(ShownFiles);
+  const name = path.replace(/^(file|sandbox|attachment):\/*/i, '').split('/').pop() || path;
+  const [state, setState] = useState<'loading' | 'ok' | 'missing'>('loading');
+  const [resolved, setResolved] = useState<FileCardData | null>(null);
+  useEffect(() => {
+    let off = false;
+    void fetch(`/api/files/meta?path=${encodeURIComponent(path)}`, { credentials: 'same-origin' }).then(async (r) => {
+      if (off) return;
+      if (!r.ok) return setState('missing');
+      setResolved(await r.json());
+      setState('ok');
+    });
+    return () => {
+      off = true;
+    };
+  }, [path]);
+  if (inline) {
+    return state === 'ok' && resolved ? (
+      <a href={fileUrl(resolved.path, true)} download={resolved.name} className="source-chip" title={`Download ${resolved.name}`}>
+        <Download className="size-3" /> <span className="truncate">{resolved.name}</span>
+      </a>
+    ) : (
+      <span className={cx('source-chip', state === 'missing' && 'line-through opacity-70')} title={state === 'missing' ? 'Not found in the workspace' : undefined}>
+        <span className="truncate">{name}</span>
+      </span>
+    );
+  }
+  if (state === 'ok' && resolved && shown.has(resolved.path)) {
+    return (
+      <a href={fileUrl(resolved.path, true)} download={resolved.name} className="my-2 flex max-w-full items-center gap-2.5 rounded-lg border border-line bg-panel px-3 py-2 text-[13px] !text-fg !no-underline transition-colors hover:border-line-strong">
+        <FileGlyph name={resolved.name} className="size-7" />
+        <span className="min-w-0 flex-1 truncate font-medium">{resolved.name}</span>
+        <span className="inline-flex shrink-0 items-center gap-1 text-[12px] text-fg-2">
+          <Download className="size-3.5" /> Download
+        </span>
+      </a>
+    );
+  }
+  if (state === 'ok' && resolved) return <FileCard card={resolved} />;
+  return (
+    <div className={cx('my-2.5 flex items-center gap-3 rounded-xl border border-dashed px-3.5 py-3', state === 'missing' ? 'border-danger/40' : 'border-line')}>
+      <FileGlyph name={name} className="opacity-60" />
+      <div className="min-w-0">
+        <div className="truncate text-[13.5px] font-medium">{name}</div>
+        <div className="text-[12px] text-fg-3">{state === 'missing' ? "This file wasn't saved. Ask to save it again and it will appear here as a download." : 'Looking for the file…'}</div>
+      </div>
+    </div>
+  );
+}
+
 /** A workspace file the agent made or changed: live preview, view in full, download. */
 export function FileCard({ card }: { card: FileCardData }) {
   const [meta, setMeta] = useState<(FileCardData & { text?: string; truncated?: boolean }) | null>(null);
@@ -84,15 +142,15 @@ export function FileCard({ card }: { card: FileCardData }) {
         <FileGlyph name={m.name} />
         <div className="min-w-0 flex-1">
           <div className="truncate text-[13.5px] font-medium">{m.name}</div>
-          <div className="flex items-center gap-1.5 font-mono text-[11px] text-fg-3">
-            {gone ? <span className="text-danger">deleted</span> : <span>{fmtBytes(m.size)}</span>}
-            <span>·</span>
+          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap font-mono text-[11px] text-fg-3">
+            {gone ? <span className="text-danger">deleted</span> : <span className="shrink-0">{fmtBytes(m.size)}</span>}
+            <span className="shrink-0">·</span>
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.span key={flash ? 'u' : m.updated} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={flash ? 'text-info' : undefined}>
                 {flash ? 'updated' : `edited ${ago(m.updated)}`}
               </motion.span>
             </AnimatePresence>
-            {m.path !== m.name && <span className="hidden truncate sm:inline">· {m.path}</span>}
+            {m.path !== m.name && <span className="hidden min-w-0 truncate sm:inline">· {m.path.split('/').slice(0, -1).join('/')}/</span>}
           </div>
         </div>
         {!gone && meta?.text !== undefined && <CopyButton text={() => meta?.text ?? ''} label="Copy contents" />}
