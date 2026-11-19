@@ -7,7 +7,7 @@ import { computeNextRun, goalJson, type GoalRow, type ScheduleKind, type Schedul
 import { getTool, listTools } from './agent/tools/registry.js';
 import { syncCalendarTools, testFeed } from './agent/tools/calendar.js';
 import { syncEmailTools } from './agent/tools/email.js';
-import { setSpaceData } from './agent/tools/personal.js';
+import { backfillMemoryEmbeddings, setSpaceData } from './agent/tools/personal.js';
 import { ensureHelpers, helperStatus } from './agent/helpers.js';
 import { PROVIDERS, testAccount } from './email.js';
 import { listConnections, removeConnection, setSecret } from './connections.js';
@@ -409,7 +409,8 @@ export function apiRouter() {
     '/memories',
     h((req) => {
       const mid = id('m_');
-      run('INSERT INTO memories (id, content, source, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', mid, String(req.body?.content ?? '').trim(), 'you', req.body?.kind === 'other' ? 'other' : 'me', now(), now());
+      run('INSERT INTO memories (id, content, source, kind, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)', mid, String(req.body?.content ?? '').trim(), 'you', ['other', 'howto'].includes(req.body?.kind) ? req.body.kind : 'me', now(), now());
+      void backfillMemoryEmbeddings();
       emit({ type: 'memory.changed' });
       return { id: mid };
     }),
@@ -418,7 +419,8 @@ export function apiRouter() {
     '/memories/:id',
     h((req) => {
       if (req.body?.content !== undefined) run('UPDATE memories SET content = ?, embedding = NULL, updated_at = ? WHERE id = ?', String(req.body.content), now(), param(req, 'id'));
-      if (req.body?.kind === 'me' || req.body?.kind === 'other') run('UPDATE memories SET kind = ? WHERE id = ?', req.body.kind, param(req, 'id'));
+      void backfillMemoryEmbeddings();
+      if (['me', 'other', 'howto'].includes(req.body?.kind)) run('UPDATE memories SET kind = ? WHERE id = ?', req.body.kind, param(req, 'id'));
       emit({ type: 'memory.changed' });
     }),
   );

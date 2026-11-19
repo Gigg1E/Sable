@@ -8,7 +8,7 @@ import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
 import { isRestricted, preapprovalFor, shouldNotifyAfterRun, type Preapproval } from './automation.js';
 import { searchTools, selectTools } from './routing.js';
-import { relevantMemories } from './tools/personal.js';
+import { relevantMemories, toolsMentioned } from './tools/personal.js';
 import { attachmentForModel, attachmentInfo, claimUploads, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
@@ -541,8 +541,13 @@ async function execute(runId: string, conversationId: string, controller: AbortC
     const history = loadHistory(conversationId, s.main.contextMessages);
     const lastUser = [...history.messages].reverse().find((m) => m.role === 'user');
     const query = typeof lastUser?.content === 'string' ? lastUser.content.slice(0, 2000) : '';
-    const picked = await selectTools(mainTools(), query, recentGroups(conversationId));
     const memories = await relevantMemories(query);
+    // How-to memories that name tools make sure those tools are loaded.
+    const allTools = mainTools();
+    const wanted = new Set(toolsMentioned(memories, allTools.map((t) => t.name)).map((n) => allTools.find((t) => t.name === n)!.group));
+    const picked = await selectTools(allTools, query, new Set([...recentGroups(conversationId), ...wanted]));
+    // A correction or standing instruction is a chance to learn a how-to.
+    const correction = /\b(no,? use|use (?:a |the )?\w+ instead|instead of|next time|from now on|always (?:use|do|send|check)|never (?:use|do|send)|don'?t use|stop using|i (?:want|prefer) you to (?:use|do)|that should(?: have)? been)\b/i.test(query);
     const answer = await agentLoop({
       runId,
       conversationId,
@@ -552,7 +557,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
       effort: s.main.effort,
       temperature: s.main.temperature,
       contextLength: s.main.contextLength,
-      system: mainSystemPrompt({ memories, toolNote: picked.method === 'all' ? '' : 'Only the tools relevant to this request are loaded. If you need a tool you don\'t see (email, calendar, watchers, routines, webhooks, shopping, files, spaces…), call tools_search first.' }),
+      system: mainSystemPrompt({ memories, learnNote: correction ? 'The user\'s last message sounds like a correction or a standing instruction about how to handle this kind of request. Follow it, and if it should apply next time too, save it with memory_save kind "howto".' : '', toolNote: picked.method === 'all' ? '' : 'Only the tools relevant to this request are loaded. If you need a tool you don\'t see (email, calendar, watchers, routines, webhooks, shopping, files, spaces…), call tools_search first.' }),
       messages: history.messages,
       historyTrimmed: history.trimmed,
       tools: picked.tools,

@@ -13,7 +13,7 @@ const SAFETY = `## Trust and safety
 - On the web and on calls you are an automated agent acting for the user. Never claim to be human.
 - Never reveal API keys or credentials, and never send the user's personal data anywhere they didn't ask for.`;
 
-export function mainSystemPrompt(ctx: { memories?: MemoryRow[]; toolNote?: string } = {}): string {
+export function mainSystemPrompt(ctx: { memories?: MemoryRow[]; toolNote?: string; learnNote?: string } = {}): string {
   const s = getSettings();
   const memories = ctx.memories ?? listMemories(40);
   const routines = all<{ title: string; kind: string }>('SELECT title, kind FROM schedules WHERE enabled = 1 ORDER BY created_at DESC LIMIT 12');
@@ -36,6 +36,7 @@ ${s.persona.about ? `\n## About the user (written by them)\n${s.persona.about}\n
 - For a job that needs more than two or three actions, create a goal (goal_create) with a short plan and update the steps as you go (goal_update). Finish by marking the goal done and summarizing the outcome.
 - Use tools instead of guessing. Check facts that may have changed (prices, hours, news) on the web.
 - When a decision is genuinely the user's (a budget, a date, choosing between options), ask a short question instead of assuming.
+- Learning how the user works: when they correct how you handled something ("no, use a watcher for that", "send those to my Discord instead", "don't search the web for this, check my email") or tell you how they want a kind of request done, do it their way AND save it with memory_save kind "howto" as "When <situation>: <what to do, which tools>". If an existing how-to is wrong or outdated, update or forget it.
 - Memory: when you learn a lasting fact that will matter later, save it with memory_save: kind "me" for the user themself, "other" for people, places and things in their life (e.g. someone's email address). Never save tasks or requests ("watch my email" is a watcher, not a memory). Don't save trivia or secrets. Use memory_forget when asked to forget something.
 - Spaces: when the user wants a tracker, dashboard, planner, checklist or board, build a Space (space_create) as a polished, responsive mini-app, and update it later with space_update.
 - Background work: use schedule_create for anything recurring or later ("every morning", "remind me Friday"). Reminders and briefings use notify "always". Checks ("tell me when X emails me", "let me know if this changes") use notify "when_new" and a sensible interval (15-60 minutes): the user must only hear about something NEW, never that nothing changed.
@@ -54,7 +55,9 @@ ${SAFETY}
 
 ## What you remember
 About the user:
-${memories.filter((m) => m.kind !== 'other').map((m) => `- [${m.id}] ${m.content}`).join('\n') || '(nothing yet)'}${
+${memories.filter((m) => m.kind === 'me' || !m.kind).map((m) => `- [${m.id}] ${m.content}`).join('\n') || '(nothing yet)'}${
+    memories.some((m) => m.kind === 'howto') ? `\nHow the user wants things like this done (follow these unless they say otherwise):\n${memories.filter((m) => m.kind === 'howto').map((m) => `- [${m.id}] ${m.content}`).join('\n')}` : ''
+  }${
     memories.some((m) => m.kind === 'other') ? `\nPeople, places and things that relate to this message:\n${memories.filter((m) => m.kind === 'other').map((m) => `- [${m.id}] ${m.content}`).join('\n')}` : ''
   }
 (memory_search finds anything else you saved.)
@@ -62,7 +65,7 @@ ${memories.filter((m) => m.kind !== 'other').map((m) => `- [${m.id}] ${m.content
 ## Automations already running
 ${routines.length ? `Routines: ${routines.map((r) => r.title).join('; ')}` : 'Routines: none'}
 ${watchers.length ? `Watchers: ${watchers.map((w) => `${w.title} (${w.source ?? 'web'})`).join('; ')}` : 'Watchers: none'}
-${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}
+${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}${ctx.learnNote ? `\n${ctx.learnNote}\n` : ''}
 
 ## Active goals
 ${goals.length ? goals.map((g) => `- ${g.id}: ${g.title} [${g.status}]`).join('\n') : '(none)'}

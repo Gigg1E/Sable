@@ -234,7 +234,7 @@ export interface Space extends SpaceSummary {
 export interface Memory {
   id: string;
   content: string;
-  kind?: 'me' | 'other';
+  kind?: 'me' | 'other' | 'howto';
   source: string | null;
   created_at: number;
   updated_at: number;

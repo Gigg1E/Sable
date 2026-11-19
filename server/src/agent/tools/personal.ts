@@ -15,7 +15,7 @@ export interface MemoryRow {
   id: string;
   content: string;
   source: string | null;
-  kind: 'me' | 'other';
+  kind: 'me' | 'other' | 'howto';
   embedding: string | null;
   created_at: number;
   updated_at: number;
@@ -36,23 +36,37 @@ async function vectorFor(text: string): Promise<number[] | null> {
   return v?.[0] ?? null;
 }
 
-/** Memories for a message: every "me" memory (up to 25) plus the "other" ones that relate to it. */
+/**
+ * Memories for a message: every "me" memory (up to 25), plus the "other" ones (people, things) and
+ * "howto" ones (how the user wants tools used in a situation) that relate to it.
+ */
 export async function relevantMemories(query: string): Promise<MemoryRow[]> {
   const rows = listMemories(2000);
-  const me = rows.filter((m) => m.kind !== 'other').slice(0, 25);
-  const others = rows.filter((m) => m.kind === 'other');
-  if (!others.length || !query.trim()) return me;
+  const me = rows.filter((m) => m.kind === 'me' || !m.kind).slice(0, 25);
+  const rest = rows.filter((m) => m.kind === 'other' || m.kind === 'howto');
+  if (!rest.length || !query.trim()) return me;
   const qv = await vectorFor(query);
   const qw = words(query);
-  const scored = others
-    .map((m) => {
-      const v = qv && m.embedding ? parseJson<number[] | null>(m.embedding, null) : null;
-      return { m, s: (v && qv ? cosine(qv, v) * 10 : 0) + overlap(qw, m.content) * 1.5 };
-    })
-    .filter((x) => x.s >= (qv ? 4 : 1))
-    .sort((a, b) => b.s - a.s)
-    .slice(0, 8);
-  return [...me, ...scored.map((x) => x.m)];
+  const score = (m: MemoryRow) => {
+    const v = qv && m.embedding ? parseJson<number[] | null>(m.embedding, null) : null;
+    // Without a vector for both sides, keywords alone decide (with a matching lower bar).
+    return { s: (v && qv ? cosine(qv, v) * 10 : 0) + overlap(qw, m.content) * 1.5, bar: v && qv ? 4 : 2.5 };
+  };
+  const pick = (kind: string, n: number) =>
+    rest
+      .filter((m) => m.kind === kind)
+      .map((m) => ({ m, ...score(m) }))
+      .filter((x) => x.s >= x.bar)
+      .sort((a, b) => b.s - a.s)
+      .slice(0, n)
+      .map((x) => x.m);
+  return [...me, ...pick('other', 8), ...pick('howto', 6)];
+}
+
+/** Tools a how-to memory mentions by name, so the preferred tools are loaded for the run. */
+export function toolsMentioned(memories: MemoryRow[], toolNames: string[]): string[] {
+  const text = memories.filter((m) => m.kind === 'howto').map((m) => m.content.toLowerCase()).join(' ');
+  return toolNames.filter((n) => text.includes(n.toLowerCase()) || text.includes(n.replace(/_/g, ' ').toLowerCase()));
 }
 
 /** Fill in missing embeddings in the background (old memories, or saved while the helper was installing). */
@@ -69,10 +83,10 @@ registerTool({
   label: 'Remember',
   group: 'Memory',
   description:
-    'Save a lasting fact, one per call. kind "me": about the user (lives in Florida, vegetarian, works nights). kind "other": about people, places or things in their life (Sam is the landlord, sam@example.com; the car is a 2019 Civic). Do NOT save tasks, requests or instructions ("monitor my email", "remind me…"): those become routines or watchers, which are stored on their own. Don\'t save one-off details or things only relevant to this conversation.',
+    'Save something lasting, one per call. kind "me": about the user (lives in Florida, vegetarian, works nights). kind "other": about people, places or things in their life (Sam is the landlord, sam@example.com; the car is a 2019 Civic). kind "howto": how the user wants a kind of request handled, learned when they correct or instruct how you use tools; write it as "When <situation>: <what to do, which tools>" (e.g. "When tracking a package: use an email watcher on the carrier\'s shipping emails, not a routine", "When posting deals: send them to the Deals Discord webhook with webhook_send"). Do NOT save one-off tasks or requests ("monitor my email" itself is a watcher, not a memory). Don\'t save details only relevant to this conversation.',
   parameters: {
     type: 'object',
-    properties: { content: { type: 'string', description: 'The fact, in one short sentence.' }, kind: { type: 'string', enum: ['me', 'other'] } },
+    properties: { content: { type: 'string', description: 'One short sentence (howto: "When <situation>: <what to do>").' }, kind: { type: 'string', enum: ['me', 'other', 'howto'] } },
     required: ['content'],
   },
   risk: 'low',
@@ -81,9 +95,12 @@ registerTool({
   async run(a, ctx) {
     const content = String(a.content).trim();
     if (!content) return 'Nothing to save.';
-    if (looksLikeTask(content))
+    const kindIn = a.kind === 'other' || a.kind === 'howto' ? a.kind : 'me';
+    if (kindIn === 'howto' && !/^(when|if|for|whenever|always|never|prefer|don'?t|use)\b/i.test(content))
+      return 'Not saved: write a how-to as "When <situation>: <what to do and which tools>", so it applies to future requests rather than this one.';
+    if (kindIn !== 'howto' && looksLikeTask(content))
       return 'Not saved: that is a task or instruction, not a fact. Automations (routines, watchers) are stored on their own; only save lasting facts about the user or the people and things in their life.';
-    const kind = a.kind === 'other' ? 'other' : 'me';
+    const kind = kindIn;
     const v = await vectorFor(content);
     // Same fact again (or an update of it): replace instead of piling up near-duplicates.
     const dup = v
@@ -119,7 +136,7 @@ registerTool({
       .filter((x) => x.s >= (qv ? 3 : 1) || !qw.size)
       .sort((x, y) => y.s - x.s)
       .slice(0, 20);
-    return rows.length ? rows.map((r) => `[${r.m.id}] (${r.m.kind === 'other' ? 'other' : 'about the user'}) ${r.m.content}`).join('\n') : 'No matching memories.';
+    return rows.length ? rows.map((r) => `[${r.m.id}] (${r.m.kind === 'other' ? 'other' : r.m.kind === 'howto' ? 'how-to' : 'about the user'}) ${r.m.content}`).join('\n') : 'No matching memories.';
   },
 });
 

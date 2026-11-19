@@ -30,11 +30,11 @@ function MemoryRow({ m }: { m: Memory }) {
         <>
           <span className="min-w-0 flex-1 text-[13.5px]">{m.content}</span>
           <button
-            onClick={() => void api.patch(`/memories/${m.id}`, { kind: m.kind === 'other' ? 'me' : 'other' })}
-            title="Switch between 'About you' and 'People & things'"
-            className={cx('h-5 shrink-0 rounded px-1.5 text-[11px]', m.kind === 'other' ? 'bg-panel-3 text-fg-2' : 'bg-tint-soft text-tint')}
+            onClick={() => void api.patch(`/memories/${m.id}`, { kind: m.kind === 'other' ? 'howto' : m.kind === 'howto' ? 'me' : 'other' })}
+            title="Click to switch: About you, People & things, How-to"
+            className={cx('h-5 shrink-0 rounded px-1.5 text-[11px]', m.kind === 'other' ? 'bg-panel-3 text-fg-2' : m.kind === 'howto' ? 'bg-accent-soft text-accent' : 'bg-tint-soft text-tint')}
           >
-            {m.kind === 'other' ? 'people & things' : 'about you'}
+            {m.kind === 'other' ? 'people & things' : m.kind === 'howto' ? 'how-to' : 'about you'}
           </button>
           <Badge tone="outline">{m.source === 'you' ? 'you' : 'learned'}</Badge>
           <span className="hidden w-16 text-right font-mono text-[11px] text-fg-3 sm:block">{timeAgo(m.updated_at)}</span>
@@ -62,13 +62,13 @@ export function MemoryView() {
     return onServerEvent((ev) => ev.type === 'memory.changed' && load());
   }, [load]);
 
-  const [tab, setTab] = useState<'all' | 'me' | 'other'>('all');
+  const [tab, setTab] = useState<'all' | 'me' | 'other' | 'howto'>('all');
   async function add() {
     if (!draft.trim()) return;
-    await api.post('/memories', { content: draft.trim(), kind: tab === 'other' ? 'other' : 'me' });
+    await api.post('/memories', { content: draft.trim(), kind: tab === 'other' || tab === 'howto' ? tab : 'me' });
     setDraft('');
   }
-  const shown = (memories ?? []).filter((m) => (!q || m.content.toLowerCase().includes(q.toLowerCase())) && (tab === 'all' || (tab === 'other' ? m.kind === 'other' : m.kind !== 'other')));
+  const shown = (memories ?? []).filter((m) => (!q || m.content.toLowerCase().includes(q.toLowerCase())) && (tab === 'all' || (tab === 'me' ? m.kind === 'me' || !m.kind : m.kind === tab)));
 
   return (
     <>
@@ -76,7 +76,7 @@ export function MemoryView() {
       <Page width="md">
         <PageIntro
           title="Memory"
-          description="Lasting facts the agent keeps. 'About you' is always in mind; 'People & things' (contacts, places, accounts) only comes up when a conversation is about them. Tasks are never saved here: those are routines and watchers."
+          description="Lasting facts the agent keeps. 'About you' is always in mind; 'People & things' (contacts, places, accounts) only comes up when a conversation is about them. 'How-to' is how you like things done, learned from your corrections (e.g. use an email watcher for packages), and it applies whenever a similar request comes up."
         />
         <div className="mb-3">
           <Segmented
@@ -88,11 +88,12 @@ export function MemoryView() {
               { value: 'all', label: `All${memories ? ` ${memories.length}` : ''}` },
               { value: 'me', label: 'About you' },
               { value: 'other', label: 'People & things' },
+              { value: 'howto', label: 'How-to' },
             ]}
           />
         </div>
         <div className="mb-4 flex gap-2">
-          <Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} placeholder="Add a fact, e.g. “I'm vegetarian”" />
+          <Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} placeholder={tab === 'howto' ? 'e.g. “When tracking a package: use an email watcher, not a routine”' : 'Add a fact, e.g. “I\'m vegetarian”'} />
           <Button variant="primary" onClick={() => void add()} disabled={!draft.trim()}>
             <Plus className="size-3.5" /> Add
           </Button>

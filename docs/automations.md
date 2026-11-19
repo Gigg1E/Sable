@@ -75,7 +75,11 @@ Two kinds, shown as tabs on the **Memory** page (click a memory's label to switc
 - **About you:** where you live, preferences, how you work. Always in the agent's mind.
 - **People & things:** contacts, places, accounts, items ("Sam is my landlord, sam@example.com"). Only brought up when a message is about them.
 
-Tasks and requests ("monitor my email", "remind me…") are refused as memories, because they belong in routines and watchers. Saving the same fact twice updates it instead of duplicating it. The agent also sees a short list of your running routines and watchers, so it knows what's already set up.
+- **How-to:** how you like a kind of request handled, learned from how you instruct and correct it. Written as *"When <situation>: <what to do, which tools>"*, e.g. *"When tracking a package: use an email watcher on the carrier's shipping emails, not a routine"* or *"When posting deals: send them to the Deals Discord webhook"*.
+
+How-to memories are learned automatically. When you correct Sable or give it a standing instruction ("no, use a watcher for that", "from now on send those to Discord", "don't search the web for this, check my email"), it does it your way and saves the lesson. Next time a similar request comes up, the matching how-to is in front of it, and **the tools it names are loaded** so it can follow it. Edit, re-label or delete them on the Memory page (How-to tab), or tell Sable a how-to is wrong.
+
+Plain tasks and requests ("monitor my email", "remind me…") are refused as memories, because they belong in routines and watchers. Saving the same fact twice updates it instead of duplicating it. The agent also sees a short list of your running routines and watchers, so it knows what's already set up.
 
 ## Tool and memory selection (helper model)
 
