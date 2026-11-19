@@ -86,4 +86,12 @@ A small embedding model (`embeddinggemma`, about 300 MB) installs itself in Olla
 - The same model picks which "people & things" memories are relevant.
 - Without Ollama, it falls back to keyword matching. Turning it off sends every tool and memory, as before.
 
-*(Spaces are being rebuilt to this design next.)*
+## Spaces
+
+Spaces are live mini apps the agent builds: trackers, dashboards, shopping lists, planners. The agent decides what's on them and how they're laid out. **Sable controls the styling**, so they always fit the app:
+
+- **Built-in look:** headings, buttons, inputs, tables and lists are styled for light and dark mode automatically. There are ready-made pieces too: cards, grids, badges, stats, progress bars, tabs.
+- **Their own personality:** each space can pick an accent color, corner style (sharp, soft, round), font (sans, serif, mono, rounded) and spacing. Accents are lifted slightly in dark mode so they stay readable.
+- **No more black-on-dark text:** hard-coded black, white and grey colors in a space's code are switched to theme colors, and any text that's still unreadable is fixed when the space loads.
+- **Live data:** a space renders from its data. When the agent, a watcher or a routine updates that data ("set the new price"), an open space updates instantly, without reloading. Example: a shopping-list space with one watcher per item writing its current price.
+- **Buttons that do things:** a space button can ask a quick question, or start a real task with the agent's tools ("check every price now and update the list"). That task runs in the space's chat.

@@ -94,6 +94,20 @@ export function SpaceFrame({ space, nonce = 0, className }: { space: Space; nonc
   const frame = useRef<HTMLIFrameElement>(null);
   const id = space.id;
   const dataRef = useRef<Record<string, unknown>>({});
+  // Keys this frame just wrote: don't bounce the server's echo back into it.
+  const echoes = useRef(new Set<string>());
+  // Live data: the agent, watchers and routines update a space without reloading it.
+  useEffect(
+    () =>
+      onServerEvent((ev) => {
+        if (ev.type !== 'space.data' || ev.id !== id) return;
+        const key = String(ev.key);
+        dataRef.current[key] = ev.value;
+        if (echoes.current.delete(key)) return;
+        frame.current?.contentWindow?.postMessage({ __sableData: true, key, value: ev.value }, '*');
+      }),
+    [id],
+  );
   useEffect(() => {
     if (space) dataRef.current = { ...space.data };
   }, [space]);
@@ -107,8 +121,12 @@ export function SpaceFrame({ space, nonce = 0, className }: { space: Space; nonc
         else if (type === 'all') reply(dataRef.current);
         else if (type === 'set') {
           dataRef.current[payload.key] = payload.value;
+          echoes.current.add(payload.key);
           await api.put(`/spaces/${id}/data`, { key: payload.key, value: payload.value });
           reply(true);
+        } else if (type === 'act') {
+          const r = await api.post<{ conversationId: string }>(`/spaces/${id}/act`, { prompt: String(payload.prompt) });
+          reply({ started: true, conversationId: r.conversationId });
         } else if (type === 'ask') {
           const r = await api.post<{ text: string }>(`/spaces/${id}/ask`, { prompt: String(payload.prompt) });
           reply(r.text);

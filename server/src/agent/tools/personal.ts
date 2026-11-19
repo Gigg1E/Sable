@@ -270,7 +270,7 @@ registerTool({
   label: 'Build space',
   group: 'Spaces',
   description:
-    'Build a Space: a small self-contained app (tracker, dashboard, planner, mood board, checklist…) the user can pin and reopen. Provide a complete HTML document body with inline <style> and <script>. Persist data with `await sable.get(key)` / `await sable.set(key, value)` (JSON values), read everything with `await sable.all()`, and ask the agent with `await sable.ask(prompt)` (returns text). Scripts may load libraries from cdn.jsdelivr.net or cdnjs.cloudflare.com; there is no other network access. Use ONLY the CSS variables --bg, --surface, --surface-2, --fg, --muted, --subtle, --accent, --ok, --danger, --border, --radius for colors (e.g. color: var(--fg); background: var(--surface)) so it works in both light and dark mode: never hard-code colors like #000, black, white or #fff for text or backgrounds. Aim for a calm, tool-like look: 1px borders, small radii, generous spacing, no gradients or emoji decoration, and make it responsive.',
+    'Build a Space: a live mini-app the user can pin and open beside the chat (tracker, dashboard, shopping list, planner, checklist…). Write the HTML body with your own layout, inline <style> for layout and <script> for behaviour. Sable styles it for you: plain elements (headings, buttons, inputs, tables, lists) already look right in light and dark, and these classes are ready to use: card, grid, row, col, spread, stack, list, badge (accent/ok/danger), stat (.value/.label), progress (>span width), tabs (>button.active), empty, primary/danger buttons, muted. Give it a personality with theme (accent color, radius, font, density) rather than hard-coded colors; for colors in your CSS use only var(--fg), var(--muted), var(--subtle), var(--bg), var(--surface), var(--surface-2), var(--border), var(--accent), var(--ok), var(--danger). Data: `await sable.all()`, `await sable.get(key)`, `await sable.set(key, value)` (JSON) persist it; `sable.on(key, value => …)` (or sable.on(fn) for any key) re-renders when the data changes from outside (you, watchers or routines updating it with space_data_set), so render from data and subscribe instead of hard-coding values. Buttons can call `await sable.ask(prompt)` for a quick text answer, or `sable.act(prompt)` to start a task with your tools (e.g. "check the prices of every item now and update the space"). Libraries may load from cdn.jsdelivr.net or cdnjs.cloudflare.com; there is no other network access. Make it responsive.',
   parameters: {
     type: 'object',
     properties: {
@@ -279,6 +279,12 @@ registerTool({
       icon: { type: 'string', description: 'A single emoji' },
       html: { type: 'string' },
       data: { type: 'object', description: 'Optional initial data (key → JSON value)' },
+      theme: {
+        type: 'object',
+        description: 'Look of this space: accent (any CSS color), radius sharp|soft|round, font sans|serif|mono|rounded, density compact|comfortable|airy',
+        properties: { accent: { type: 'string' }, radius: { type: 'string', enum: ['sharp', 'soft', 'round'] }, font: { type: 'string', enum: ['sans', 'serif', 'mono', 'rounded'] }, density: { type: 'string', enum: ['compact', 'comfortable', 'airy'] } },
+      },
+
     },
     required: ['title', 'html'],
   },
@@ -288,8 +294,8 @@ registerTool({
   async run(a, ctx) {
     const sid = id('s_');
     run(
-      'INSERT INTO spaces (id, title, description, icon, html, data, pinned, conversation_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?)',
-      sid, String(a.title), String(a.description ?? ''), String(a.icon ?? '✨'), String(a.html), JSON.stringify(a.data ?? {}), ctx.conversationId, now(), now(),
+      'INSERT INTO spaces (id, title, description, icon, html, data, pinned, conversation_id, created_at, updated_at, theme) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?)',
+      sid, String(a.title), String(a.description ?? ''), String(a.icon ?? '✨'), String(a.html), JSON.stringify(a.data ?? {}), ctx.conversationId, now(), now(), a.theme ? JSON.stringify(a.theme) : null,
     );
     emit({ type: 'space.changed', id: sid, conversationId: ctx.conversationId });
     return `Space ${sid} created. The user can open it from Spaces.`;
@@ -300,7 +306,7 @@ registerTool({
   name: 'space_update',
   label: 'Update space',
   group: 'Spaces',
-  description: 'Update a Space: replace its html, title or description, and/or merge keys into its stored data.',
+  description: 'Update a Space: replace its html, title, description or theme, and/or merge keys into its stored data. To change only data (prices, items, status), prefer space_data_set: it updates the open space live without reloading it.',
   parameters: {
     type: 'object',
     properties: {
@@ -309,6 +315,11 @@ registerTool({
       description: { type: 'string' },
       html: { type: 'string' },
       data: { type: 'object', description: 'Keys to merge into the stored data' },
+      theme: {
+        type: 'object',
+        description: 'Look of this space: accent (any CSS color), radius sharp|soft|round, font sans|serif|mono|rounded, density compact|comfortable|airy',
+        properties: { accent: { type: 'string' }, radius: { type: 'string', enum: ['sharp', 'soft', 'round'] }, font: { type: 'string', enum: ['sans', 'serif', 'mono', 'rounded'] }, density: { type: 'string', enum: ['compact', 'comfortable', 'airy'] } },
+      },
     },
     required: ['id'],
   },
@@ -320,11 +331,55 @@ registerTool({
     if (!s) return 'No space with that id.';
     const data = { ...parseJson<Record<string, unknown>>(s.data, {}), ...((a.data as object) ?? {}) };
     run(
-      'UPDATE spaces SET title = COALESCE(?, title), description = COALESCE(?, description), html = COALESCE(?, html), data = ?, updated_at = ? WHERE id = ?',
-      (a.title as string) ?? null, (a.description as string) ?? null, (a.html as string) ?? null, JSON.stringify(data), now(), s.id,
+      'UPDATE spaces SET title = COALESCE(?, title), description = COALESCE(?, description), html = COALESCE(?, html), data = ?, theme = COALESCE(?, theme), updated_at = ? WHERE id = ?',
+      (a.title as string) ?? null, (a.description as string) ?? null, (a.html as string) ?? null, JSON.stringify(data), a.theme ? JSON.stringify(a.theme) : null, now(), s.id,
     );
     emit({ type: 'space.changed', id: s.id, conversationId: ctx.conversationId });
     return 'Space updated.';
+  },
+});
+
+/** Set one data key of a space and push it to any open copy live (no reload). */
+export function setSpaceData(spaceId: string, key: string, value: unknown) {
+  const s = get<{ id: string; data: string }>('SELECT id, data FROM spaces WHERE id = ?', spaceId);
+  if (!s) return false;
+  const data = { ...parseJson<Record<string, unknown>>(s.data, {}), [key]: value };
+  const json = JSON.stringify(data);
+  if (json.length > 2_000_000) throw new Error('Space data is too large');
+  run('UPDATE spaces SET data = ? WHERE id = ?', json, s.id);
+  emit({ type: 'space.data', id: s.id, key, value });
+  return true;
+}
+
+registerTool({
+  name: 'space_data_set',
+  label: 'Update space data',
+  group: 'Spaces',
+  description:
+    "Set one key of a Space's data (any JSON value); the space updates live if it's open. Use it to keep spaces in sync, e.g. a watcher writing the latest price into a shopping list space. Read the current value first with space_data_get when you only change part of it.",
+  parameters: { type: 'object', properties: { id: { type: 'string', description: 'Space id' }, key: { type: 'string' }, value: { description: 'Any JSON value' } }, required: ['id', 'key', 'value'] },
+  risk: 'low',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Update ${a.key} in space ${a.id}`,
+  async run(a) {
+    return setSpaceData(String(a.id), String(a.key), a.value) ? `Set ${a.key}.` : 'No space with that id. Use space_list.';
+  },
+});
+
+registerTool({
+  name: 'space_data_get',
+  label: 'Read space data',
+  group: 'Spaces',
+  description: "Read a Space's data: one key, or all of it.",
+  parameters: { type: 'object', properties: { id: { type: 'string' }, key: { type: 'string' } }, required: ['id'] },
+  risk: 'low',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Read space ${a.id}${a.key ? ` · ${a.key}` : ''}`,
+  async run(a) {
+    const s = get<{ data: string }>('SELECT data FROM spaces WHERE id = ?', String(a.id));
+    if (!s) return 'No space with that id.';
+    const data = parseJson<Record<string, unknown>>(s.data, {});
+    return JSON.stringify(a.key ? (data[String(a.key)] ?? null) : data, null, 1).slice(0, 30_000);
   },
 });
 

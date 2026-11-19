@@ -7,6 +7,7 @@ import { computeNextRun, goalJson, type GoalRow, type ScheduleKind, type Schedul
 import { getTool, listTools } from './agent/tools/registry.js';
 import { syncCalendarTools, testFeed } from './agent/tools/calendar.js';
 import { syncEmailTools } from './agent/tools/email.js';
+import { setSpaceData } from './agent/tools/personal.js';
 import { ensureHelpers, helperStatus } from './agent/helpers.js';
 import { PROVIDERS, testAccount } from './email.js';
 import {
@@ -482,7 +483,7 @@ export function apiRouter() {
   // Spaces render from their own URL with a sandbox CSP: their scripts get an opaque origin and no
   // network, so a space can never act as you, even if its HTML was influenced by a web page.
   r.get('/spaces/:id/frame', (req, res) => {
-    const s = get<{ html: string }>('SELECT html FROM spaces WHERE id = ?', param(req, 'id'));
+    const s = get<{ html: string; theme: string | null }>('SELECT html, theme FROM spaces WHERE id = ?', param(req, 'id'));
     if (!s) return res.status(404).type('text').send('Not found');
     res.setHeader('Content-Security-Policy', [
       "default-src 'none'",
@@ -499,17 +500,18 @@ export function apiRouter() {
     ].join('; '));
     res.setHeader('X-Frame-Options', 'SAMEORIGIN');
     res.setHeader('Cache-Control', 'no-store');
-    res.type('html').send(spaceFrameHtml(s.html, req.query.theme === 'light' ? 'light' : 'dark'));
+    res.type('html').send(spaceFrameHtml(s.html, req.query.theme === 'light' ? 'light' : 'dark', parseJson(s.theme, {})));
   });
   r.put(
     '/spaces/:id/data',
     h((req) => {
       const s = get<{ data: string }>('SELECT data FROM spaces WHERE id = ?', param(req, 'id'));
       if (!s) throw new HttpError(404, 'Not found');
-      const data = { ...parseJson<Record<string, unknown>>(s.data, {}), [String(req.body?.key)]: req.body?.value };
-      const json = JSON.stringify(data);
-      if (json.length > 2_000_000) throw new HttpError(413, 'Space data is too large');
-      run('UPDATE spaces SET data = ? WHERE id = ?', json, param(req, 'id'));
+      try {
+        setSpaceData(param(req, 'id'), String(req.body?.key), req.body?.value);
+      } catch (err) {
+        throw new HttpError(413, errorMessage(err));
+      }
       return { ok: true };
     }),
   );
@@ -520,6 +522,26 @@ export function apiRouter() {
       if (!s) throw new HttpError(404, 'Not found');
       const system = `You are ${getSettings().persona.name}, answering a request made from inside the user's "${s.title}" Space (a mini-app). Reply with only what was asked for, no preamble. If JSON is requested, reply with JSON only.\n\nSpace data:\n${s.data.slice(0, 20_000)}`;
       return { text: await quickAnswer(system, String(req.body?.prompt ?? '')) };
+    }),
+  );
+
+  // A space button starting a real task: runs in the space's own chat with the agent's tools.
+  r.post(
+    '/spaces/:id/act',
+    h((req) => {
+      const s = get<{ id: string; title: string; conversation_id: string | null }>('SELECT id, title, conversation_id FROM spaces WHERE id = ?', param(req, 'id'));
+      if (!s) throw new HttpError(404, 'Not found');
+      let cid = s.conversation_id;
+      if (!cid || !get('SELECT id FROM conversations WHERE id = ?', cid)) {
+        cid = createConversation(s.title, 'chat');
+        run('UPDATE spaces SET conversation_id = ? WHERE id = ?', cid, s.id);
+      }
+      const prompt = String(req.body?.prompt ?? '').slice(0, 4000);
+      if (!prompt) throw new HttpError(400, 'Empty request');
+      const msg = `[From the "${s.title}" space (${s.id})] ${prompt}\n(Update the space's data with space_data_set as you go; it updates live.)`;
+      const busy = activeRunFor(cid);
+      if (busy) return { ...interject(cid, msg), conversationId: cid };
+      return { runId: startRun(cid, msg), conversationId: cid };
     }),
   );
 
