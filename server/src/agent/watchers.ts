@@ -498,6 +498,33 @@ registerTool({
 });
 
 registerTool({
+  name: 'watch_update',
+  label: 'Change watcher',
+  group: 'Watchers',
+  description:
+    'Change an existing watcher (find its id with watch_list): title, interval_min, enabled (false pauses it), or whether it notifies. Use this when the user wants a watcher quieter, less frequent or paused, instead of creating another.',
+  parameters: {
+    type: 'object',
+    properties: { id: { type: 'string' }, title: { type: 'string' }, interval_min: { type: 'number' }, enabled: { type: 'boolean' }, notify: { type: 'boolean' } },
+    required: ['id'],
+  },
+  risk: 'low',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Change watcher ${a.id}`,
+  async run(a) {
+    const w = get<WatcherRow>('SELECT * FROM watchers WHERE id = ?', String(a.id));
+    if (!w) return 'No watcher with that id. Use watch_list to find it.';
+    const actions = { ...JSON.parse(w.actions || '{}'), ...(a.notify === undefined ? {} : { notify: !!a.notify }) };
+    run(
+      'UPDATE watchers SET title = COALESCE(?, title), interval_min = COALESCE(?, interval_min), enabled = COALESCE(?, enabled), actions = ? WHERE id = ?',
+      (a.title as string) ?? null, a.interval_min === undefined ? null : Math.max(5, Math.round(Number(a.interval_min))), a.enabled === undefined ? null : a.enabled ? 1 : 0, JSON.stringify(actions), w.id,
+    );
+    emit({ type: 'watcher.changed', id: w.id });
+    return 'Watcher updated.';
+  },
+});
+
+registerTool({
   name: 'watch_delete',
   label: 'Delete watcher',
   group: 'Watchers',

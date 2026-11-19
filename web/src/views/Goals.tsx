@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { CalendarClock, Check, ChevronRight, ListChecks, MessageSquare, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Empty, Field, IconButton, Input, Page, PageIntro, Progress, Segmented, Select, Sheet, Textarea, Toggle, TopBar, listItem } from '../components/ui';
+import { Badge, Button, Card, Empty, Field, IconButton, Input, Page, PageIntro, Progress, Segmented, Select, Sheet, Textarea, Tip, Toggle, TopBar, listItem } from '../components/ui';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
@@ -290,6 +290,14 @@ export function RoutinesView() {
                     <div className="truncate text-[12.5px] text-fg-3">{s.prompt}</div>
                   </div>
                   <span className="w-36 text-[12.5px] text-fg-2">{describe(s)}</span>
+                  <Tip label={s.notify === 'when_new' ? 'Notifies only when the check finds something new. Click to notify every run.' : 'Notifies every run. Click to notify only when something new is found.'}>
+                    <button
+                      onClick={() => void api.patch(`/schedules/${s.id}`, { notify: s.notify === 'when_new' ? 'always' : 'when_new' }).then(() => load())}
+                      className={cx('h-6 shrink-0 rounded-md border px-2 text-[11.5px] transition-colors', s.notify === 'when_new' ? 'border-tint/30 bg-tint-soft text-tint' : 'border-line text-fg-3 hover:text-fg-2')}
+                    >
+                      {s.notify === 'when_new' ? 'Only when new' : 'Every run'}
+                    </button>
+                  </Tip>
                   <span className="w-36 font-mono text-[11.5px] text-fg-3">{s.enabled && s.next_run ? clockTime(s.next_run) : 'paused'}</span>
                   <div className="ml-auto flex w-[132px] items-center justify-end gap-0.5">
                     <IconButton label="Run now" onClick={() => void api.post<{ runId: string | null }>(`/schedules/${s.id}/run`).then(() => load())}>

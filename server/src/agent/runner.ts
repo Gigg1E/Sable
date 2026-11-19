@@ -6,6 +6,7 @@ import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
+import { shouldNotifyAfterRun } from './automation.js';
 import { attachmentForModel, attachmentInfo, claimUploads, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
@@ -508,7 +509,8 @@ async function execute(runId: string, conversationId: string, controller: AbortC
       persist: true,
     });
     setRunStatus(runId, conversationId, 'done');
-    if (source !== 'user' || connectedClients() === 0) {
+    // Background runs notify only when there's something to say (see automation.ts).
+    if (source !== 'user' ? shouldNotifyAfterRun(conversationId, runId, answer) : connectedClients() === 0) {
       const title = get<{ title: string }>('SELECT title FROM conversations WHERE id = ?', conversationId)?.title ?? 'Task';
       void notify({ title: `${s.persona.name} · ${title}`, body: truncate(answer.replace(/[#*_>`]/g, ''), 180), link: `/chat/${conversationId}`, kind: source === 'schedule' ? 'schedule' : 'run' });
     }

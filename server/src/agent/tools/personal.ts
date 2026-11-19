@@ -2,6 +2,7 @@ import { all, get, run } from '../../db.js';
 import { emit } from '../../events.js';
 import { notify } from '../../push.js';
 import { id, now, parseJson } from '../../util.js';
+import { blockNotify, defaultNotify, markNotified } from '../automation.js';
 import { registerTool } from './registry.js';
 
 // ───────────────────────────── Memory ─────────────────────────────
@@ -303,7 +304,10 @@ registerTool({
   defaultPolicy: 'auto',
   summarize: (a) => `Notify: ${a.title}`,
   async run(a, ctx) {
+    const blocked = blockNotify(ctx.conversationId, String(a.title), String(a.body ?? ''));
+    if (blocked) return blocked;
     await notify({ title: String(a.title), body: String(a.body ?? ''), link: `/chat/${ctx.conversationId}`, kind: 'agent' });
+    markNotified(ctx.runId);
     return 'Notification sent.';
   },
 });
@@ -324,7 +328,8 @@ export function computeNextRun(kind: ScheduleKind, spec: ScheduleSpec, from = no
     const t = Date.parse(spec.at ?? '');
     return Number.isFinite(t) && t > from ? t : null;
   }
-  if (kind === 'interval') return from + Math.max(5, Number(spec.every_minutes) || 60) * 60_000;
+  // Checks more often than every 10 minutes are almost never what anyone wants (and cost model calls).
+  if (kind === 'interval') return from + Math.max(10, Number(spec.every_minutes) || 60) * 60_000;
   const [h, m] = (spec.time ?? '09:00').split(':').map(Number);
   const d = new Date(from);
   d.setSeconds(0, 0);
@@ -345,7 +350,7 @@ registerTool({
   label: 'Schedule task',
   group: 'Schedules',
   description:
-    'Schedule work to run in the background later or on repeat. At each run the agent receives `prompt` as an instruction. kind: once (at = ISO date-time), interval (every_minutes ≥ 5), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are in the server\'s local time zone.',
+    'Schedule work to run in the background later or on repeat. At each run the agent receives `prompt` as an instruction. kind: once (at = ISO date-time), interval (every_minutes ≥ 10; use 15-60 for checks), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are in the server\'s local time zone. notify: "always" for reminders and briefings the user wants every time (default for once/daily/weekly); "when_new" for checks ("tell me when X emails me"), which only notify when something new happened and never report that nothing changed (default for interval). To change an existing schedule use schedule_update, never create a second one.',
   parameters: {
     type: 'object',
     properties: {
@@ -356,6 +361,7 @@ registerTool({
       every_minutes: { type: 'number' },
       time: { type: 'string' },
       weekday: { type: 'integer' },
+      notify: { type: 'string', enum: ['always', 'when_new'] },
     },
     required: ['title', 'prompt', 'kind'],
   },
@@ -367,12 +373,13 @@ registerTool({
     const next = computeNextRun(a.kind, spec);
     if (next == null) return 'That time is in the past or invalid; nothing scheduled.';
     const sid = id('sch_');
+    const mode = a.notify === 'always' || a.notify === 'when_new' ? a.notify : defaultNotify(String(a.kind));
     run(
-      'INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)',
-      sid, String(a.title), String(a.prompt), String(a.kind), JSON.stringify(spec), next, now(),
+      'INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, notify, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
+      sid, String(a.title), String(a.prompt), String(a.kind), JSON.stringify(spec), next, mode, now(),
     );
     emit({ type: 'schedule.changed', conversationId: ctx.conversationId });
-    return `Scheduled ${sid}; next run ${new Date(next).toString()}.`;
+    return `Scheduled ${sid}; next run ${new Date(next).toString()}. Notifies ${mode === 'always' ? 'every run' : 'only when something new happens'}.`;
   },
 });
 
@@ -388,6 +395,48 @@ registerTool({
     const rows = all<{ id: string; title: string; kind: string; spec: string; next_run: number | null; enabled: number }>('SELECT * FROM schedules ORDER BY created_at DESC');
     if (!rows.length) return 'No schedules.';
     return rows.map((r) => `${r.id} — ${r.title} [${r.kind} ${r.spec}] ${r.enabled ? 'next ' + (r.next_run ? new Date(r.next_run).toString() : '—') : 'disabled'}`).join('\n');
+  },
+});
+
+registerTool({
+  name: 'schedule_update',
+  label: 'Change schedule',
+  group: 'Schedules',
+  description:
+    'Change an existing scheduled task (find its id with schedule_list): title, prompt, timing (kind with at / every_minutes / time / weekday), notify ("always" or "when_new") or enabled (false pauses it). Use this whenever the user wants an automation changed, quieter, less frequent or paused.',
+  parameters: {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      title: { type: 'string' },
+      prompt: { type: 'string' },
+      kind: { type: 'string', enum: ['once', 'interval', 'daily', 'weekly'] },
+      at: { type: 'string' },
+      every_minutes: { type: 'number' },
+      time: { type: 'string' },
+      weekday: { type: 'integer' },
+      notify: { type: 'string', enum: ['always', 'when_new'] },
+      enabled: { type: 'boolean' },
+    },
+    required: ['id'],
+  },
+  risk: 'medium',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Change schedule ${a.id}`,
+  async run(a, ctx) {
+    const cur = get<{ id: string; kind: ScheduleKind; spec: string; enabled: number }>('SELECT id, kind, spec, enabled FROM schedules WHERE id = ?', String(a.id));
+    if (!cur) return 'No schedule with that id. Use schedule_list to find it.';
+    const kind = (a.kind ?? cur.kind) as ScheduleKind;
+    const spec: ScheduleSpec = { ...JSON.parse(cur.spec || '{}'), ...Object.fromEntries(['at', 'every_minutes', 'time', 'weekday'].filter((k) => a[k] !== undefined).map((k) => [k, a[k]])) };
+    const enabled = a.enabled === undefined ? !!cur.enabled : !!a.enabled;
+    const next = enabled ? computeNextRun(kind, spec) : null;
+    if (enabled && next == null) return 'That time is in the past or invalid; nothing changed.';
+    run(
+      'UPDATE schedules SET title = COALESCE(?, title), prompt = COALESCE(?, prompt), kind = ?, spec = ?, notify = COALESCE(?, notify), enabled = ?, next_run = ? WHERE id = ?',
+      (a.title as string) ?? null, (a.prompt as string) ?? null, kind, JSON.stringify(spec), (a.notify as string) ?? null, enabled ? 1 : 0, next, cur.id,
+    );
+    emit({ type: 'schedule.changed', conversationId: ctx.conversationId });
+    return enabled ? `Updated. Next run ${new Date(next!).toString()}.` : 'Updated and paused.';
   },
 });
 

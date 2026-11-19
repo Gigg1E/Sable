@@ -517,7 +517,7 @@ export function apiRouter() {
   );
 
   // ── Schedules ──
-  const scheduleJson = (s: any) => ({ ...s, spec: parseJson(s.spec, {}), enabled: !!s.enabled });
+  const scheduleJson = (s: any) => ({ ...s, spec: parseJson(s.spec, {}), enabled: !!s.enabled, notify: s.notify ?? (s.kind === 'interval' ? 'when_new' : 'always') });
   r.get('/schedules', h(() => all('SELECT * FROM schedules ORDER BY created_at DESC').map(scheduleJson)));
   r.post(
     '/schedules',
@@ -542,7 +542,8 @@ export function apiRouter() {
       if (!s) throw new HttpError(404, 'Not found');
       const enabled = req.body?.enabled === undefined ? !!s.enabled : !!req.body.enabled;
       const next = enabled ? computeNextRun(s.kind, parseJson(s.spec, {})) : s.next_run;
-      run('UPDATE schedules SET enabled = ?, next_run = ? WHERE id = ?', enabled && next != null ? 1 : 0, next, s.id);
+      const notify = req.body?.notify === 'always' || req.body?.notify === 'when_new' ? req.body.notify : null;
+      run('UPDATE schedules SET enabled = ?, next_run = ?, notify = COALESCE(?, notify) WHERE id = ?', enabled && next != null ? 1 : 0, next, notify, s.id);
       emit({ type: 'schedule.changed' });
     }),
   );

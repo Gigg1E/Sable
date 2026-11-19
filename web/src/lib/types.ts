@@ -255,6 +255,8 @@ export interface Schedule {
   last_run: number | null;
   enabled: boolean;
   conversation_id: string | null;
+  /** Notify on every run, or only when the check finds something new. */
+  notify?: 'always' | 'when_new';
 }
 export interface Notification {
   id: string;
