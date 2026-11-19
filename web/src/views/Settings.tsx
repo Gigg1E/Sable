@@ -11,6 +11,7 @@ import { SecuritySection } from './Security';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
 import { disablePush, enablePush, pushState } from '../lib/push';
+import { play, setSoundPrefs, soundPrefs } from '../lib/sounds';
 import { navigate } from '../lib/router';
 import { onServerEvent, useStore } from '../lib/store';
 import type { AgentProfile, Effort, McpServerConfig, Policy, ProviderConfig, Settings, ToolInfo } from '../lib/types';
@@ -770,6 +771,31 @@ function IconBtn({ onClick }: { onClick: () => void }) {
   );
 }
 
+function SoundsSection() {
+  const [p, setP] = useState(soundPrefs());
+  const update = (next: Partial<typeof p>) => {
+    setSoundPrefs(next);
+    setP(soundPrefs());
+    setTimeout(() => play('done'), 30);
+  };
+  return (
+    <Section title="Sounds" description="Short, soft sounds for sending, finished replies, approvals, notifications and errors. Saved on this device.">
+      <Card className="flex flex-wrap items-center gap-4 p-4">
+        <Toggle checked={p.on} onChange={(on) => update({ on })} label="Sounds" />
+        <span className="text-[13px] text-fg-2">{p.on ? 'On' : 'Off'}</span>
+        <input type="range" min={0} max={1} step={0.05} value={p.volume} disabled={!p.on} onChange={(e) => setP({ ...p, volume: Number(e.target.value) })} onPointerUp={() => update({ volume: p.volume })} onKeyUp={() => update({ volume: p.volume })} className="w-48 accent-[var(--tint)]" aria-label="Volume" />
+        <div className="flex flex-wrap gap-1.5">
+          {(['send', 'done', 'approval', 'notify', 'error'] as const).map((s) => (
+            <Button key={s} size="sm" variant="ghost" disabled={!p.on} onClick={() => play(s)}>
+              {s === 'done' ? 'Reply done' : s === 'notify' ? 'Notification' : s[0].toUpperCase() + s.slice(1)}
+            </Button>
+          ))}
+        </div>
+      </Card>
+    </Section>
+  );
+}
+
 function NotificationsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
   const [state, setState] = useState<string>('…');
   const [busy, setBusy] = useState(false);
@@ -909,7 +935,12 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'security' && <SecuritySection />}
                 {active === 'shopping' && <ShoppingSection draft={draft} edit={edit} />}
                 {active === 'network' && <NetworkSection draft={draft} edit={edit} />}
-                {active === 'notifications' && <NotificationsSection draft={draft} edit={edit} />}
+                {active === 'notifications' && (
+                  <>
+                    <NotificationsSection draft={draft} edit={edit} />
+                    <SoundsSection />
+                  </>
+                )}
               </motion.div>
             </AnimatePresence>
           </div>

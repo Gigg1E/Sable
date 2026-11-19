@@ -1,5 +1,6 @@
 import { toast as sonner } from 'sonner';
 import { create } from 'zustand';
+import { play } from './sounds';
 import { api } from './api';
 import { navigate } from './router';
 import type { Approval, Conversation, Message, Notification, Settings, ToolState } from './types';
@@ -192,11 +193,14 @@ function handle(ev: any) {
         return { runs, streaming };
       });
       if (ev.status === 'error') s.toast({ title: 'Something went wrong', body: ev.error, tone: 'error' });
+      if (ev.status === 'error') play('error');
+      else if (ev.status === 'done' && s.runs[ev.conversationId]) play('done');
       refreshConversationsSoon();
       break;
     }
     case 'approval.requested':
       set((st) => ({ approvals: [...st.approvals.filter((a) => a.id !== ev.approval.id), ev.approval] }));
+      play('approval');
       break;
     case 'approval.resolved':
       set((st) => ({ approvals: st.approvals.filter((a) => a.id !== ev.id) }));
@@ -206,6 +210,7 @@ function handle(ev: any) {
       break;
     case 'notification':
       set((st) => ({ unread: st.unread + 1 }));
+      if (ev.notification.kind !== 'approval' && ev.notification.kind !== 'run') play('notify');
       if (ev.notification.kind !== 'approval' || document.hidden) {
         s.toast({ title: ev.notification.title, body: ev.notification.body, link: ev.notification.link });
       }

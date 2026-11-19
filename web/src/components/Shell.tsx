@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Webhook,
+  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -10,6 +10,7 @@ import { cx } from '../lib/format';
 import { navigate, usePath } from '../lib/router';
 import { useStore } from '../lib/store';
 import { usePanel } from '../lib/panel';
+import { play, setSoundPrefs, soundPrefs } from '../lib/sounds';
 import { getTheme, resolvedTheme, setTheme, type Theme } from '../lib/theme';
 import { CommandPalette } from './CommandPalette';
 import { Logo } from './Logo';
@@ -131,6 +132,7 @@ function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate
 
 function AccountMenu() {
   const theme = useTheme();
+  const [soundsOn, setSoundsOn] = useState(() => soundPrefs().on);
   const name = useStore((s) => s.settings?.persona.name ?? 'Sable');
   return (
     <Menu.Root>
@@ -158,6 +160,19 @@ function AccountMenu() {
             </Menu.Item>
           ))}
           <Menu.Separator className="my-1 h-px bg-line" />
+          <Menu.Item
+            className={menuItem}
+            onSelect={(e) => {
+              e.preventDefault();
+              const on = !soundPrefs().on;
+              setSoundPrefs({ on });
+              setSoundsOn(on);
+              if (on) play('toggle');
+            }}
+          >
+            {soundsOn ? <Volume2 className="size-3.5" /> : <VolumeX className="size-3.5" />} <span className="flex-1">Sounds</span>
+            <span className="text-[11px] text-fg-3">{soundsOn ? 'On' : 'Off'}</span>
+          </Menu.Item>
           <Menu.Item className={menuItem} onSelect={() => navigate('/settings')}>
             <Settings className="size-3.5" /> Settings
           </Menu.Item>

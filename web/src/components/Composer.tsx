@@ -5,6 +5,7 @@ import { cx } from '../lib/format';
 import { prepareImage, uploadFile, uploadImage } from '../lib/images';
 import { FileGlyph, fmtBytes } from './Cards';
 import { navigate } from '../lib/router';
+import { play } from '../lib/sounds';
 import { useStore } from '../lib/store';
 import { Kbd, Spinner, Tip } from './ui';
 
@@ -139,14 +140,20 @@ export const Composer = forwardRef<
     // Interjecting is text-only; with attachments it falls back to the queue.
     if (running && mode === 'interject' && onInterject && t && !ready.length) {
       setText('');
+      play('queue');
       onInterject(t);
       return;
     }
     setText('');
     files.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
     setFiles([]);
-    if (running) onQueue?.(t, ready);
-    else await onSend(t, ready);
+    if (running) {
+      play('queue');
+      onQueue?.(t, ready);
+    } else {
+      play('send');
+      await onSend(t, ready);
+    }
   }
 
   return (
