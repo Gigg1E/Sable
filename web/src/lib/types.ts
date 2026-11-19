@@ -50,7 +50,7 @@ export interface Channel {
   url: string;
   token?: string;
   enabled: boolean;
-  events: 'all' | 'important';
+  events: 'all' | 'important' | 'none';
 }
 
 export type ExtractSpec =

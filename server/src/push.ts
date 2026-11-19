@@ -48,7 +48,7 @@ export async function notify(input: NotifyInput) {
   emit({ type: 'notification', notification: note });
 
   const important = note.kind === 'approval' || note.kind === 'watch' || note.kind === 'hook' || note.kind === 'agent' || note.kind === 'schedule';
-  for (const ch of getSettings().channels.filter((c) => c.enabled && (c.events === 'all' || important))) {
+  for (const ch of getSettings().channels.filter((c) => c.enabled && c.events !== 'none' && (c.events === 'all' || important))) {
     void sendToChannel(ch, note.title, note.body, absoluteLink(note.link)).catch((err) => console.error(`[channel ${ch.name}]`, (err as Error).message));
   }
 
@@ -79,7 +79,22 @@ function absoluteLink(link: string) {
  * Deliver a notification to an outbound channel. These are destinations the user configured
  * themselves, so they use the normal network rather than the agent's (VPN) proxy.
  */
-export async function sendToChannel(ch: Channel, title: string, body: string, link = '') {
+/** A saved output (channel) by name or id. */
+export function outputByName(name: string): Channel | undefined {
+  const n = name.trim().toLowerCase();
+  return getSettings().channels.find((c) => c.id.toLowerCase() === n || c.name.toLowerCase() === n);
+}
+
+/** Push to a saved output (by name) or a URL: Discord/Slack/ntfy get their own format, anything else JSON. */
+export async function pushTo(target: string, title: string, body: string, data?: Record<string, unknown>) {
+  const saved = outputByName(target) ?? getSettings().channels.find((c) => c.url === target);
+  if (saved) return sendToChannel(saved, title, body, '', data);
+  if (!/^https?:\/\//i.test(target)) throw new Error(`No saved webhook called "${target}".`);
+  const type: Channel['type'] = /discord(app)?\.com\/api\/webhooks/.test(target) ? 'discord' : /hooks\.slack\.com/.test(target) ? 'slack' : 'webhook';
+  return sendToChannel({ id: 'adhoc', name: 'adhoc', type, url: target, enabled: true, events: 'none' }, title, body, '', data);
+}
+
+export async function sendToChannel(ch: Channel, title: string, body: string, link = '', data?: Record<string, unknown>) {
   const signal = AbortSignal.timeout(10_000);
   let res: Response;
   if (ch.type === 'ntfy') {
@@ -107,7 +122,7 @@ export async function sendToChannel(ch: Channel, title: string, body: string, li
     res = await fetch(ch.url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(ch.token ? { Authorization: `Bearer ${ch.token}` } : {}) },
-      body: JSON.stringify({ source: 'sable', title, body, link, ts: new Date().toISOString() }),
+      body: JSON.stringify({ source: 'sable', title, body, link, ...(data ? { data } : {}), ts: new Date().toISOString() }),
       signal,
     });
   }

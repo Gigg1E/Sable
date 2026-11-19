@@ -58,7 +58,8 @@ export interface Channel {
   token?: string;
   enabled: boolean;
   /** Which notifications go to this channel. */
-  events: 'all' | 'important';
+  /** all / important: also gets notifications. none: only when the agent or an automation sends to it. */
+  events: 'all' | 'important' | 'none';
 }
 
 /** A mailbox reached over IMAP/SMTP with an app password. */

@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Check, ChevronRight, Copy, KeyRound, MessageSquare, Plus, RotateCw, Send, Trash2, Webhook as WebhookIcon } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Empty, Field, IconButton, Input, Page, PageIntro, Select, Sheet, Spinner, Textarea, Toggle, TopBar } from '../components/ui';
+import type { Channel, Settings } from '../lib/types';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
@@ -236,6 +237,99 @@ function NewHook({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
+const KINDS: { re: RegExp; type: Channel['type']; label: string }[] = [
+  { re: /discord(app)?\.com\/api\/webhooks/, type: 'discord', label: 'Discord' },
+  { re: /hooks\.slack\.com/, type: 'slack', label: 'Slack' },
+  { re: /ntfy/, type: 'ntfy', label: 'ntfy' },
+];
+const kindOf = (url: string) => KINDS.find((k) => k.re.test(url)) ?? { type: 'webhook' as const, label: 'Webhook' };
+
+/** Places Sable pushes to (stored as notification channels). */
+function OutputsSection() {
+  const settings = useStore((s) => s.settings);
+  const toast = useStore((s) => s.toast);
+  const [name, setName] = useState('');
+  const [url, setUrl] = useState('');
+  const [tests, setTests] = useState<Record<string, string>>({});
+  const outputs = settings?.channels ?? [];
+  async function save(next: Channel[]) {
+    if (!settings) return;
+    const saved = await api.put<Settings>('/settings', { ...settings, channels: next });
+    useStore.setState({ settings: saved });
+  }
+  return (
+    <section className="mb-10">
+      <h2 className="text-[15px] font-semibold">Outputs</h2>
+      <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-fg-2">
+        Places {settings?.persona.name ?? 'Sable'} can push to: a Discord or Slack channel, ntfy, or any URL. Watchers, routines and chats can send to them by name ("post price drops to Deals Discord"). Paste a link here, or give it to the agent in chat.
+      </p>
+      <Card className="mt-4 divide-y divide-line">
+        {outputs.map((c, i) => (
+          <div key={c.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-3">
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[13.5px] font-medium">{c.name}</div>
+              <div className="truncate font-mono text-[11.5px] text-fg-3">
+                {KINDS.find((k) => k.type === c.type)?.label ?? 'Webhook'} · {c.url.replace(/^https?:\/\//, '').split('/')[0]}
+              </div>
+            </div>
+            <Select
+              value={c.events}
+              onChange={(e) => void save(outputs.map((x, j) => (j === i ? { ...x, events: e.target.value as Channel['events'] } : x)))}
+              className="!h-7 !w-auto !text-[12px]"
+              aria-label="What it receives"
+            >
+              <option value="none">Only what's sent to it</option>
+              <option value="important">+ important notifications</option>
+              <option value="all">+ all notifications</option>
+            </Select>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={async () => {
+                const r = await api.post<{ ok: boolean; error?: string }>('/channels/test', c).catch((err: Error) => ({ ok: false, error: err.message }));
+                setTests((t) => ({ ...t, [c.id]: r.ok ? 'Delivered' : (r.error ?? 'Failed') }));
+              }}
+            >
+              <Send className="size-3.5" /> Test
+            </Button>
+            <Toggle size="sm" checked={c.enabled} onChange={(v) => void save(outputs.map((x, j) => (j === i ? { ...x, enabled: v } : x)))} label="Enabled" />
+            <IconButton label="Remove" className="hover:text-danger" onClick={() => void save(outputs.filter((_, j) => j !== i))}>
+              <Trash2 className="size-3.5" />
+            </IconButton>
+            {tests[c.id] && <div className={cx('basis-full text-[12px]', tests[c.id] === 'Delivered' ? 'text-ok' : 'text-danger')}>{tests[c.id]}</div>}
+          </div>
+        ))}
+        <form
+          className="flex flex-wrap items-end gap-2 px-4 py-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            if (!/^https:\/\//.test(url.trim())) return toast({ title: 'Paste an https:// link', tone: 'error' });
+            const k = kindOf(url.trim());
+            let id = (name || k.label).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'webhook';
+            while (outputs.some((c) => c.id === id)) id += '-2';
+            await save([...outputs, { id, name: name.trim() || `${k.label} ${outputs.length + 1}`, type: k.type, url: url.trim(), enabled: true, events: 'none' }]);
+            setName('');
+            setUrl('');
+          }}
+        >
+          <Field label="Name">
+            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Deals Discord" className="sm:w-44" />
+          </Field>
+          <div className="min-w-[220px] flex-1">
+            <Field label="Webhook link">
+              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://discord.com/api/webhooks/…" />
+            </Field>
+          </div>
+          <Button size="sm" type="submit" disabled={!url.trim()}>
+            <Plus className="size-3.5" /> Add output
+          </Button>
+        </form>
+      </Card>
+      <p className="mt-2 text-[12px] text-fg-3">Discord: channel settings → Integrations → Webhooks → New webhook → Copy URL. Slack: an app with Incoming Webhooks.</p>
+    </section>
+  );
+}
+
 export function WebhooksView() {
   const [hooks, setHooks] = useState<Hook[] | null>(null);
   const [creating, setCreating] = useState(false);
@@ -252,12 +346,15 @@ export function WebhooksView() {
         title="Webhooks"
         actions={
           <Button size="sm" variant="primary" onClick={() => setCreating(true)}>
-            <Plus className="size-3.5" /> New webhook
+            <Plus className="size-3.5" /> New push URL
           </Button>
         }
       />
       <Page width="lg">
-        <PageIntro title="Webhooks" description="Private URLs that let other services (GitHub, Home Assistant, IFTTT, uptime monitors, your own scripts) notify you or hand work to the agent." />
+        <PageIntro title="Webhooks" description="Outputs are places Sable pushes to. Push URLs are private links other services call to wake Sable (they work like a watcher)." />
+        <OutputsSection />
+        <h2 className="mb-1 text-[15px] font-semibold">Push URLs</h2>
+        <p className="mb-4 max-w-2xl text-[13px] leading-relaxed text-fg-2">Private URLs that GitHub, Home Assistant, IFTTT, uptime monitors or your own scripts can call to notify you or hand work to the agent.</p>
         {isLocal && (
           <div className="mb-5 rounded-md border border-line bg-panel-2/60 px-3.5 py-2.5 text-[12.5px] text-fg-2">
             You're on <code className="font-mono">localhost</code>. Outside services need your server's public address. Set it in Settings → Network so the URLs below use it.

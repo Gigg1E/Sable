@@ -2,7 +2,7 @@ import * as cheerio from 'cheerio';
 import { all, get, run } from '../db.js';
 import { emit } from '../events.js';
 import { agentFetch } from '../net.js';
-import { notify } from '../push.js';
+import { notify, pushTo } from '../push.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { activeRunFor, createConversation, quickAnswer, startRun } from './runner.js';
 import { htmlToText } from './tools/web.js';
@@ -10,6 +10,7 @@ import { registerTool } from './tools/registry.js';
 import { fmtMoney, shopVariantSnapshot } from '../shop/tools.js';
 import { emailAccount, latestUid, mailAfter, syncMailListeners } from '../email.js';
 import { eventsBetween } from './tools/calendar.js';
+import { createHook, hookUrl } from './hooks.js';
 
 /**
  * Watchers: deterministic change detection. The server polls a URL, extracts one value and
@@ -396,12 +397,7 @@ async function trigger(w: WatcherRow, actions: WatchActions, prev: string | null
   const body = `${reason ? `Condition met (${reason}). ` : ''}${new URL(w.url).host}`;
   if (actions.notify) await notify({ title, body, link: '/watchers', kind: 'watch' });
   if (actions.webhook) {
-    void fetch(actions.webhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: 'sable', watcher: { id: w.id, title: w.title, url: w.url }, previous: prev, current: cur.value, numeric: cur.numeric, reason, ts: new Date().toISOString() }),
-      signal: AbortSignal.timeout(10_000),
-    }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));
+    void pushTo(actions.webhook, title, body, { watcher: { id: w.id, title: w.title, url: w.url }, previous: prev, current: cur.value, numeric: cur.numeric, reason }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));
   }
   if (actions.prompt) wake(w, `${actions.prompt}\n\nWatched page: ${w.url}\nCondition: ${reason}\nPrevious value: ${prev ?? '(none)'}\n<untrusted source="watched page">Current value: ${truncate(cur.value, 2000)}</untrusted>`);
 }
@@ -432,12 +428,7 @@ function wake(w: WatcherRow, body: string) {
 async function fireEvent(w: WatcherRow, actions: WatchActions, ev: { title: string; body: string; details: string; payload: Record<string, unknown> }) {
   if (actions.notify && !actions.prompt) await notify({ title: ev.title, body: ev.body, link: '/watchers', kind: 'watch' });
   if (actions.webhook) {
-    void fetch(actions.webhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ source: 'sable', watcher: { id: w.id, title: w.title }, ...ev.payload, ts: new Date().toISOString() }),
-      signal: AbortSignal.timeout(10_000),
-    }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));
+    void pushTo(actions.webhook, ev.title, ev.body, { watcher: { id: w.id, title: w.title }, ...ev.payload }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));
   }
   if (actions.prompt) wake(w, `${actions.prompt}\n\n${ev.details}${actions.notify ? '\n\n(Tell the user what happened with notify, briefly.)' : ''}`);
 }
@@ -589,12 +580,12 @@ registerTool({
   label: 'Create watcher',
   group: 'Watchers',
   description:
-    "Monitor something and act when something new happens. source 'web': a page or API on a schedule (prices, stock, status; test it with watch_test first). source 'email': new mail in the user's inbox, optionally only from certain senders or with a subject (noticed within seconds). source 'calendar': a new event appears, or an event is about to start. on_trigger is your instruction for when it fires, written with every detail you'll need, e.g. \"The price dropped below $40: add 1 of variant X to the cart and tell me\" or \"Summarize the email and tell me if it needs a reply\". Without on_trigger the user just gets a notification. The user reviews and approves it; once approved, its runs act without asking again except purchases and tools in restrict.",
+    "Monitor something and act when something new happens. source 'push': a private URL for another service to call. source 'web': a page or API on a schedule (prices, stock, status; test it with watch_test first). source 'email': new mail in the user's inbox, optionally only from certain senders or with a subject (noticed within seconds). source 'calendar': a new event appears, or an event is about to start. on_trigger is your instruction for when it fires, written with every detail you'll need, e.g. \"The price dropped below $40: add 1 of variant X to the cart and tell me\" or \"Summarize the email and tell me if it needs a reply\". Without on_trigger the user just gets a notification. The user reviews and approves it; once approved, its runs act without asking again except purchases and tools in restrict.",
   parameters: {
     type: 'object',
     properties: {
       title: { type: 'string', description: 'Short name, e.g. "RTX 5070 under $500" or "Emails from my vendors"' },
-      source: { type: 'string', enum: ['web', 'email', 'calendar'], description: 'Default web' },
+      source: { type: 'string', enum: ['web', 'email', 'calendar', 'push'], description: "Default web. 'push': Sable makes a private URL another service calls (GitHub, Home Assistant, a script); fires on each call" },
       url: { type: 'string', description: 'web: the page or API' },
       extract: extractSchema,
       condition: {
@@ -612,7 +603,7 @@ registerTool({
       calendar_contains: { type: 'string', description: 'calendar: only events whose title/location/notes contain this' },
       notify: { type: 'boolean', description: 'Tell the user when it fires (default true)' },
       on_trigger: { type: 'string', description: 'What you should do when it fires' },
-      webhook_url: { type: 'string', description: 'Optional URL to POST a JSON payload to when it fires' },
+      webhook_url: { type: 'string', description: 'Optional: a saved webhook output name (see webhook_outputs) or URL to push to when it fires, e.g. the user\'s Discord' },
       restrict: { type: 'array', items: { type: 'string' }, description: 'Tool names (or parts, like "send") that should still ask during its runs' },
     },
     required: ['title'],
@@ -621,8 +612,14 @@ registerTool({
   defaultPolicy: 'ask',
   alwaysAsk: true,
   async preview(a) {
-    const src = (a.source ?? 'web') as WatcherRow['source'];
+    const src = (a.source ?? 'web') as WatcherRow['source'] | 'push';
     if (src === 'web' && (!a.url || !a.extract || !a.condition)) return { refuse: 'A web watcher needs url, extract and condition.' };
+    if (src === 'push') {
+      return {
+        summary: `Push URL “${a.title}”`,
+        card: { type: 'automation', kind: 'watcher', title: String(a.title), when: 'A private URL another service calls · fires on every call', prompt: a.on_trigger ? String(a.on_trigger) : 'Notify you with what was sent.', restrict: [] },
+      };
+    }
     if (src === 'email') {
       try {
         emailAccount(a.email_account);
@@ -631,7 +628,7 @@ registerTool({
       }
     }
     const cfg = src === 'email' ? { account: a.email_account, from: a.email_from, subject_contains: a.email_subject } : src === 'calendar' ? { when: a.calendar_when ?? 'added', minutes_before: a.minutes_before, contains: a.calendar_contains } : null;
-    const label = sourceLabel({ source: src, source_config: cfg ? JSON.stringify(cfg) : null, url: String(a.url ?? '') });
+    const label = sourceLabel({ source: src as WatcherRow['source'], source_config: cfg ? JSON.stringify(cfg) : null, url: String(a.url ?? '') });
     const when = src === 'web' ? `Checks ${label} every ${Math.max(5, Number(a.every_minutes) || 60)} min; fires when it ${describeCondition(a.condition as Condition)}` : src === 'email' ? `${label} · noticed within seconds` : label;
     const does = a.on_trigger ? String(a.on_trigger) : 'Notify you.';
     return {
@@ -641,7 +638,12 @@ registerTool({
   },
   summarize: (a) => `Watch “${a.title}”`,
   async run(a, ctx) {
-    const src = (a.source ?? 'web') as WatcherRow['source'];
+    const src = (a.source ?? 'web') as WatcherRow['source'] | 'push';
+    if (src === 'push') {
+      const h = createHook({ name: String(a.title), verify: 'none', action: { notify: a.notify !== false, prompt: a.on_trigger || undefined } });
+      const url = hookUrl(h);
+      return `Push URL created for "${a.title}":\n${url.startsWith('/') ? `<your Sable address>${url}` : url}\nGive this to the other service. Each call ${a.on_trigger ? 'wakes you with the payload' : 'notifies the user'}. The user can copy it any time from Webhooks.`;
+    }
     const cond = (a.condition ?? { kind: 'changed' }) as Condition & { value?: unknown };
     if (['below', 'above', 'drop_percent', 'rise_percent'].includes(cond.kind)) (cond as any).value = parseNumber(cond.value) ?? 0;
     const sourceConfig =

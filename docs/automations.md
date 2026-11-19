@@ -28,7 +28,7 @@ A watcher monitors something and runs a prompt when something new happens. Like 
 | **Email** | New mail arrives, optionally only from certain senders (name, address or domain) or with a subject | Within seconds (live IMAP connection), with a fallback check every 15 min |
 | **Calendar** | An event is added to your calendar feeds, or is about to start (X minutes before) | Every check |
 | **Web** | A page or API changes: price below/above, % drop, text appears, any change | Every N minutes (5+, polite 60 for shops) |
-| **Push** | Another service calls a URL Sable gives you | Instantly *(moving here from Webhooks in the next update)* |
+| **Push** | Another service calls a private URL Sable gives you (listed under Webhooks → Push URLs) | Instantly |
 
 What happens when it fires is a prompt, for example:
 - "The price dropped below $40: add 1 of it to my cart and tell me."
@@ -36,6 +36,18 @@ What happens when it fires is a prompt, for example:
 - "Reply 'Thanks, got it' to the sender."
 
 The runs happen in the watcher's own chat under **Automations** in the sidebar, where you can also talk to it. Watchers check in code, with no model call, so nothing runs (and nothing pings you) until something new actually matches.
+
+## Webhooks
+
+**Webhooks → Outputs** are places Sable pushes to: a Discord or Slack channel, ntfy, or any URL.
+- Paste a link on the Webhooks page, or give it to the agent in chat ("save this as Deals Discord"). The agent asks before saving.
+- After that, anything can send to it by name: "post price drops to Deals Discord". That works from a watcher, a routine or a chat.
+- Each output receives **only what's sent to it**, unless you also forward your notifications to it (important or all).
+- Discord and Slack get formatted messages. Other URLs get JSON `{ title, body, data }`.
+
+**Webhooks → Push URLs** are private links other services call to wake Sable (GitHub, Home Assistant, a script). They work like a watcher: ask for one ("give me a URL that tells me when my build fails"), give it to the other service, and each call runs the prompt.
+
+If you ask for something to go "to my webhook" and none is saved, the agent asks whether you have a link to paste or want Sable to make a push URL.
 
 ## Email accounts
 
@@ -57,4 +69,4 @@ Push notifications for approvals have **Approve** and **Deny** buttons, so you d
 
 A check that found nothing new never notifies you, and the same news is never sent twice. See [Routines](#routines).
 
-*(Webhooks and Spaces are being rebuilt to this design next. This page grows as each part lands.)*
+*(Spaces are being rebuilt to this design next.)*

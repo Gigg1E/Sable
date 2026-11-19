@@ -710,6 +710,7 @@ function ChannelsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
                   </Field>
                   <Field label="Send">
                     <Select value={c.events} onChange={(e) => set((x) => void (x.events = e.target.value as 'all' | 'important'))}>
+                      <option value="none">Only what's sent to it</option>
                       <option value="important">Important</option>
                       <option value="all">All</option>
                     </Select>
