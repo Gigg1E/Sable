@@ -1,9 +1,9 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { Brain, Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Empty, IconButton, Input, Page, PageIntro, TopBar, listItem } from '../components/ui';
+import { Badge, Button, Card, Empty, IconButton, Input, Page, PageIntro, Segmented, TopBar, listItem } from '../components/ui';
 import { api } from '../lib/api';
-import { timeAgo } from '../lib/format';
+import { cx, timeAgo } from '../lib/format';
 import { onServerEvent } from '../lib/store';
 import type { Memory } from '../lib/types';
 
@@ -29,6 +29,13 @@ function MemoryRow({ m }: { m: Memory }) {
       ) : (
         <>
           <span className="min-w-0 flex-1 text-[13.5px]">{m.content}</span>
+          <button
+            onClick={() => void api.patch(`/memories/${m.id}`, { kind: m.kind === 'other' ? 'me' : 'other' })}
+            title="Switch between 'About you' and 'People & things'"
+            className={cx('h-5 shrink-0 rounded px-1.5 text-[11px]', m.kind === 'other' ? 'bg-panel-3 text-fg-2' : 'bg-tint-soft text-tint')}
+          >
+            {m.kind === 'other' ? 'people & things' : 'about you'}
+          </button>
           <Badge tone="outline">{m.source === 'you' ? 'you' : 'learned'}</Badge>
           <span className="hidden w-16 text-right font-mono text-[11px] text-fg-3 sm:block">{timeAgo(m.updated_at)}</span>
           <div className="flex transition-opacity md:opacity-0 md:group-hover:opacity-100">
@@ -55,18 +62,35 @@ export function MemoryView() {
     return onServerEvent((ev) => ev.type === 'memory.changed' && load());
   }, [load]);
 
+  const [tab, setTab] = useState<'all' | 'me' | 'other'>('all');
   async function add() {
     if (!draft.trim()) return;
-    await api.post('/memories', { content: draft.trim() });
+    await api.post('/memories', { content: draft.trim(), kind: tab === 'other' ? 'other' : 'me' });
     setDraft('');
   }
-  const shown = (memories ?? []).filter((m) => !q || m.content.toLowerCase().includes(q.toLowerCase()));
+  const shown = (memories ?? []).filter((m) => (!q || m.content.toLowerCase().includes(q.toLowerCase())) && (tab === 'all' || (tab === 'other' ? m.kind === 'other' : m.kind !== 'other')));
 
   return (
     <>
       <TopBar title="Memory" />
       <Page width="md">
-        <PageIntro title="Memory" description="Facts and preferences the agent keeps about you. They stay on your server, and you can edit or delete any of them." />
+        <PageIntro
+          title="Memory"
+          description="Lasting facts the agent keeps. 'About you' is always in mind; 'People & things' (contacts, places, accounts) only comes up when a conversation is about them. Tasks are never saved here: those are routines and watchers."
+        />
+        <div className="mb-3">
+          <Segmented
+            id="memory-tab"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            options={[
+              { value: 'all', label: `All${memories ? ` ${memories.length}` : ''}` },
+              { value: 'me', label: 'About you' },
+              { value: 'other', label: 'People & things' },
+            ]}
+          />
+        </div>
         <div className="mb-4 flex gap-2">
           <Input value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && void add()} placeholder="Add a fact, e.g. “I'm vegetarian”" />
           <Button variant="primary" onClick={() => void add()} disabled={!draft.trim()}>

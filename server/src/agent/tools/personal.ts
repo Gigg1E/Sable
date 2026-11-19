@@ -4,13 +4,19 @@ import { notify } from '../../push.js';
 import { id, now, parseJson } from '../../util.js';
 import { blockNotify, defaultNotify, markNotified } from '../automation.js';
 import { registerTool } from './registry.js';
+import { cosine, embed, overlap, words } from '../helpers.js';
 
 // ───────────────────────────── Memory ─────────────────────────────
+// Two kinds: "me" (facts about the user: where they live, preferences, routines of life) and
+// "other" (people, places, accounts, things: "Sam is my landlord, sam@example.com").
+// "Me" memories are always in context; "other" ones only when relevant to the message.
 
 export interface MemoryRow {
   id: string;
   content: string;
   source: string | null;
+  kind: 'me' | 'other';
+  embedding: string | null;
   created_at: number;
   updated_at: number;
 }
@@ -19,19 +25,77 @@ export function listMemories(limit = 200): MemoryRow[] {
   return all<MemoryRow>('SELECT * FROM memories ORDER BY updated_at DESC LIMIT ?', limit);
 }
 
+/** Things that are tasks or instructions, not facts: those belong in routines/watchers, not memory. */
+function looksLikeTask(text: string) {
+  return /^(please\s+)?(monitor|watch|track|check|remind|email|send|text|call|buy|order|add|set|create|schedule|notify|tell|ping|alert|follow up|keep an eye|look (up|for)|find|search|cancel|book)\b/i.test(text.trim()) ||
+    /\b(remind me|notify me|let me know when|tell me when|watch (for|my)|monitor (my|this|for)|every (day|morning|hour|week))\b/i.test(text);
+}
+
+async function vectorFor(text: string): Promise<number[] | null> {
+  const v = await embed([text]);
+  return v?.[0] ?? null;
+}
+
+/** Memories for a message: every "me" memory (up to 25) plus the "other" ones that relate to it. */
+export async function relevantMemories(query: string): Promise<MemoryRow[]> {
+  const rows = listMemories(2000);
+  const me = rows.filter((m) => m.kind !== 'other').slice(0, 25);
+  const others = rows.filter((m) => m.kind === 'other');
+  if (!others.length || !query.trim()) return me;
+  const qv = await vectorFor(query);
+  const qw = words(query);
+  const scored = others
+    .map((m) => {
+      const v = qv && m.embedding ? parseJson<number[] | null>(m.embedding, null) : null;
+      return { m, s: (v && qv ? cosine(qv, v) * 10 : 0) + overlap(qw, m.content) * 1.5 };
+    })
+    .filter((x) => x.s >= (qv ? 4 : 1))
+    .sort((a, b) => b.s - a.s)
+    .slice(0, 8);
+  return [...me, ...scored.map((x) => x.m)];
+}
+
+/** Fill in missing embeddings in the background (old memories, or saved while the helper was installing). */
+export async function backfillMemoryEmbeddings() {
+  const rows = all<MemoryRow>('SELECT * FROM memories WHERE embedding IS NULL LIMIT 200');
+  if (!rows.length) return;
+  const vecs = await embed(rows.map((r) => r.content));
+  if (!vecs) return;
+  rows.forEach((r, i) => run('UPDATE memories SET embedding = ? WHERE id = ?', JSON.stringify(vecs[i]), r.id));
+}
+
 registerTool({
   name: 'memory_save',
   label: 'Remember',
   group: 'Memory',
   description:
-    'Save a durable fact or preference about the user (e.g. "Prefers aisle seats", "Daughter Mia is allergic to peanuts"). One fact per call. Only save things that will matter later.',
-  parameters: { type: 'object', properties: { content: { type: 'string', description: 'The fact, in one short sentence.' } }, required: ['content'] },
+    'Save a lasting fact, one per call. kind "me": about the user (lives in Florida, vegetarian, works nights). kind "other": about people, places or things in their life (Sam is the landlord, sam@example.com; the car is a 2019 Civic). Do NOT save tasks, requests or instructions ("monitor my email", "remind me…"): those become routines or watchers, which are stored on their own. Don\'t save one-off details or things only relevant to this conversation.',
+  parameters: {
+    type: 'object',
+    properties: { content: { type: 'string', description: 'The fact, in one short sentence.' }, kind: { type: 'string', enum: ['me', 'other'] } },
+    required: ['content'],
+  },
   risk: 'low',
   defaultPolicy: 'auto',
   summarize: (a) => `Remember: ${a.content}`,
   async run(a, ctx) {
+    const content = String(a.content).trim();
+    if (!content) return 'Nothing to save.';
+    if (looksLikeTask(content))
+      return 'Not saved: that is a task or instruction, not a fact. Automations (routines, watchers) are stored on their own; only save lasting facts about the user or the people and things in their life.';
+    const kind = a.kind === 'other' ? 'other' : 'me';
+    const v = await vectorFor(content);
+    // Same fact again (or an update of it): replace instead of piling up near-duplicates.
+    const dup = v
+      ? listMemories(2000).find((m) => m.embedding && cosine(v, parseJson<number[]>(m.embedding, [])) > 0.93)
+      : listMemories(2000).find((m) => m.content.toLowerCase() === content.toLowerCase());
+    if (dup) {
+      run('UPDATE memories SET content = ?, kind = ?, embedding = ?, updated_at = ? WHERE id = ?', content, kind, v ? JSON.stringify(v) : dup.embedding, now(), dup.id);
+      emit({ type: 'memory.changed' });
+      return `Updated memory ${dup.id}.`;
+    }
     const mid = id('m_');
-    run('INSERT INTO memories (id, content, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', mid, String(a.content).trim(), ctx.agent, now(), now());
+    run('INSERT INTO memories (id, content, source, kind, embedding, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', mid, content, ctx.agent, kind, v ? JSON.stringify(v) : null, now(), now());
     emit({ type: 'memory.changed' });
     return `Saved memory ${mid}.`;
   },
@@ -41,19 +105,21 @@ registerTool({
   name: 'memory_search',
   label: 'Search memory',
   group: 'Memory',
-  description: 'Search saved memories about the user by keywords. Returns matching memories with their ids.',
+  description: 'Search saved memories (about the user, and about people, places and things in their life). Returns matching memories with their ids.',
   parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
   risk: 'low',
   defaultPolicy: 'auto',
   summarize: (a) => `Search memory for "${a.query}"`,
   async run(a) {
-    const words = String(a.query).toLowerCase().split(/\W+/).filter((w) => w.length > 2);
-    const rows = listMemories(1000)
-      .map((m) => ({ m, score: words.filter((w) => m.content.toLowerCase().includes(w)).length }))
-      .filter((x) => x.score > 0 || !words.length)
-      .sort((x, y) => y.score - x.score)
+    const q = String(a.query);
+    const qv = await vectorFor(q);
+    const qw = words(q);
+    const rows = listMemories(2000)
+      .map((m) => ({ m, s: (qv && m.embedding ? cosine(qv, parseJson<number[]>(m.embedding, [])) * 10 : 0) + overlap(qw, m.content) * 1.5 }))
+      .filter((x) => x.s >= (qv ? 3 : 1) || !qw.size)
+      .sort((x, y) => y.s - x.s)
       .slice(0, 20);
-    return rows.length ? rows.map((r) => `[${r.m.id}] ${r.m.content}`).join('\n') : 'No matching memories.';
+    return rows.length ? rows.map((r) => `[${r.m.id}] (${r.m.kind === 'other' ? 'other' : 'about the user'}) ${r.m.content}`).join('\n') : 'No matching memories.';
   },
 });
 

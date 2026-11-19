@@ -351,12 +351,54 @@ function ProviderCard({ p, edit, index, removable }: { p: ProviderConfig; edit: 
   );
 }
 
+type HelperState = { ollama: boolean; model: string; installed: boolean; pulling: boolean; progress?: string; error?: string; enabled: boolean };
+
+function HelperModelCard({ draft, edit }: { draft: Settings; edit: Edit }) {
+  const [st, setSt] = useState<HelperState | null>(null);
+  useEffect(() => {
+    void api.get<HelperState>('/helpers').then(setSt);
+    return onServerEvent((ev) => ev.type === 'helpers.changed' && setSt(ev.status as HelperState));
+  }, []);
+  const enabled = draft.helpers?.enabled !== false;
+  const label = !st
+    ? 'Checking…'
+    : !enabled
+      ? 'Off: every tool and memory goes to the model'
+      : !st.ollama
+        ? "Ollama isn't reachable, so keyword matching is used instead"
+        : st.pulling
+          ? `Installing ${st.model}… ${st.progress ?? ''}`
+          : st.installed
+            ? `${st.model} is installed and in use`
+            : (st.error ?? `${st.model} isn't installed yet`);
+  return (
+    <Section
+      title="Helper model"
+      description="A tiny local embedding model (about 300 MB, on Ollama) picks which tools and memories each message needs, so the main model isn't handed everything at once. It installs itself; nothing to set up."
+    >
+      <Card className="flex flex-wrap items-center gap-3 p-4">
+        <Toggle checked={enabled} onChange={(v) => edit((d) => void (d.helpers = { embedModel: d.helpers?.embedModel || 'embeddinggemma', enabled: v }))} label="Smart tool and memory selection" />
+        <span className={cx('min-w-0 flex-1 text-[13px]', st?.installed && enabled ? 'text-ok' : 'text-fg-2')}>{label}</span>
+        {st && enabled && st.ollama && !st.installed && !st.pulling && (
+          <Button size="sm" onClick={() => void api.post<HelperState>('/helpers/install').then(setSt)}>
+            Install now
+          </Button>
+        )}
+        <Field label="Model">
+          <Input value={draft.helpers?.embedModel ?? 'embeddinggemma'} onChange={(e) => edit((d) => void (d.helpers = { enabled: d.helpers?.enabled !== false, embedModel: e.target.value.trim() }))} className="!w-48 font-mono !text-[12px]" />
+        </Field>
+      </Card>
+    </Section>
+  );
+}
+
 function ModelsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
   const [adding, setAdding] = useState<ProviderConfig['type']>('openai-compatible');
   const builtin = new Set(['ollama', 'llamacpp', 'anthropic', 'openai']);
   const mainProvider = draft.providers.find((p) => p.id === draft.main.providerId);
   return (
     <>
+      <HelperModelCard draft={draft} edit={edit} />
       <Section title="Main agent" description="The model that talks with you and runs the show. A local Ollama model works well; it can hand harder jobs to sub-agents.">
         <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
           <Field label="Provider">

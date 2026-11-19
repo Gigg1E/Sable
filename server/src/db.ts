@@ -107,6 +107,8 @@ addColumn('watchers', 'state', 'TEXT');
 addColumn('watchers', 'autonomy', 'TEXT');
 addColumn('watchers', 'restrict_tools', 'TEXT');
 addColumn('watchers', 'run_conversation_id', 'TEXT');
+addColumn('memories', 'kind', "TEXT NOT NULL DEFAULT 'me'");
+addColumn('memories', 'embedding', 'TEXT');
 addColumn('conversations', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
 
 type Row = Record<string, unknown>;

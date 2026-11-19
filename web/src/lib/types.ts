@@ -134,6 +134,7 @@ export interface Settings {
   channels: Channel[];
   calendars: CalendarFeed[];
   email: { accounts: EmailAccount[] };
+  helpers?: { enabled: boolean; embedModel: string };
   publicUrl: string;
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }
@@ -233,6 +234,7 @@ export interface Space extends SpaceSummary {
 export interface Memory {
   id: string;
   content: string;
+  kind?: 'me' | 'other';
   source: string | null;
   created_at: number;
   updated_at: number;

@@ -1,6 +1,6 @@
 import { all } from '../db.js';
 import { getSettings, type AgentProfile } from '../settings.js';
-import { listMemories } from './tools/personal.js';
+import { listMemories, type MemoryRow } from './tools/personal.js';
 
 function clock() {
   const d = new Date();
@@ -13,9 +13,11 @@ const SAFETY = `## Trust and safety
 - On the web and on calls you are an automated agent acting for the user. Never claim to be human.
 - Never reveal API keys or credentials, and never send the user's personal data anywhere they didn't ask for.`;
 
-export function mainSystemPrompt(): string {
+export function mainSystemPrompt(ctx: { memories?: MemoryRow[]; toolNote?: string } = {}): string {
   const s = getSettings();
-  const memories = listMemories(80);
+  const memories = ctx.memories ?? listMemories(40);
+  const routines = all<{ title: string; kind: string }>('SELECT title, kind FROM schedules WHERE enabled = 1 ORDER BY created_at DESC LIMIT 12');
+  const watchers = all<{ title: string; source: string }>('SELECT title, source FROM watchers WHERE enabled = 1 ORDER BY created_at DESC LIMIT 12');
   const goals = all<{ id: string; title: string; steps: string; status: string }>(
     "SELECT id, title, steps, status FROM goals WHERE status IN ('active','blocked') ORDER BY updated_at DESC LIMIT 8",
   );
@@ -34,7 +36,7 @@ ${s.persona.about ? `\n## About the user (written by them)\n${s.persona.about}\n
 - For a job that needs more than two or three actions, create a goal (goal_create) with a short plan and update the steps as you go (goal_update). Finish by marking the goal done and summarizing the outcome.
 - Use tools instead of guessing. Check facts that may have changed (prices, hours, news) on the web.
 - When a decision is genuinely the user's (a budget, a date, choosing between options), ask a short question instead of assuming.
-- Memory: when you learn a lasting fact or preference that will matter later, save it with memory_save. Don't save trivia or secrets. Use memory_forget when asked to forget something.
+- Memory: when you learn a lasting fact that will matter later, save it with memory_save: kind "me" for the user themself, "other" for people, places and things in their life (e.g. someone's email address). Never save tasks or requests ("watch my email" is a watcher, not a memory). Don't save trivia or secrets. Use memory_forget when asked to forget something.
 - Spaces: when the user wants a tracker, dashboard, planner, checklist or board, build a Space (space_create) as a polished, responsive mini-app, and update it later with space_update.
 - Background work: use schedule_create for anything recurring or later ("every morning", "remind me Friday"). Reminders and briefings use notify "always". Checks ("tell me when X emails me", "let me know if this changes") use notify "when_new" and a sensible interval (15-60 minutes): the user must only hear about something NEW, never that nothing changed.
 - Routines vs watchers: a routine is about TIME (remind me, brief me, do X at 8pm). A watcher is about MONITORING (when an email arrives, when a price drops, when an event is added). Never use a routine to poll for something a watcher can watch: email (source email, filter by senders/subject), calendar (source calendar), web pages and prices (source web). Put what to do when it fires in on_trigger, e.g. "add it to my cart" or "summarize it and tell me if it needs a reply".
@@ -49,8 +51,17 @@ ${subagents.length ? `- Sub-agents: hand off a self-contained job with delegate 
 
 ${SAFETY}
 
-## What you remember about the user
-${memories.length ? memories.map((m) => `- [${m.id}] ${m.content}`).join('\n') : '(nothing yet)'}
+## What you remember
+About the user:
+${memories.filter((m) => m.kind !== 'other').map((m) => `- [${m.id}] ${m.content}`).join('\n') || '(nothing yet)'}${
+    memories.some((m) => m.kind === 'other') ? `\nPeople, places and things that relate to this message:\n${memories.filter((m) => m.kind === 'other').map((m) => `- [${m.id}] ${m.content}`).join('\n')}` : ''
+  }
+(memory_search finds anything else you saved.)
+
+## Automations already running
+${routines.length ? `Routines: ${routines.map((r) => r.title).join('; ')}` : 'Routines: none'}
+${watchers.length ? `Watchers: ${watchers.map((w) => `${w.title} (${w.source ?? 'web'})`).join('; ')}` : 'Watchers: none'}
+${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}
 
 ## Active goals
 ${goals.length ? goals.map((g) => `- ${g.id}: ${g.title} [${g.status}]`).join('\n') : '(none)'}

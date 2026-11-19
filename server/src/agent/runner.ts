@@ -7,6 +7,8 @@ import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
 import { isRestricted, preapprovalFor, shouldNotifyAfterRun, type Preapproval } from './automation.js';
+import { searchTools, selectTools } from './routing.js';
+import { relevantMemories } from './tools/personal.js';
 import { attachmentForModel, attachmentInfo, claimUploads, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
@@ -183,11 +185,14 @@ interface LoopOptions {
 
 async function agentLoop(o: LoopOptions): Promise<string> {
   const { llm } = resolveProvider(o.providerId);
-  const toolSpecs = o.tools.map(toSpec);
+  let toolSpecs = o.tools.map(toSpec);
   let lastText = '';
 
   for (let step = 0; step < o.maxSteps; step++) {
     if (o.signal.aborted) throw new Error('aborted');
+    // Tools the model loaded with tools_search join from the next step.
+    for (const t of loadedTools.get(o.runId) ?? []) if (!o.tools.some((x) => x.name === t.name)) o.tools.push(t);
+    if (toolSpecs.length !== o.tools.length) toolSpecs = o.tools.map(toSpec);
     // Interjections: the user's new messages join the conversation between steps, without stopping the run.
     const inbox = o.persist ? active.get(o.runId)?.inbox : undefined;
     while (inbox?.length) {
@@ -455,6 +460,41 @@ function mainTools(): ToolDef[] {
     .filter((t) => (getSettings().policies[t.name] ?? t.defaultPolicy) !== 'deny');
 }
 
+/** Tools a run loaded on demand with tools_search. */
+const loadedTools = new Map<string, ToolDef[]>();
+
+registerTool({
+  name: 'tools_search',
+  label: 'Find tools',
+  group: 'Core',
+  description:
+    "Find and load tools you don't currently have (only a relevant subset is loaded for each message). Describe what you need, e.g. \"send an email\", \"watch a price\", \"read a calendar\". The matching tools become available on your next step.",
+  parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] },
+  risk: 'low',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Find tools for “${a.query}”`,
+  async run(a, ctx) {
+    const found = await searchTools(mainTools(), String(a.query));
+    if (!found.length) return 'No matching tools. You may not have a tool for that; tell the user what you can do instead.';
+    // Load whole groups, so related tools (list / create / update) come together.
+    const groupsHit = new Set(found.slice(0, 4).map((t) => t.group));
+    const load = mainTools().filter((t) => groupsHit.has(t.group) || found.includes(t));
+    loadedTools.set(ctx.runId, [...(loadedTools.get(ctx.runId) ?? []), ...load]);
+    return `Loaded ${load.length} tools, available from your next step:\n${load.map((t) => `- ${t.name}: ${t.description.split(/(?<=\.)\s/)[0]}`).join('\n')}`;
+  },
+});
+
+/** Tool groups used in the last few turns stay loaded, so follow-ups ("make it 9pm") still work. */
+function recentGroups(conversationId: string): Set<string> {
+  const rows = all<{ tool_calls: string | null }>("SELECT tool_calls FROM messages WHERE conversation_id = ? AND role = 'assistant' AND tool_calls IS NOT NULL ORDER BY created_at DESC LIMIT 6", conversationId);
+  const out = new Set<string>();
+  for (const r of rows) for (const c of parseJson<ToolCall[]>(r.tool_calls, [])) {
+    const t = getTool(c.name);
+    if (t) out.add(t.group);
+  }
+  return out;
+}
+
 // ───────────────────────── Starting runs ─────────────────────────
 
 export function createConversation(title = 'New chat', kind = 'chat') {
@@ -499,6 +539,10 @@ async function execute(runId: string, conversationId: string, controller: AbortC
     const model = await resolveModel(s.main.providerId, s.main.model);
     run('UPDATE runs SET model = ? WHERE id = ?', model, runId);
     const history = loadHistory(conversationId, s.main.contextMessages);
+    const lastUser = [...history.messages].reverse().find((m) => m.role === 'user');
+    const query = typeof lastUser?.content === 'string' ? lastUser.content.slice(0, 2000) : '';
+    const picked = await selectTools(mainTools(), query, recentGroups(conversationId));
+    const memories = await relevantMemories(query);
     const answer = await agentLoop({
       runId,
       conversationId,
@@ -508,10 +552,10 @@ async function execute(runId: string, conversationId: string, controller: AbortC
       effort: s.main.effort,
       temperature: s.main.temperature,
       contextLength: s.main.contextLength,
-      system: mainSystemPrompt(),
+      system: mainSystemPrompt({ memories, toolNote: picked.method === 'all' ? '' : 'Only the tools relevant to this request are loaded. If you need a tool you don\'t see (email, calendar, watchers, routines, webhooks, shopping, files, spaces…), call tools_search first.' }),
       messages: history.messages,
       historyTrimmed: history.trimmed,
-      tools: mainTools(),
+      tools: picked.tools,
       maxSteps: s.main.maxSteps,
       signal: controller.signal,
       persist: true,
@@ -536,6 +580,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
     }
   } finally {
     active.delete(runId);
+    loadedTools.delete(runId);
   }
 }
 

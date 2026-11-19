@@ -13,6 +13,8 @@ import { expireStaleApprovals } from './agent/sentinel.js';
 import { reloadMcp } from './agent/tools/mcp.js';
 import { syncCalendarTools } from './agent/tools/calendar.js';
 import { syncEmailTools } from './agent/tools/email.js';
+import { startHelpers } from './agent/helpers.js';
+import { backfillMemoryEmbeddings } from './agent/tools/personal.js';
 import { DATA_DIR, HOST, PORT, WEB_DIST } from './config.js';
 import { initPush } from './push.js';
 import { apiRouter } from './routes.js';
@@ -111,6 +113,9 @@ app.listen(PORT, HOST, () => {
   void reloadMcp();
   syncCalendarTools();
   syncEmailTools();
+  startHelpers();
+  setInterval(() => void backfillMemoryEmbeddings(), 10 * 60_000).unref();
+  setTimeout(() => void backfillMemoryEmbeddings(), 60_000).unref();
   startScheduler();
   startWatchers();
   resumeShopLink();

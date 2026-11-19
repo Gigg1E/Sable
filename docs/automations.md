@@ -69,4 +69,21 @@ Push notifications for approvals have **Approve** and **Deny** buttons, so you d
 
 A check that found nothing new never notifies you, and the same news is never sent twice. See [Routines](#routines).
 
+## Memory
+
+Two kinds, shown as tabs on the **Memory** page (click a memory's label to switch it):
+- **About you:** where you live, preferences, how you work. Always in the agent's mind.
+- **People & things:** contacts, places, accounts, items ("Sam is my landlord, sam@example.com"). Only brought up when a message is about them.
+
+Tasks and requests ("monitor my email", "remind me…") are refused as memories, because they belong in routines and watchers. Saving the same fact twice updates it instead of duplicating it. The agent also sees a short list of your running routines and watchers, so it knows what's already set up.
+
+## Tool and memory selection (helper model)
+
+A small embedding model (`embeddinggemma`, about 300 MB) installs itself in Ollama the first time Sable sees Ollama. Its status and an **Install now** button are in **Settings → Models → Helper model**.
+
+- For each message it picks the relevant **tool groups** (email, watchers, web, files…), plus groups used in the last few turns and a few core tools. A typical message gets 10-20 tools instead of 50+, which makes smaller models far less likely to pick the wrong one.
+- The model can always call **tools_search** ("send an email") to load anything else.
+- The same model picks which "people & things" memories are relevant.
+- Without Ollama, it falls back to keyword matching. Turning it off sends every tool and memory, as before.
+
 *(Spaces are being rebuilt to this design next.)*

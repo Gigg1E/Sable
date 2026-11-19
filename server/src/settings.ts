@@ -108,6 +108,8 @@ export interface Settings {
   calendars: CalendarFeed[];
   /** Mailboxes the agent can read, watch and send from. */
   email: { accounts: EmailAccount[] };
+  /** Small local model that picks relevant tools and memories (installed in Ollama automatically). */
+  helpers: { enabled: boolean; embedModel: string };
   /** Public base URL of this Sable server, used to build inbound webhook URLs. */
   publicUrl: string;
   shopping: {
@@ -183,6 +185,7 @@ export function defaultSettings(): Settings {
     channels: [],
     calendars: [],
     email: { accounts: [] },
+    helpers: { enabled: true, embedModel: 'embeddinggemma' },
     publicUrl: env.SABLE_PUBLIC_URL ?? '',
     shopping: { enabled: true, purchases: false, maxOrder: 200, country: 'US', currency: 'USD' },
   };
@@ -201,7 +204,7 @@ export function getSettings(): Settings {
 
 function merge(defaults: Settings, stored: Partial<Settings>): Settings {
   const out = { ...defaults, ...stored } as Settings;
-  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping', 'email'] as const) {
+  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping', 'email', 'helpers'] as const) {
     (out as any)[key] = { ...(defaults as any)[key], ...((stored as any)[key] ?? {}) };
   }
   return out;
