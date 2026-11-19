@@ -148,7 +148,7 @@ export function FileCard({ card }: { card: FileCardData }) {
           <button onClick={() => usePanel.getState().show('files', m.path)} className="block max-w-full truncate text-left text-[13.5px] font-medium hover:underline hover:decoration-line-strong hover:underline-offset-2" title="Open in the side panel">
             {m.name}
           </button>
-          <div className="flex min-w-0 items-center gap-1.5 whitespace-nowrap font-mono text-[11px] text-fg-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-1.5 font-mono text-[11px] text-fg-3 sm:flex-nowrap sm:whitespace-nowrap">
             {gone ? <span className="text-danger">deleted</span> : <span className="shrink-0">{fmtBytes(m.size)}</span>}
             <span className="shrink-0">·</span>
             <AnimatePresence mode="popLayout" initial={false}>
@@ -159,7 +159,11 @@ export function FileCard({ card }: { card: FileCardData }) {
             {m.path.replace(/^chats\/[^/]+\//, '') !== m.name && <span className="hidden min-w-0 truncate sm:inline">· {m.path.replace(/^chats\/[^/]+\//, '').split('/').slice(0, -1).join('/')}/</span>}
           </div>
         </div>
-        {!gone && meta?.text !== undefined && <CopyButton text={() => meta?.text ?? ''} label="Copy contents" />}
+        {!gone && meta?.text !== undefined && (
+          <span className="hidden sm:inline-flex">
+            <CopyButton text={() => meta?.text ?? ''} label="Copy contents" />
+          </span>
+        )}
         {!gone && (
           <a href={fileUrl(m.path, true)} download={m.name} className="inline-flex h-7 items-center gap-1.5 rounded-md border border-line px-2.5 text-[12.5px] text-fg-2 transition-colors hover:border-line-strong hover:text-fg">
             <Download className="size-3.5" /> <span className="hidden sm:inline">Download</span>

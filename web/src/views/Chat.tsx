@@ -64,7 +64,8 @@ export function ChatHome() {
   const active = goals.filter((g) => g.status === 'active' || g.status === 'blocked').slice(0, 4);
   const upcoming = schedules.filter((s) => s.enabled && s.next_run).sort((a, b) => a.next_run! - b.next_run!).slice(0, 4);
   const running = conversations.filter((c) => runs[c.id]);
-  const recent = conversations.filter((c) => !runs[c.id]).slice(0, 6);
+  // Recent conversations you had (automation runs live in their own sidebar section).
+  const recent = conversations.filter((c) => !runs[c.id] && !['schedule', 'watch', 'hook'].includes(c.kind)).slice(0, 6);
 
   return (
     <>
@@ -166,7 +167,7 @@ export function ChatHome() {
                 {recent.map((c) => (
                   <button key={c.id} onClick={() => navigate(`/chat/${c.id}`)} className="group flex w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-panel-2/60">
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-[13.5px]">{c.title}</div>
+                      <div className="truncate text-[13.5px]">{c.title.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')}</div>
                       {c.preview && <div className="mt-0.5 truncate text-[12.5px] text-fg-3">{c.preview.replace(/[#*_`>]/g, '')}</div>}
                     </div>
                     <span className="shrink-0 font-mono text-[11px] text-fg-3">{timeAgo(c.updated_at)}</span>

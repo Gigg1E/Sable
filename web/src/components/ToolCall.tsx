@@ -113,20 +113,20 @@ export function ToolRow({ call, result, isError, depth = 0, title }: { call: Too
           <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
             <div className="space-y-2 px-3 pb-3 pl-9 text-[11.5px]">
               <div>
-                <div className="mb-1 flex items-center justify-between text-[10.5px] font-medium uppercase tracking-wider text-fg-3">
+                <div className="mb-1 flex items-center justify-between text-[10.5px] font-medium text-fg-3">
                   Input <CopyButton text={pretty(call.args)} label="Copy input" className="-my-1 normal-case tracking-normal" />
                 </div>
                 <pre className="max-h-56 overflow-auto rounded-md border border-line bg-sunken p-2.5 font-mono text-fg-2">{pretty(call.args)}</pre>
               </div>
               {live?.progress && (
                 <div>
-                  <div className="mb-1 text-[10.5px] font-medium uppercase tracking-wider text-fg-3">Live output</div>
+                  <div className="mb-1 text-[10.5px] font-medium text-fg-3">Live output</div>
                   <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-line bg-sunken p-2.5 font-mono text-fg-2">{live.progress}</pre>
                 </div>
               )}
               {output !== undefined && (
                 <div>
-                  <div className="mb-1 flex items-center justify-between text-[10.5px] font-medium uppercase tracking-wider text-fg-3">
+                  <div className="mb-1 flex items-center justify-between text-[10.5px] font-medium text-fg-3">
                     Result <CopyButton text={String(output)} label="Copy result" className="-my-1 normal-case tracking-normal" />
                   </div>
                   <pre className={cx('max-h-72 overflow-auto whitespace-pre-wrap rounded-md border p-2.5 font-mono', isError || status === 'error' ? 'border-danger/25 bg-danger/5 text-danger' : 'border-line bg-sunken text-fg-2')}>{output}</pre>

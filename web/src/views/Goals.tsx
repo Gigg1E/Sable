@@ -142,7 +142,7 @@ export function GoalsView() {
           <Empty icon={<ListChecks className="size-4" />} title={tab === 'active' ? 'Nothing in progress' : 'No goals here'} body="Ask for something that takes a few steps, like planning a trip or comparing options, and the plan is tracked here." />
         ) : (
           <Card className="overflow-hidden">
-            <div className="hidden items-center gap-3 border-b border-line bg-panel-2/50 px-4 py-2 font-mono text-[10.5px] uppercase tracking-wider text-fg-3 sm:flex">
+            <div className="hidden items-center gap-3 border-b border-line bg-panel-2/50 px-4 py-2 font-mono text-[10.5px] text-fg-3 sm:flex">
               <span className="w-3.5" />
               <span className="flex-1">Goal</span>
               <span className="w-28">Progress</span>
@@ -276,7 +276,7 @@ export function RoutinesView() {
           />
         ) : (
           <Card className="overflow-hidden">
-            <div className="hidden items-center gap-3 border-b border-line bg-panel-2/50 px-4 py-2 font-mono text-[10.5px] uppercase tracking-wider text-fg-3 md:flex">
+            <div className="hidden items-center gap-3 border-b border-line bg-panel-2/50 px-4 py-2 font-mono text-[10.5px] text-fg-3 md:flex">
               <span className="flex-1">Routine</span>
               <span className="w-36">Schedule</span>
               <span className="w-36">Next run</span>

@@ -137,7 +137,7 @@ function FilesTab({ chat, files }: { chat: string; files: ChatFile[] }) {
       {groups.map(([label, list]) =>
         list.length ? (
           <div key={label} className="mb-3">
-            <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-fg-3">{label}</div>
+            <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium text-fg-3">{label}</div>
             {list.map((f) => (
               <div key={f.path} className="group flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-panel-2">
                 <button onClick={() => set({ file: f.path })} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
@@ -202,15 +202,15 @@ function RemindersTab({ schedules, watchers }: { schedules: Schedule[]; watchers
   );
   return (
     <div className="min-h-0 flex-1 overflow-auto p-2">
-      {upcoming.length > 0 && <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wider text-fg-3">Coming up</div>}
+      {upcoming.length > 0 && <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium text-fg-3">Coming up</div>}
       {upcoming.map((s) => (
         <Row key={s.id} title={s.title} sub={kind(s)} right={when(s.next_run)} dot="bg-tint" to="/routines" />
       ))}
-      {watchers.length > 0 && <div className="px-2 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-fg-3">Watching</div>}
+      {watchers.length > 0 && <div className="px-2 pb-1 pt-3 text-[11px] font-medium text-fg-3">Watching</div>}
       {watchers.map((w) => (
         <Row key={w.id} title={w.title} sub={w.conditionLabel} right={w.last_value ?? undefined} dot={w.enabled ? 'bg-ok' : 'bg-fg-3'} to="/watchers" />
       ))}
-      {paused.length > 0 && <div className="px-2 pb-1 pt-3 text-[11px] font-medium uppercase tracking-wider text-fg-3">Paused</div>}
+      {paused.length > 0 && <div className="px-2 pb-1 pt-3 text-[11px] font-medium text-fg-3">Paused</div>}
       {paused.map((s) => (
         <Row key={s.id} title={s.title} sub={kind(s)} dot="bg-fg-3" to="/routines" />
       ))}

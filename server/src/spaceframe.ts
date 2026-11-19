@@ -1,8 +1,8 @@
 /** Builds a Space's document: theme variables + the postMessage bridge, around the agent's HTML. */
 
 const THEMES = {
-  dark: { bg: '#0f0f11', surface: '#151517', surface2: '#1b1b1e', fg: '#ececee', muted: '#a0a0a8', subtle: '#6a6a72', accent: '#e3a650', ok: '#3fcf8e', danger: '#f2705a', border: '#232326' },
-  light: { bg: '#fafaf9', surface: '#ffffff', surface2: '#f4f4f2', fg: '#19191c', muted: '#5d5d64', subtle: '#8d8d94', accent: '#a26a14', ok: '#15803d', danger: '#c2410c', border: '#e6e6e3' },
+  dark: { bg: '#10141b', surface: '#161b24', surface2: '#1c222d', fg: '#e7eaf0', muted: '#a4acba', subtle: '#6d7687', accent: '#e3a650', ok: '#3fcf8e', danger: '#f2705a', border: '#242b37' },
+  light: { bg: '#f7f8fa', surface: '#ffffff', surface2: '#f2f4f8', fg: '#151a23', muted: '#545d6d', subtle: '#8a92a0', accent: '#a26a14', ok: '#15803d', danger: '#c2410c', border: '#e2e6ed' },
 };
 
 const BRIDGE = `(function(){var n=0,p={};function call(t,x){return new Promise(function(res,rej){var id=++n;p[id]={res:res,rej:rej};parent.postMessage({__sable:true,id:id,type:t,payload:x},'*')})}

@@ -606,7 +606,7 @@ function PermissionsSection({ draft, edit, tools }: { draft: Settings; edit: Edi
       >
         {groups.map(([group, list]) => (
           <Card key={group} className="divide-y divide-line">
-            <div className="px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-fg-3">{group}</div>
+            <div className="px-4 py-2.5 text-[11px] font-medium text-fg-3">{group}</div>
             {list.map((t) => {
               const policy = draft.policies[t.name] ?? t.defaultPolicy;
               return (

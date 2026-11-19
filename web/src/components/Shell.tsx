@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
+  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -102,7 +102,7 @@ function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate
       </button>
       <Menu.Root>
         <Menu.Trigger asChild>
-          <button className="absolute right-1 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-fg-3 opacity-0 transition-opacity hover:bg-panel-3 hover:text-fg group-hover:opacity-100 data-[state=open]:opacity-100" aria-label="Chat options">
+          <button className="absolute right-1 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded text-fg-3 opacity-0 transition-opacity hover:bg-panel-3 hover:text-fg group-hover:opacity-100 data-[state=open]:opacity-100 [@media(hover:none)]:opacity-100" aria-label="Chat options">
             <MoreHorizontal className="size-3.5" />
           </button>
         </Menu.Trigger>
@@ -398,17 +398,17 @@ function useTouchKeyboard() {
   return open;
 }
 
-function MobileTabs({ onMore, hidden }: { onMore: () => void; hidden: boolean }) {
+function MobileTabs({ onMore, onChats, hidden }: { onMore: () => void; onChats: () => void; hidden: boolean }) {
   const path = usePath();
   const approvals = useStore((s) => s.approvals.length);
   const unread = useStore((s) => s.unread);
   const tabs = [
-    { to: '/', label: 'Home', icon: Home, active: path === '/' || path.startsWith('/chat') },
-    { to: '/goals', label: 'Goals', icon: ListChecks, active: path.startsWith('/goals') },
+    { to: '/', label: 'Home', icon: Home, active: path === '/' },
+    { to: '#chats', label: 'Chats', icon: MessagesSquare, active: path.startsWith('/chat') },
     { to: '/spaces', label: 'Spaces', icon: LayoutGrid, active: path.startsWith('/spaces') },
     { to: '/inbox', label: 'Inbox', icon: Inbox, active: path === '/inbox', count: approvals + unread },
   ];
-  const moreActive = ['/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
+  const moreActive = ['/goals', '/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
   return (
     <AnimatePresence initial={false}>
       {!hidden && (
@@ -422,7 +422,7 @@ function MobileTabs({ onMore, hidden }: { onMore: () => void; hidden: boolean })
     >
       <div className="grid h-14 grid-cols-5">
         {tabs.map((t) => (
-          <button key={t.to} onClick={() => navigate(t.to)} className={cx('relative flex flex-col items-center justify-center gap-1 text-[10.5px] font-medium', t.active ? 'text-fg' : 'text-fg-3')}>
+          <button key={t.to} onClick={() => (t.to === '#chats' ? onChats() : navigate(t.to))} className={cx('relative flex flex-col items-center justify-center gap-1 text-[10.5px] font-medium', t.active ? 'text-fg' : 'text-fg-3')}>
             <span className="relative">
               <t.icon className="size-[19px]" strokeWidth={t.active ? 2.1 : 1.7} />
               {!!t.count && <span className="absolute -right-2 -top-1 min-w-4 rounded-full bg-accent px-1 text-center text-[9.5px] font-semibold leading-4 text-bg">{t.count}</span>}
@@ -444,6 +444,7 @@ function MobileTabs({ onMore, hidden }: { onMore: () => void; hidden: boolean })
 // ───────────────────────── Shell ─────────────────────────
 
 export function Shell({ children, routeKey }: { children: ReactNode; routeKey: string }) {
+  const path = usePath();
   const [drawer, setDrawer] = useState(false);
   const [more, setMore] = useState(false);
   const [palette, setPalette] = useState(false);
@@ -497,7 +498,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
             </AnimatePresence>
           </main>
           <StatusBar />
-          <MobileTabs onMore={() => setMore(true)} hidden={keyboard} />
+          <MobileTabs onMore={() => setMore(true)} onChats={() => setDrawer(true)} hidden={keyboard || /^\/(chat|spaces)\/./.test(path)} />
         </div>
 
         <AnimatePresence>
@@ -524,6 +525,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
         <Sheet open={more} onClose={() => setMore(false)} title="More">
           <div className="-m-2 space-y-px">
             {[
+              { to: '/goals', label: 'Goals', icon: ListChecks },
               { to: '/routines', label: 'Routines', icon: CalendarClock },
               { to: '/watchers', label: 'Watchers', icon: Radar },
               { to: '/webhooks', label: 'Webhooks', icon: Webhook },
