@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, MoreHorizontal, PanelLeftClose, Pencil, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Webhook,
+  Activity, Brain, CalendarClock, Check, Home, Inbox, LayoutGrid, ListChecks, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -52,7 +52,16 @@ function NavItem({ to, label, icon: Icon, count, active, onNavigate }: { to: str
   );
 }
 
-function ChatRow({ id, title, active, running, waiting, onNavigate }: { id: string; title: string; active: boolean; running: boolean; waiting: boolean; onNavigate?: () => void }) {
+const AUTOMATION_KINDS: Record<string, { icon: typeof CalendarClock; label: string }> = {
+  schedule: { icon: CalendarClock, label: 'Routine' },
+  watch: { icon: Radar, label: 'Watcher' },
+  hook: { icon: Webhook, label: 'Webhook' },
+};
+/** Automation chats were titled "⏰ Morning weather"; the icon now says what they are. */
+const cleanTitle = (t: string) => t.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '') || t;
+
+function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate }: { id: string; title: string; kind: string; pinned: boolean; active: boolean; running: boolean; waiting: boolean; onNavigate?: () => void }) {
+  const auto = AUTOMATION_KINDS[kind];
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(title);
   async function rename() {
@@ -87,8 +96,8 @@ function ChatRow({ id, title, active, running, waiting, onNavigate }: { id: stri
         }}
         className={cx('flex h-7 w-full items-center gap-2 rounded-md px-2 pr-7 text-left text-[13px] transition-colors', active ? 'bg-panel-2 text-fg' : 'text-fg-2 hover:bg-panel-2/60 hover:text-fg')}
       >
-        {(running || waiting) && <StatusDot state={waiting ? 'waiting' : 'running'} />}
-        <span className="min-w-0 flex-1 truncate">{title}</span>
+        {running || waiting ? <StatusDot state={waiting ? 'waiting' : 'running'} /> : auto ? <auto.icon className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : null}
+        <span className="min-w-0 flex-1 truncate">{cleanTitle(title)}</span>
       </button>
       <Menu.Root>
         <Menu.Trigger asChild>
@@ -98,6 +107,15 @@ function ChatRow({ id, title, active, running, waiting, onNavigate }: { id: stri
         </Menu.Trigger>
         <Menu.Portal>
           <Menu.Content align="start" sideOffset={4} className={menuContent}>
+            <Menu.Item
+              className={menuItem}
+              onSelect={() => {
+                useStore.setState((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, pinned: !pinned } : c)) }));
+                void api.patch(`/conversations/${id}`, { pinned: !pinned });
+              }}
+            >
+              {pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />} {pinned ? 'Unpin' : 'Pin to top'}
+            </Menu.Item>
             <Menu.Item className={menuItem} onSelect={() => (setValue(title), setRenaming(true))}>
               <Pencil className="size-3.5" /> Rename
             </Menu.Item>
@@ -152,9 +170,35 @@ function AccountMenu() {
   );
 }
 
+function SectionHead({ label, count }: { label: string; count?: number }) {
+  return (
+    <div className="flex items-center justify-between px-2 pb-1 text-[11px] font-medium text-fg-3">
+      <span>{label}</span>
+      {!!count && <span className="font-mono tabular">{count}</span>}
+    </div>
+  );
+}
+
 function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () => void; onSearch: () => void; onCollapse?: () => void }) {
   const path = usePath();
   const name = useStore((s) => s.settings?.persona.name ?? 'Sable');
+  const [autoOpen, setAutoOpenState] = useState(() => {
+    try {
+      return localStorage.getItem('sable.autosOpen') !== '0';
+    } catch {
+      return true;
+    }
+  });
+  const setAutoOpen = (f: (o: boolean) => boolean) =>
+    setAutoOpenState((o) => {
+      const n = f(o);
+      try {
+        localStorage.setItem('sable.autosOpen', n ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return n;
+    });
   const conversations = useStore((s) => s.conversations);
   const runs = useStore((s) => s.runs);
   const approvals = useStore((s) => s.approvals);
@@ -210,15 +254,46 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
           <NavItem key={n.to} {...n} active={path.startsWith(n.to)} onNavigate={onNavigate} />
         ))}
       </nav>
-      <div className="mt-5 flex items-center justify-between px-4 pb-1 text-[11px] font-medium text-fg-3">
-        <span>Chats</span>
-        <span className="font-mono tabular">{conversations.length || ''}</span>
-      </div>
-      <div className="min-h-0 flex-1 space-y-px overflow-y-auto px-2 pb-2">
-        {conversations.slice(0, 60).map((c) => (
-          <ChatRow key={c.id} id={c.id} title={c.title} active={path === `/chat/${c.id}`} running={!!runs[c.id]} waiting={waitingConvs.has(c.id)} onNavigate={onNavigate} />
-        ))}
-        {!conversations.length && <p className="px-2 py-2 text-xs text-fg-3">No chats yet.</p>}
+      <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+        {(() => {
+          const row = (c: (typeof conversations)[number]) => (
+            <ChatRow key={c.id} id={c.id} title={c.title} kind={c.kind} pinned={!!c.pinned} active={path === `/chat/${c.id}`} running={!!runs[c.id]} waiting={waitingConvs.has(c.id)} onNavigate={onNavigate} />
+          );
+          const pinnedList = conversations.filter((c) => c.pinned);
+          const chats = conversations.filter((c) => !c.pinned && !AUTOMATION_KINDS[c.kind]);
+          const autos = conversations.filter((c) => !c.pinned && AUTOMATION_KINDS[c.kind]);
+          const autoBusy = autos.some((c) => runs[c.id] || waitingConvs.has(c.id));
+          return (
+            <>
+              {pinnedList.length > 0 && (
+                <>
+                  <SectionHead label="Pinned" />
+                  <div className="mb-3 space-y-px">{pinnedList.map(row)}</div>
+                </>
+              )}
+              <SectionHead label="Chats" count={chats.length} />
+              <div className="space-y-px">{chats.slice(0, 60).map(row)}</div>
+              {!chats.length && <p className="px-2 py-2 text-xs text-fg-3">No chats yet.</p>}
+              {autos.length > 0 && (
+                <div className="mt-3">
+                  <button onClick={() => setAutoOpen((o) => !o)} className="flex w-full items-center gap-1 rounded-md px-2 pb-1 pt-1 text-[11px] font-medium text-fg-3 hover:text-fg-2">
+                    <ChevronRight className={cx('size-3 transition-transform', autoOpen && 'rotate-90')} />
+                    <span className="flex-1 text-left">Automations</span>
+                    {autoBusy && <StatusDot state="running" />}
+                    <span className="font-mono tabular">{autos.length}</span>
+                  </button>
+                  <AnimatePresence initial={false}>
+                    {autoOpen && (
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.16 }} className="space-y-px overflow-hidden">
+                        {autos.slice(0, 40).map(row)}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+            </>
+          );
+        })()}
       </div>
       <div className="space-y-px border-t border-line p-2">
         <NavItem to="/settings" label="Settings" icon={Settings} active={path.startsWith('/settings')} onNavigate={onNavigate} />

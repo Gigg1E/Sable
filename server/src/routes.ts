@@ -310,7 +310,7 @@ export function apiRouter() {
       all(
         `SELECT c.*, (SELECT content FROM messages m WHERE m.conversation_id = c.id AND m.role IN ('user','assistant') AND m.content != '' ORDER BY m.rowid DESC LIMIT 1) AS preview
          FROM conversations c ORDER BY c.updated_at DESC LIMIT 300`,
-      ).map((c: any) => ({ ...c, running: !!activeRunFor(c.id) })),
+      ).map((c: any) => ({ ...c, pinned: !!c.pinned, running: !!activeRunFor(c.id) })),
     ),
   );
   r.post('/conversations', h(() => ({ id: createConversation() })));
@@ -344,7 +344,8 @@ export function apiRouter() {
   r.patch(
     '/conversations/:id',
     h((req) => {
-      run('UPDATE conversations SET title = ? WHERE id = ?', String(req.body?.title ?? 'Untitled').slice(0, 120), param(req, 'id'));
+      if (req.body?.title !== undefined) run('UPDATE conversations SET title = ? WHERE id = ?', String(req.body.title || 'Untitled').slice(0, 120), param(req, 'id'));
+      if (req.body?.pinned !== undefined) run('UPDATE conversations SET pinned = ? WHERE id = ?', req.body.pinned ? 1 : 0, param(req, 'id'));
       emit({ type: 'conversation.changed', id: param(req, 'id') });
     }),
   );

@@ -165,6 +165,7 @@ export interface Conversation {
   updated_at: number;
   preview?: string | null;
   running?: boolean;
+  pinned?: boolean;
 }
 export interface Approval {
   id: string;

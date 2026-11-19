@@ -404,8 +404,8 @@ export function ChatView({ id }: { id: string }) {
   return (
     <>
       <TopBar
-        title={conversation?.title ?? 'Chat'}
-        crumbs={conversation?.kind === 'schedule' ? 'Routines' : 'Chats'}
+        title={(conversation?.title ?? 'Chat').replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')}
+        crumbs={{ schedule: 'Routine', watch: 'Watcher', hook: 'Webhook' }[conversation?.kind ?? ''] ?? 'Chats'}
         actions={
           <>
             {running && (
