@@ -6,6 +6,8 @@ import { clearState, forgetOAuth, oauthCallbackUrl, serverForState } from './age
 import { computeNextRun, goalJson, type GoalRow, type ScheduleKind, type ScheduleSpec } from './agent/tools/personal.js';
 import { getTool, listTools } from './agent/tools/registry.js';
 import { syncCalendarTools, testFeed } from './agent/tools/calendar.js';
+import { syncEmailTools } from './agent/tools/email.js';
+import { PROVIDERS, testAccount } from './email.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
   recordFailedLogin, recoveryCodesLeft, requireAuth, sessionCount, setPassword, twoFactorEnabled,
@@ -23,7 +25,7 @@ import crypto from 'node:crypto';
 import { kvSet } from './db.js';
 import { notify, removeSubscription, saveSubscription, sendToChannel, vapidPublicKey } from './push.js';
 import { fireSchedule } from './scheduler.js';
-import { getSettings, publicSettings, updateSettings, type CalendarFeed, type ProviderConfig, type Settings } from './settings.js';
+import { getSettings, publicSettings, updateSettings, type CalendarFeed, type EmailAccount, type ProviderConfig, type Settings } from './settings.js';
 import { errorMessage, id, now, parseJson } from './util.js';
 import { getUpload, uploadRoutes } from './uploads.js';
 import { workspaceRoutes } from './agent/tools/workspace.js';
@@ -578,6 +580,7 @@ export function apiRouter() {
       updateSettings(req.body as Settings);
       if (JSON.stringify(getSettings().mcpServers) !== before) void reloadMcp();
       syncCalendarTools();
+      syncEmailTools();
       emit({ type: 'settings.changed' });
       return publicSettings();
     }),
@@ -670,6 +673,24 @@ export function apiRouter() {
       back(`shop_error=${encodeURIComponent(errorMessage(err))}`);
     }
   });
+
+  r.post(
+    '/email/test',
+    h(async (req) => {
+      const body = req.body as EmailAccount;
+      const stored = getSettings().email.accounts.find((a) => a.id === body.id);
+      const acc = { ...body, password: !body.password || body.password.includes('••••') ? (stored?.password ?? '') : body.password };
+      if (!acc.address || !acc.password) return { ok: false, error: 'Enter the address and app password first.' };
+      try {
+        await testAccount(acc);
+        return { ok: true };
+      } catch (err) {
+        const msg = errorMessage(err);
+        return { ok: false, error: /auth|credential|login|invalid/i.test(msg) ? `Sign-in failed: check the address and that you used an app password, not your normal password. (${msg})` : msg };
+      }
+    }),
+  );
+  r.get('/email/providers', h(() => PROVIDERS));
 
   r.post(
     '/calendars/test',

@@ -6,6 +6,7 @@ import { Badge, Button, Card, Field, Input, Segmented, Select, Spinner, Textarea
 import { AGENT_TEMPLATES } from '../lib/agentTemplates';
 import { ConnectorsSection } from './Connectors';
 import { CalendarFeedsSection } from './Calendars';
+import { EmailAccountsSection } from './EmailAccounts';
 import { ShoppingSection } from './Shopping';
 import { SecuritySection } from './Security';
 import { api } from '../lib/api';
@@ -928,6 +929,7 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'permissions' && <PermissionsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'connectors' && (
                   <>
+                    <EmailAccountsSection draft={draft} edit={edit} />
                     <CalendarFeedsSection draft={draft} edit={edit} />
                     <ConnectorsSection draft={draft} edit={edit} tools={tools} saveNow={(next) => save(next, true)} />
                   </>

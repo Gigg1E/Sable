@@ -60,7 +60,7 @@ function WatcherRow({ w }: { w: Watcher }) {
         <div className="min-w-0 flex-1">
           <div className={cx('truncate text-[13.5px] font-medium', !w.enabled && 'text-fg-3')}>{w.title}</div>
           <div className="truncate text-[12px] text-fg-3">
-            {host(w.url)} · {w.conditionLabel} · every {every(w.interval_min)}
+            {w.source && w.source !== 'web' ? w.sourceLabel : `${host(w.url)} · ${w.conditionLabel} · every ${every(w.interval_min)}`}
           </div>
         </div>
         <Sparkline points={w.spark} width={96} height={28} className="hidden shrink-0 sm:block" />
@@ -116,10 +116,12 @@ function WatcherRow({ w }: { w: Watcher }) {
               <div className="space-y-3 text-[12.5px]">
                 <dl className="space-y-2">
                   {[
-                    ['Page', <a key="u" href={w.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-fg hover:underline">{host(w.url)} <ExternalLink className="size-3" /></a>],
+                    w.source && w.source !== 'web'
+                      ? ['Watches', w.sourceLabel]
+                      : ['Page', <a key="u" href={w.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-fg hover:underline">{host(w.url)} <ExternalLink className="size-3" /></a>],
                     ['Reads', `${EXTRACT_LABEL[w.extract.kind]}: ${extractDetail(w.extract)}`],
                     ['Alerts when', w.conditionLabel],
-                    ['Then', [w.actions.notify && 'notify', w.actions.webhook && `POST ${host(w.actions.webhook)}`, w.actions.prompt && 'ask the agent'].filter(Boolean).join(', ') || 'log only'],
+                    ['Then', [w.actions.notify && 'notify', w.actions.webhook && `POST ${host(w.actions.webhook)}`, w.actions.prompt && `the agent: “${w.actions.prompt.slice(0, 120)}”`].filter(Boolean).join(', ') || 'log only'],
                     ['Next check', w.enabled && w.next_check ? clockTime(w.next_check) : 'paused'],
                     ['Last alert', w.last_triggered ? timeAgo(w.last_triggered) : 'never'],
                   ].map(([k, v]) => (

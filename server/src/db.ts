@@ -101,6 +101,12 @@ addColumn('schedules', 'notify', 'TEXT');
 addColumn('schedules', 'last_result', 'TEXT');
 addColumn('schedules', 'autonomy', 'TEXT');
 addColumn('schedules', 'restrict_tools', 'TEXT');
+addColumn('watchers', 'source', "TEXT NOT NULL DEFAULT 'web'");
+addColumn('watchers', 'source_config', 'TEXT');
+addColumn('watchers', 'state', 'TEXT');
+addColumn('watchers', 'autonomy', 'TEXT');
+addColumn('watchers', 'restrict_tools', 'TEXT');
+addColumn('watchers', 'run_conversation_id', 'TEXT');
 addColumn('conversations', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
 
 type Row = Record<string, unknown>;

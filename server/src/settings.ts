@@ -61,6 +61,24 @@ export interface Channel {
   events: 'all' | 'important';
 }
 
+/** A mailbox reached over IMAP/SMTP with an app password. */
+export interface EmailAccount {
+  id: string;
+  name: string;
+  address: string;
+  provider: 'gmail' | 'icloud' | 'yahoo' | 'outlook' | 'custom';
+  /** Login name if it isn't the address. */
+  user?: string;
+  /** App password (secret). */
+  password: string;
+  imapHost?: string;
+  imapPort?: number;
+  smtpHost?: string;
+  smtpPort?: number;
+  isDefault?: boolean;
+  enabled?: boolean;
+}
+
 /** A read-only calendar subscription (iCal / ICS "secret address"). */
 export interface CalendarFeed {
   id: string;
@@ -87,6 +105,8 @@ export interface Settings {
   channels: Channel[];
   /** Read-only calendar feeds the agent can read. */
   calendars: CalendarFeed[];
+  /** Mailboxes the agent can read, watch and send from. */
+  email: { accounts: EmailAccount[] };
   /** Public base URL of this Sable server, used to build inbound webhook URLs. */
   publicUrl: string;
   shopping: {
@@ -161,6 +181,7 @@ export function defaultSettings(): Settings {
     anthropic: { serverFallbacks: true },
     channels: [],
     calendars: [],
+    email: { accounts: [] },
     publicUrl: env.SABLE_PUBLIC_URL ?? '',
     shopping: { enabled: true, purchases: false, maxOrder: 200, country: 'US', currency: 'USD' },
   };
@@ -179,7 +200,7 @@ export function getSettings(): Settings {
 
 function merge(defaults: Settings, stored: Partial<Settings>): Settings {
   const out = { ...defaults, ...stored } as Settings;
-  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping'] as const) {
+  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping', 'email'] as const) {
     (out as any)[key] = { ...(defaults as any)[key], ...((stored as any)[key] ?? {}) };
   }
   return out;
@@ -209,6 +230,7 @@ export function publicSettings(): Settings {
     c.url = maskUrl(c.url);
   }
   for (const c of s.calendars ?? []) c.url = maskUrl(c.url);
+  for (const a of s.email?.accounts ?? []) a.password = a.password ? MASK : '';
   for (const m of s.mcpServers) {
     if (m.env) for (const k of Object.keys(m.env)) m.env[k] = m.env[k] ? MASK : '';
     if (m.headers) for (const k of Object.keys(m.headers)) m.headers[k] = m.headers[k] ? MASK : '';
@@ -229,6 +251,9 @@ export function updateSettings(next: Settings): Settings {
     const old = prev.channels.find((x) => x.id === c.id);
     if (c.token === MASK) c.token = old?.token ?? '';
     if (c.url?.includes(MASK)) c.url = old?.url ?? '';
+  }
+  for (const a of next.email?.accounts ?? []) {
+    if (a.password === MASK) a.password = prev.email?.accounts?.find((x) => x.id === a.id)?.password ?? '';
   }
   for (const c of next.calendars ?? []) {
     if (c.url?.includes(MASK)) c.url = prev.calendars?.find((x) => x.id === c.id)?.url ?? '';

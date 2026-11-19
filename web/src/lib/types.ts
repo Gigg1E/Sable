@@ -66,6 +66,9 @@ export interface Watcher {
   id: string;
   title: string;
   url: string;
+  source?: 'web' | 'email' | 'calendar';
+  sourceLabel?: string;
+  autonomy?: 'auto' | 'ask' | null;
   extract: ExtractSpec;
   condition: Condition;
   conditionLabel: string;
@@ -130,6 +133,7 @@ export interface Settings {
   anthropic: { serverFallbacks: boolean };
   channels: Channel[];
   calendars: CalendarFeed[];
+  email: { accounts: EmailAccount[] };
   publicUrl: string;
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }
@@ -374,4 +378,19 @@ export interface AutomationCard {
   notify?: 'always' | 'when_new';
   restrict: string[];
   source?: string;
+}
+
+export interface EmailAccount {
+  id: string;
+  name: string;
+  address: string;
+  provider: 'gmail' | 'icloud' | 'yahoo' | 'outlook' | 'custom';
+  user?: string;
+  password: string;
+  imapHost?: string;
+  imapPort?: number;
+  smtpHost?: string;
+  smtpPort?: number;
+  isDefault?: boolean;
+  enabled?: boolean;
 }

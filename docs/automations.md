@@ -19,6 +19,36 @@ Sable has four kinds of automation, each with one job:
   - **Every run / Only when new:** whether it tells you every time, or only when there's something new.
   - **Runs on its own / Asks first:** whether its steps are pre-approved.
 
+## Watchers
+
+A watcher monitors something and runs a prompt when something new happens. Like routines, creating one shows a card you approve. **Approve** pre-approves the steps its runs take, except purchases and anything you restrict.
+
+| Source | Fires when | How fast |
+|---|---|---|
+| **Email** | New mail arrives, optionally only from certain senders (name, address or domain) or with a subject | Within seconds (live IMAP connection), with a fallback check every 15 min |
+| **Calendar** | An event is added to your calendar feeds, or is about to start (X minutes before) | Every check |
+| **Web** | A page or API changes: price below/above, % drop, text appears, any change | Every N minutes (5+, polite 60 for shops) |
+| **Push** | Another service calls a URL Sable gives you | Instantly *(moving here from Webhooks in the next update)* |
+
+What happens when it fires is a prompt, for example:
+- "The price dropped below $40: add 1 of it to my cart and tell me."
+- "Summarize the email and tell me if it needs a reply."
+- "Reply 'Thanks, got it' to the sender."
+
+The runs happen in the watcher's own chat under **Automations** in the sidebar, where you can also talk to it. Watchers check in code, with no model call, so nothing runs (and nothing pings you) until something new actually matches.
+
+## Email accounts
+
+**Settings → Connectors → Email → Add email account.** Pick the provider, enter the address and an **app password** (not your normal password):
+
+- **Gmail:** turn on 2-Step Verification, then Google Account → Security → **App passwords**.
+- **iCloud:** account.apple.com → Sign-In and Security → **App-Specific Passwords**.
+- **Yahoo:** Account Security → **Generate app password**.
+- **Outlook.com:** Microsoft often blocks app passwords for IMAP. If **Test** fails, use the Microsoft 365 connector.
+- **Other:** your provider's IMAP/SMTP servers (also works with local bridges such as Proton Mail Bridge).
+
+Connect several and mark one **Default**. The agent can then search, read and send email (sending asks you unless a routine or watcher you approved does it), and watchers can watch any of them.
+
 ## Approving from the notification
 
 Push notifications for approvals have **Approve** and **Deny** buttons, so you don't need to open the app. This works on Android, Windows and macOS (Chrome, Edge, Firefox). On iPhone, iOS doesn't support notification buttons, so tapping opens the approval in the app.
@@ -27,4 +57,4 @@ Push notifications for approvals have **Approve** and **Deny** buttons, so you d
 
 A check that found nothing new never notifies you, and the same news is never sent twice. See [Routines](#routines).
 
-*(Watchers, webhooks and Spaces are being rebuilt to this design. This page grows as each part lands.)*
+*(Webhooks and Spaces are being rebuilt to this design next. This page grows as each part lands.)*
