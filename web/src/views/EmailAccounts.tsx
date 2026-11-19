@@ -9,7 +9,7 @@ import type { EmailAccount, Settings } from '../lib/types';
 type Edit = (fn: (d: Settings) => void) => void;
 
 const PROVIDERS: { value: EmailAccount['provider']; label: string; help: string }[] = [
-  { value: 'gmail', label: 'Gmail', help: 'Turn on 2-Step Verification, then Google Account → Security → App passwords. Paste the 16-letter password here (spaces are fine).' },
+  { value: 'gmail', label: 'Gmail', help: 'Turn on 2-Step Verification, then go to myaccount.google.com/apppasswords, create one (any name) and paste the 16 letters here; spaces are removed for you. Use the same Google account as the address.' },
   { value: 'icloud', label: 'iCloud Mail', help: 'account.apple.com → Sign-In and Security → App-Specific Passwords.' },
   { value: 'yahoo', label: 'Yahoo Mail', help: 'Yahoo Account Security → Generate app password.' },
   { value: 'outlook', label: 'Outlook.com', help: 'Microsoft often blocks app passwords for IMAP. If the test fails, use the Microsoft 365 connector below instead.' },
@@ -17,7 +17,7 @@ const PROVIDERS: { value: EmailAccount['provider']; label: string; help: string 
 ];
 
 export function EmailAccountsSection({ draft, edit }: { draft: Settings; edit: Edit }) {
-  const [tests, setTests] = useState<Record<string, { ok: boolean; error?: string } | 'busy'>>({});
+  const [tests, setTests] = useState<Record<string, { ok: boolean; error?: string; message?: string } | 'busy'>>({});
   const accounts = draft.email?.accounts ?? [];
   return (
     <section className="mb-10">
@@ -92,13 +92,13 @@ export function EmailAccountsSection({ draft, edit }: { draft: Settings; edit: E
                       disabled={!a.address || !a.password}
                       onClick={async () => {
                         setTests((x) => ({ ...x, [a.id]: 'busy' }));
-                        const r = await api.post<{ ok: boolean; error?: string }>('/email/test', a).catch((err: Error) => ({ ok: false, error: err.message }));
+                        const r = await api.post<{ ok: boolean; error?: string; message?: string }>('/email/test', a).catch((err: Error) => ({ ok: false, error: err.message }));
                         setTests((x) => ({ ...x, [a.id]: r }));
                       }}
                     >
                       Test
                     </Button>
-                    {t && t !== 'busy' && <span className={cx('min-w-0 text-xs', t.ok ? 'text-ok' : 'text-danger')}>{t.ok ? 'Connected' : t.error}</span>}
+                    {t && t !== 'busy' && <span className={cx('min-w-0 flex-1 basis-full text-xs leading-relaxed sm:basis-auto', t.ok ? (t.message?.startsWith('Reading works') ? 'text-accent' : 'text-ok') : 'text-danger')}>{t.ok ? (t.message ?? 'Connected') : t.error}</span>}
                   </div>
                 </Card>
               </motion.div>

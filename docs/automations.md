@@ -59,6 +59,11 @@ If you ask for something to go "to my webhook" and none is saved, the agent asks
 - **Outlook.com:** Microsoft often blocks app passwords for IMAP. If **Test** fails, use the Microsoft 365 connector.
 - **Other:** your provider's IMAP/SMTP servers (also works with local bridges such as Proton Mail Bridge).
 
+**If Test fails**, the message says which part failed (reading or sending) and why:
+- **"rejected the sign-in"** (with the server's own words): the address or app password is wrong. For Gmail, the app password must come from the same Google account as the address, 2-Step Verification must be on, and changing your Google password cancels old app passwords, so make a new one. Spaces in the app password are removed for you. Work and school accounts may have app passwords blocked by their admin.
+- **"Couldn't connect"**: the server is unreachable. If you use the VPN option (`SABLE_AGENT_PROXY`), many VPN proxies only allow web ports, not mail ports 993/465/587. Email then fails through the proxy even with the right password.
+- **"Reading works, but sending failed"**: watchers and reading still work. Only sending email is affected.
+
 Connect several and mark one **Default**. The agent can then search, read and send email (sending asks you unless a routine or watcher you approved does it), and watchers can watch any of them.
 
 ## Approving from the notification

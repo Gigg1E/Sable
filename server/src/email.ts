@@ -19,6 +19,14 @@ export const PROVIDERS: Record<string, { label: string; imap: string; imapPort: 
   custom: { label: 'Other (IMAP)', imap: '', imapPort: 993, smtp: '', smtpPort: 465, help: "Use your provider's IMAP and SMTP settings" },
 };
 
+/**
+ * Providers show app passwords in groups ("abcd efgh ijkl mnop"); the spaces aren't part of it and
+ * some servers reject them. Custom servers keep the password exactly as typed.
+ */
+export function appPassword(acc: EmailAccount) {
+  return acc.provider === 'custom' ? acc.password : acc.password.replace(/\s+/g, '');
+}
+
 function server(acc: EmailAccount) {
   const p = PROVIDERS[acc.provider] ?? PROVIDERS.custom;
   return {
@@ -48,7 +56,7 @@ function imapClient(acc: EmailAccount) {
     port: s.imapPort,
     // 993 is TLS from the start; other ports (local bridges like Proton Mail Bridge) upgrade with STARTTLS when offered.
     secure: s.imapPort === 993,
-    auth: { user: acc.user || acc.address, pass: acc.password },
+    auth: { user: (acc.user || acc.address).trim(), pass: appPassword(acc) },
     logger: false,
     ...(AGENT_PROXY ? { proxy: AGENT_PROXY } : {}),
   });
@@ -152,16 +160,61 @@ export async function sendMail(acc: EmailAccount, msg: { to: string; cc?: string
     host: s.smtp,
     port: s.smtpPort,
     secure: s.smtpPort === 465,
-    auth: { user: acc.user || acc.address, pass: acc.password },
+    auth: { user: (acc.user || acc.address).trim(), pass: appPassword(acc) },
     ...(AGENT_PROXY ? { proxy: AGENT_PROXY } : {}),
   });
   const info = await t.sendMail({ from: acc.name && acc.name !== acc.address ? `"${acc.name}" <${acc.address}>` : acc.address, to: msg.to, cc: msg.cc, subject: msg.subject, text: msg.text });
   return info.messageId;
 }
 
-export async function testAccount(acc: EmailAccount) {
-  const uid = await latestUid(acc);
-  return { ok: true, latestUid: uid };
+type Problem = { ok: false; part: 'read' | 'send'; error: string };
+
+/** Explain a mail failure in plain words: wrong password vs. can't reach the server vs. something else. */
+function explain(acc: EmailAccount, part: 'read' | 'send', err: unknown): Problem {
+  const e = err as { authenticationFailed?: boolean; responseCode?: number; responseText?: string; response?: string; code?: string; message?: string; serverResponseCode?: string };
+  const s = server(acc);
+  const host = part === 'read' ? `${s.imap}:${s.imapPort}` : `${s.smtp}:${s.smtpPort}`;
+  const said = (e.responseText || e.response || e.message || '').toString().replace(/\s+/g, ' ').trim().slice(0, 200);
+  const auth = e.authenticationFailed || e.code === 'EAUTH' || e.responseCode === 535 || /AUTHENTICATIONFAILED|Invalid credentials|Username and Password not accepted|authentication failed|\[AUTH\]/i.test(said);
+  if (auth) {
+    const tips =
+      acc.provider === 'gmail'
+        ? 'Check: the address is exactly the Google account the app password was made in; 2-Step Verification is on; you copied the newest 16-letter app password (old ones stop working when you change your Google password); and it isn\'t a work/school account whose admin blocks app passwords.'
+        : acc.provider === 'icloud'
+          ? 'Use your full @icloud.com (or @me.com) address and an app-specific password from account.apple.com.'
+          : acc.provider === 'outlook'
+            ? 'Microsoft has turned off app passwords for IMAP on most Outlook.com accounts, so this may not be fixable here; use the Microsoft 365 connector instead.'
+            : 'Check the address, login name and app password.';
+    return { ok: false, part, error: `The ${part === 'read' ? 'mail' : 'sending'} server (${host}) rejected the sign-in. ${tips}${said ? ` Server said: "${said}"` : ''}` };
+  }
+  if (/ENOTFOUND|EAI_AGAIN/.test(e.code ?? said)) return { ok: false, part, error: `Couldn't find ${host}. Check the server name${AGENT_PROXY ? ', or your agent proxy/VPN' : ''}.` };
+  if (/ETIMEDOUT|ECONNREFUSED|ECONNRESET|timeout|socket|proxy|tunnel/i.test(`${e.code ?? ''} ${said}`))
+    return {
+      ok: false,
+      part,
+      error: `Couldn't connect to ${host}${AGENT_PROXY ? ' through the agent proxy (VPN). Many VPN proxies only allow web ports, not mail ports (993/465/587); see docs/automations.md' : ' (a firewall may block mail ports 993/465/587)'}. ${said}`.trim(),
+    };
+  if (/certificate|self.signed|TLS|SSL/i.test(said)) return { ok: false, part, error: `Secure connection to ${host} failed: ${said}` };
+  return { ok: false, part, error: `${host}: ${said || 'unknown error'}` };
+}
+
+/** Check reading (IMAP) and sending (SMTP) separately, so the error says which part failed and why. */
+export async function testAccount(acc: EmailAccount): Promise<{ ok: true; latestUid: number; send: true | Problem } | Problem> {
+  let uid: number;
+  try {
+    uid = await latestUid(acc);
+  } catch (err) {
+    return explain(acc, 'read', err);
+  }
+  try {
+    const s = server(acc);
+    await nodemailer
+      .createTransport({ host: s.smtp, port: s.smtpPort, secure: s.smtpPort === 465, auth: { user: (acc.user || acc.address).trim(), pass: appPassword(acc) }, connectionTimeout: 10_000, ...(AGENT_PROXY ? { proxy: AGENT_PROXY } : {}) })
+      .verify();
+    return { ok: true, latestUid: uid, send: true };
+  } catch (err) {
+    return { ok: true, latestUid: uid, send: explain(acc, 'send', err) };
+  }
 }
 
 // ───────────── Live new-mail listeners (IMAP IDLE) ─────────────

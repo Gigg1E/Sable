@@ -710,13 +710,9 @@ export function apiRouter() {
       const stored = getSettings().email.accounts.find((a) => a.id === body.id);
       const acc = { ...body, password: !body.password || body.password.includes('••••') ? (stored?.password ?? '') : body.password };
       if (!acc.address || !acc.password) return { ok: false, error: 'Enter the address and app password first.' };
-      try {
-        await testAccount(acc);
-        return { ok: true };
-      } catch (err) {
-        const msg = errorMessage(err);
-        return { ok: false, error: /auth|credential|login|invalid/i.test(msg) ? `Sign-in failed: check the address and that you used an app password, not your normal password. (${msg})` : msg };
-      }
+      const r = await testAccount(acc);
+      if (!r.ok) return { ok: false, error: r.error };
+      return r.send === true ? { ok: true, message: 'Connected: reading and sending both work.' } : { ok: true, message: `Reading works (watchers can use it), but sending failed: ${r.send.error}` };
     }),
   );
   r.get('/email/providers', h(() => PROVIDERS));
