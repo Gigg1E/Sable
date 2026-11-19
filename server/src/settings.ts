@@ -67,7 +67,7 @@ export interface EmailAccount {
   id: string;
   name: string;
   address: string;
-  provider: 'gmail' | 'icloud' | 'yahoo' | 'outlook' | 'custom';
+  provider: 'gmail' | 'icloud' | 'yahoo' | 'outlook' | 'custom' | 'google';
   /** Login name if it isn't the address. */
   user?: string;
   /** App password (secret). */
@@ -108,6 +108,8 @@ export interface Settings {
   calendars: CalendarFeed[];
   /** Mailboxes the agent can read, watch and send from. */
   email: { accounts: EmailAccount[] };
+  /** The user's own Google OAuth client, for "Sign in with Google" (Gmail + Calendar). */
+  google: { clientId: string; clientSecret: string };
   /** Small local model that picks relevant tools and memories (installed in Ollama automatically). */
   helpers: { enabled: boolean; embedModel: string };
   /** Public base URL of this Sable server, used to build inbound webhook URLs. */
@@ -186,6 +188,7 @@ export function defaultSettings(): Settings {
     calendars: [],
     email: { accounts: [] },
     helpers: { enabled: true, embedModel: 'embeddinggemma' },
+    google: { clientId: '', clientSecret: '' },
     publicUrl: env.SABLE_PUBLIC_URL ?? '',
     shopping: { enabled: true, purchases: false, maxOrder: 200, country: 'US', currency: 'USD' },
   };
@@ -204,7 +207,7 @@ export function getSettings(): Settings {
 
 function merge(defaults: Settings, stored: Partial<Settings>): Settings {
   const out = { ...defaults, ...stored } as Settings;
-  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping', 'email', 'helpers'] as const) {
+  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping', 'email', 'helpers', 'google'] as const) {
     (out as any)[key] = { ...(defaults as any)[key], ...((stored as any)[key] ?? {}) };
   }
   return out;
@@ -241,6 +244,7 @@ export function publicSettings(): Settings {
     if (m.oauth?.clientSecret) m.oauth.clientSecret = MASK;
   }
   if (s.shopping?.clientSecret) s.shopping.clientSecret = MASK;
+  if (s.google?.clientSecret) s.google.clientSecret = MASK;
   return s;
 }
 
@@ -251,6 +255,7 @@ export function updateSettings(next: Settings): Settings {
     if (p.apiKey?.startsWith(MASK)) p.apiKey = prev.providers.find((x) => x.id === p.id)?.apiKey ?? '';
   }
   if (next.shopping?.clientSecret === MASK) next.shopping.clientSecret = prev.shopping.clientSecret ?? '';
+  if (next.google?.clientSecret === MASK) next.google.clientSecret = prev.google?.clientSecret ?? '';
   for (const c of next.channels ?? []) {
     const old = prev.channels.find((x) => x.id === c.id);
     if (c.token === MASK) c.token = old?.token ?? '';

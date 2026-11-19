@@ -26,7 +26,7 @@ export function EmailAccountsSection({ draft, edit }: { draft: Settings; edit: E
         <Badge tone="outline">read · watch · send</Badge>
       </div>
       <p className="mt-1 max-w-2xl text-[13px] leading-relaxed text-fg-2">
-        Connect a mailbox with an <b className="text-fg">app password</b> (not your normal password). {draft.persona.name} can then search and read mail, watch for new emails from certain senders (noticed within seconds), and send email from it, with your approval unless a routine you approved does it. Works with personal Gmail.
+        For Gmail, use <b className="text-fg">Sign in with Google</b> above instead. For other mailboxes, connect with an <b className="text-fg">app password</b> (not your normal password). {draft.persona.name} can then search and read mail, watch for new emails from certain senders (noticed within seconds), and send email from it, with your approval unless a routine you approved does it. Works with personal Gmail.
       </p>
       <div className="mt-4 space-y-3">
         <AnimatePresence initial={false}>

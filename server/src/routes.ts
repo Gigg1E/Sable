@@ -11,6 +11,7 @@ import { backfillMemoryEmbeddings, setSpaceData } from './agent/tools/personal.j
 import { ensureHelpers, helperStatus } from './agent/helpers.js';
 import { PROVIDERS, testAccount } from './email.js';
 import { listConnections, removeConnection, setSecret } from './connections.js';
+import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unlinkGoogle } from './google.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
   recordFailedLogin, recoveryCodesLeft, requireAuth, sessionCount, setPassword, twoFactorEnabled,
@@ -752,6 +753,41 @@ export function apiRouter() {
     }),
   );
 
+  // ── Sign in with Google (Gmail + Calendar) ──
+  r.get('/google', h((req) => ({ accounts: googleAccounts(), redirectUri: `${appOrigin(req)}/api/mcp/oauth/callback`, configured: !!(getSettings().google?.clientId && getSettings().google?.clientSecret) })));
+  r.post(
+    '/google/link',
+    h((req) => {
+      try {
+        return { url: beginGoogleLink(`${appOrigin(req)}/api/mcp/oauth/callback`, req.body?.hint ? String(req.body.hint) : undefined) };
+      } catch (err) {
+        return { error: errorMessage(err) };
+      }
+    }),
+  );
+  r.delete(
+    '/google/:email',
+    h((req) => {
+      unlinkGoogle(param(req, 'email'));
+      syncEmailTools();
+      syncCalendarTools();
+    }),
+  );
+  const googleCallback = async (req: Request, res: Response) => {
+    const back = (q: string) => res.redirect(`/settings/connectors?${q}`);
+    const state = String(req.query.state ?? '');
+    if (req.query.error) return back(`google_error=${encodeURIComponent(String(req.query.error_description ?? req.query.error))}`);
+    if (!isGoogleState(state)) return back('google_error=' + encodeURIComponent('Sign-in expired or was started elsewhere. Try again.'));
+    try {
+      const acc = await completeGoogleLink(state, String(req.query.code ?? ''));
+      syncEmailTools();
+      syncCalendarTools();
+      back(`google_linked=${encodeURIComponent(acc.email)}`);
+    } catch (err) {
+      back(`google_error=${encodeURIComponent(errorMessage(err))}`);
+    }
+  };
+
   r.get('/mcp', h(() => mcpStatus()));
   r.post('/mcp/reload', h(async () => (await reloadMcp(), mcpStatus())));
   r.get('/mcp/oauth/info', h((req) => ({ callbackUrl: oauthCallbackUrl(appOrigin(req)) })));
@@ -777,6 +813,8 @@ export function apiRouter() {
   // The provider redirects the browser here after the user approves (session cookie is sent: same-site top-level GET).
   r.get('/mcp/oauth/callback', async (req, res) => {
     const state = String(req.query.state ?? '');
+    // Sign in with Google shares this return address, so the redirect URI already registered keeps working.
+    if (state.startsWith('g_')) return googleCallback(req, res);
     const serverId = state ? serverForState(state) : undefined;
     const back = (q: string) => res.redirect(`/settings/connectors?${q}`);
     if (req.query.error) return back(`oauth_error=${encodeURIComponent(String(req.query.error_description ?? req.query.error))}`);

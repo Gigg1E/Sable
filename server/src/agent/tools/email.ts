@@ -1,4 +1,4 @@
-import { emailAccount, readMail, searchMail, sendMail } from '../../email.js';
+import { emailAccount, emailAccounts, readMail, searchMail, sendMail } from '../../email.js';
 import { getSettings } from '../../settings.js';
 import { untrusted } from '../../util.js';
 import { registerTool, unregisterWhere } from './registry.js';
@@ -6,7 +6,7 @@ import { registerTool, unregisterWhere } from './registry.js';
 /** Email tools, registered only when an account is connected. */
 export function syncEmailTools() {
   unregisterWhere((t) => t.group === 'Email');
-  const accounts = (getSettings().email?.accounts ?? []).filter((a) => a.enabled !== false && a.address && a.password);
+  const accounts = emailAccounts();
   if (!accounts.length) return;
   const which = {
     type: 'string',

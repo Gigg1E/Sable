@@ -59,13 +59,13 @@ function key(): Buffer {
   if (!fs.existsSync(file)) fs.writeFileSync(file, crypto.randomBytes(32).toString('base64'), { mode: 0o600 });
   return (vaultKey = Buffer.from(fs.readFileSync(file, 'utf8').trim(), 'base64'));
 }
-function seal(plain: string): string {
+export function seal(plain: string): string {
   const iv = crypto.randomBytes(12);
   const c = crypto.createCipheriv('aes-256-gcm', key(), iv);
   const enc = Buffer.concat([c.update(plain, 'utf8'), c.final()]);
   return [iv, c.getAuthTag(), enc].map((b) => b.toString('base64')).join('.');
 }
-function open(sealed: string): string {
+export function open(sealed: string): string {
   const [iv, tag, enc] = sealed.split('.').map((s) => Buffer.from(s, 'base64'));
   const d = crypto.createDecipheriv('aes-256-gcm', key(), iv);
   d.setAuthTag(tag);

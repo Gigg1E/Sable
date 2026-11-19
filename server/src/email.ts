@@ -4,6 +4,7 @@ import nodemailer from 'nodemailer';
 import { AGENT_PROXY } from './net.js';
 import { getSettings, type EmailAccount } from './settings.js';
 import { errorMessage, truncate } from './util.js';
+import { googleAccounts, googleToken } from './google.js';
 
 /**
  * Email over IMAP (read, search, watch) and SMTP (send), with an app password. Works with personal
@@ -16,6 +17,7 @@ export const PROVIDERS: Record<string, { label: string; imap: string; imapPort: 
   icloud: { label: 'iCloud Mail', imap: 'imap.mail.me.com', imapPort: 993, smtp: 'smtp.mail.me.com', smtpPort: 587, help: 'account.apple.com → Sign-In and Security → App-Specific Passwords' },
   yahoo: { label: 'Yahoo Mail', imap: 'imap.mail.yahoo.com', imapPort: 993, smtp: 'smtp.mail.yahoo.com', smtpPort: 465, help: 'Yahoo Account Security → Generate app password' },
   outlook: { label: 'Outlook.com', imap: 'outlook.office365.com', imapPort: 993, smtp: 'smtp-mail.outlook.com', smtpPort: 587, help: 'Microsoft may block app passwords for IMAP; if it fails, use the Microsoft 365 connector instead' },
+  google: { label: 'Google account (signed in)', imap: 'imap.gmail.com', imapPort: 993, smtp: 'smtp.gmail.com', smtpPort: 465, help: 'Linked with Sign in with Google' },
   custom: { label: 'Other (IMAP)', imap: '', imapPort: 993, smtp: '', smtpPort: 465, help: "Use your provider's IMAP and SMTP settings" },
 };
 
@@ -37,10 +39,19 @@ function server(acc: EmailAccount) {
   };
 }
 
+/** Mailboxes: app-password accounts from Settings, plus every Google account linked with Sign in with Google. */
+export function emailAccounts(): EmailAccount[] {
+  const manual = (getSettings().email?.accounts ?? []).filter((a) => a.enabled !== false && a.address && a.password);
+  const linked = googleAccounts()
+    .filter((g) => g.gmail && !manual.some((m) => m.address.toLowerCase() === g.email))
+    .map((g): EmailAccount => ({ id: `google:${g.email}`, name: g.name ? `${g.name} (Gmail)` : 'Gmail', address: g.email, provider: 'google', password: '', enabled: true }));
+  return [...manual, ...linked];
+}
+
 /** Pick an account by id, address or name (case-insensitive); default account otherwise. */
 export function emailAccount(which?: string): EmailAccount {
-  const list = (getSettings().email?.accounts ?? []).filter((a) => a.enabled !== false && a.address && a.password);
-  if (!list.length) throw new Error('No email account is connected. The user can add one in Settings → Connectors → Email (an app password is needed).');
+  const list = emailAccounts();
+  if (!list.length) throw new Error('No email account is connected. The user can Sign in with Google (Settings → Connectors → Google) or add a mailbox with an app password (Settings → Connectors → Email).');
   if (which) {
     const w = which.toLowerCase();
     const hit = list.find((a) => a.id === which || a.address.toLowerCase() === w || a.name.toLowerCase() === w || a.address.toLowerCase().includes(w));
@@ -49,21 +60,23 @@ export function emailAccount(which?: string): EmailAccount {
   return list.find((a) => a.isDefault) ?? list[0];
 }
 
-function imapClient(acc: EmailAccount) {
+async function imapClient(acc: EmailAccount) {
   const s = server(acc);
+  // Google accounts sign in with an OAuth access token (XOAUTH2), never a password.
+  const auth = acc.provider === 'google' ? { user: acc.address, accessToken: await googleToken(acc.address) } : { user: (acc.user || acc.address).trim(), pass: appPassword(acc) };
   return new ImapFlow({
     host: s.imap,
     port: s.imapPort,
     // 993 is TLS from the start; other ports (local bridges like Proton Mail Bridge) upgrade with STARTTLS when offered.
     secure: s.imapPort === 993,
-    auth: { user: (acc.user || acc.address).trim(), pass: appPassword(acc) },
+    auth,
     logger: false,
     ...(AGENT_PROXY ? { proxy: AGENT_PROXY } : {}),
   });
 }
 
 async function withInbox<T>(acc: EmailAccount, fn: (c: ImapFlow) => Promise<T>, folder = 'INBOX'): Promise<T> {
-  const c = imapClient(acc);
+  const c = await imapClient(acc);
   await c.connect();
   try {
     const lock = await c.getMailboxLock(folder);
@@ -154,13 +167,19 @@ export async function mailAfter(acc: EmailAccount, afterUid: number, max = 25): 
   });
 }
 
+async function smtpAuth(acc: EmailAccount) {
+  return acc.provider === 'google'
+    ? { type: 'OAuth2' as const, user: acc.address, accessToken: await googleToken(acc.address) }
+    : { user: (acc.user || acc.address).trim(), pass: appPassword(acc) };
+}
+
 export async function sendMail(acc: EmailAccount, msg: { to: string; cc?: string; subject: string; text: string }) {
   const s = server(acc);
   const t = nodemailer.createTransport({
     host: s.smtp,
     port: s.smtpPort,
     secure: s.smtpPort === 465,
-    auth: { user: (acc.user || acc.address).trim(), pass: appPassword(acc) },
+    auth: await smtpAuth(acc),
     ...(AGENT_PROXY ? { proxy: AGENT_PROXY } : {}),
   });
   const info = await t.sendMail({ from: acc.name && acc.name !== acc.address ? `"${acc.name}" <${acc.address}>` : acc.address, to: msg.to, cc: msg.cc, subject: msg.subject, text: msg.text });
@@ -209,7 +228,7 @@ export async function testAccount(acc: EmailAccount): Promise<{ ok: true; latest
   try {
     const s = server(acc);
     await nodemailer
-      .createTransport({ host: s.smtp, port: s.smtpPort, secure: s.smtpPort === 465, auth: { user: (acc.user || acc.address).trim(), pass: appPassword(acc) }, connectionTimeout: 10_000, ...(AGENT_PROXY ? { proxy: AGENT_PROXY } : {}) })
+      .createTransport({ host: s.smtp, port: s.smtpPort, secure: s.smtpPort === 465, auth: await smtpAuth(acc), connectionTimeout: 10_000, ...(AGENT_PROXY ? { proxy: AGENT_PROXY } : {}) })
       .verify();
     return { ok: true, latestUid: uid, send: true };
   } catch (err) {
@@ -226,7 +245,7 @@ export function syncMailListeners(ids: Set<string>, onNew: (accountId: string) =
   for (const [id, l] of listeners) {
     if (!ids.has(id)) {
       l.stop = true;
-      void l.client.logout().catch(() => {});
+      void l.client?.logout().catch(() => {});
       listeners.delete(id);
     }
   }
@@ -239,14 +258,16 @@ export function syncMailListeners(ids: Set<string>, onNew: (accountId: string) =
       continue;
     }
     const start = (delay: number) => {
-      const entry = { client: imapClient(acc), stop: false };
-      listeners.set(id, entry);
+      const entry: { client: ImapFlow | null; stop: boolean } = { client: null, stop: false };
+      listeners.set(id, entry as { client: ImapFlow; stop: boolean });
       setTimeout(async () => {
         if (entry.stop) return;
         try {
+          entry.client = await imapClient(acc);
           entry.client.on('exists', () => onNew(id));
           entry.client.on('close', () => {
-            if (!entry.stop && listeners.get(id) === entry) start(60_000); // reconnect
+            // Google closes OAuth sessions when the hour-long token expires: reconnect quickly with a fresh one.
+            if (!entry.stop && listeners.get(id) === entry) start(acc.provider === 'google' ? 3_000 : 60_000);
           });
           entry.client.on('error', () => {});
           await entry.client.connect();

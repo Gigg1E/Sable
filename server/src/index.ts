@@ -23,7 +23,7 @@ import { hooksRouter } from './agent/hooks.js';
 import { startWatchers } from './agent/watchers.js';
 import { startScheduler } from './scheduler.js';
 import { proxyLabel } from './net.js';
-import { getSettings } from './settings.js';
+import { getSettings, updateSettings } from './settings.js';
 
 recoverRuns();
 expireStaleApprovals();
@@ -115,6 +115,12 @@ app.listen(PORT, HOST, () => {
   syncCalendarTools();
   syncEmailTools();
   startHelpers();
+  // Reuse the OAuth client from the old Google MCP connector, so Sign in with Google needs no retyping.
+  {
+    const s = getSettings();
+    const old = s.mcpServers.find((m) => (m.preset === 'gmail' || m.preset === 'google-calendar') && m.oauth?.clientId && m.oauth?.clientSecret);
+    if (old && !s.google?.clientId) updateSettings({ ...s, google: { clientId: old.oauth!.clientId!, clientSecret: old.oauth!.clientSecret! } });
+  }
   setInterval(() => void backfillMemoryEmbeddings(), 10 * 60_000).unref();
   setTimeout(() => void backfillMemoryEmbeddings(), 60_000).unref();
   startScheduler();

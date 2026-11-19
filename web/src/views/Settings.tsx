@@ -7,6 +7,7 @@ import { AGENT_TEMPLATES } from '../lib/agentTemplates';
 import { ConnectorsSection } from './Connectors';
 import { CalendarFeedsSection } from './Calendars';
 import { EmailAccountsSection } from './EmailAccounts';
+import { GoogleSection } from './GoogleAccounts';
 import { ConnectionsSection } from '../components/Connections';
 import { ShoppingSection } from './Shopping';
 import { SecuritySection } from './Security';
@@ -973,6 +974,7 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'permissions' && <PermissionsSection draft={draft} edit={edit} tools={tools} />}
                 {active === 'connectors' && (
                   <>
+                    <GoogleSection draft={draft} edit={edit} saveNow={(next) => save(next, true)} />
                     <EmailAccountsSection draft={draft} edit={edit} />
                     <ConnectionsSection />
                     <CalendarFeedsSection draft={draft} edit={edit} />

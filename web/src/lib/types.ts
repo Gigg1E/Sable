@@ -135,6 +135,7 @@ export interface Settings {
   calendars: CalendarFeed[];
   email: { accounts: EmailAccount[] };
   helpers?: { enabled: boolean; embedModel: string };
+  google?: { clientId: string; clientSecret: string };
   publicUrl: string;
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }

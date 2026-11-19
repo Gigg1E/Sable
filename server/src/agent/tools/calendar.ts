@@ -2,6 +2,7 @@ import ICAL from 'ical.js';
 import { agentFetch } from '../../net.js';
 import { getSettings, type CalendarFeed } from '../../settings.js';
 import { errorMessage, untrusted } from '../../util.js';
+import { createGoogleEvent, googleAccounts, googleEventsBetween } from '../../google.js';
 import { registerTool, unregisterWhere } from './registry.js';
 
 /**
@@ -131,7 +132,14 @@ export async function eventsBetween(from: Date, to: Date, opts: { calendar?: str
       }
     }),
   );
-  return { events: events.sort((a, b) => +a.start - +b.start), errors, feeds: feeds.length };
+  // Calendars from linked Google accounts (Sign in with Google), via the Calendar API.
+  const google = googleAccounts().filter((g) => g.calendar && !g.broken);
+  if (google.length) {
+    const g = await googleEventsBetween(from, to);
+    for (const e of g.events) if (!opts.calendar || e.calendar.toLowerCase().includes(opts.calendar.toLowerCase())) events.push({ calendar: e.calendar, title: e.title, start: e.start, end: e.end, allDay: e.allDay, location: e.location, description: e.description, busy: e.busy });
+    errors.push(...g.errors);
+  }
+  return { events: events.sort((a, b) => +a.start - +b.start), errors, feeds: feeds.length + google.length };
 }
 
 /** Check a feed right away (Settings → "Test"). */
@@ -168,12 +176,43 @@ const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-d
 const tzName = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 function noFeeds() {
-  return 'No calendar feeds are set up. Tell the user they can add their calendar under Settings → Connectors → Calendar feeds (iCal), using the secret iCal address from Google Calendar, Outlook or iCloud.';
+  return 'No calendars are connected. Tell the user they can Sign in with Google (Settings → Connectors → Google) or add an iCal feed (Settings → Connectors → Calendar feeds).';
 }
 
 export function syncCalendarTools() {
   unregisterWhere((t) => t.group === 'Calendar');
-  if (!getSettings().calendars.some((f) => f.enabled && f.url)) return;
+  const googleCals = googleAccounts().filter((g) => g.calendar);
+  if (googleCals.length) {
+    registerTool({
+      name: 'calendar_create_event',
+      label: 'Add calendar event',
+      group: 'Calendar',
+      description:
+        "Add an event to the user's Google Calendar. start/end are local date-times like 2026-11-21T15:00 (server time zone) or dates for all-day events. If the time or title is missing, ask the user first.",
+      parameters: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          start: { type: 'string' },
+          end: { type: 'string', description: 'Default: one hour after start' },
+          all_day: { type: 'boolean' },
+          location: { type: 'string' },
+          description: { type: 'string' },
+          account: { type: 'string', description: `Google account (default ${googleCals[0].email})` },
+        },
+        required: ['title', 'start'],
+      },
+      risk: 'medium',
+      defaultPolicy: 'ask',
+      summarize: (a) => `Add “${a.title}” on ${a.start}`,
+      async run(a) {
+        const acc = googleCals.find((g) => g.email === String(a.account ?? '').toLowerCase()) ?? googleCals[0];
+        const r = await createGoogleEvent(acc.email, { title: String(a.title), start: String(a.start), end: a.end ? String(a.end) : undefined, allDay: !!a.all_day, location: a.location, description: a.description });
+        return `Added to ${acc.email}'s calendar.${r.link ? ` ${r.link}` : ''}`;
+      },
+    });
+  }
+  if (!getSettings().calendars.some((f) => f.enabled && f.url) && !googleCals.length) return;
 
   registerTool({
     name: 'calendar_events',
