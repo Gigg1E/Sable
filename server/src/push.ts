@@ -37,6 +37,8 @@ export interface NotifyInput {
   body?: string;
   link?: string;
   kind?: 'approval' | 'run' | 'agent' | 'schedule' | 'system' | 'watch' | 'hook';
+  /** Adds Approve / Deny buttons to the push notification (where the browser supports them). */
+  approvalId?: string;
 }
 
 /** Store an in-app notification, broadcast it live, and send a web push to every subscribed device. */
@@ -54,7 +56,7 @@ export async function notify(input: NotifyInput) {
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await webpush.sendNotification(JSON.parse(s.sub), JSON.stringify({ title: note.title, body: note.body, link: note.link, tag: note.kind }), { TTL: 3600 });
+        await webpush.sendNotification(JSON.parse(s.sub), JSON.stringify({ title: note.title, body: note.body, link: note.link, tag: note.kind, approvalId: input.approvalId }), { TTL: 3600 });
       } catch (err) {
         const code = (err as { statusCode?: number }).statusCode;
         if (code === 404 || code === 410) removeSubscription(s.endpoint);

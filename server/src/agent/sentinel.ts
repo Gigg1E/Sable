@@ -92,7 +92,7 @@ export function requestApproval(input: {
   );
   const row = get<ApprovalRow>('SELECT * FROM approvals WHERE id = ?', aid)!;
   emit({ type: 'approval.requested', approval: { ...approvalJson(row), toolLabel: input.tool.label } });
-  void notify({ title: `Approve: ${input.summary}`, body: `${input.agent} is waiting for your OK.`, link: `/chat/${input.conversationId}`, kind: 'approval' });
+  void notify({ title: `Approve: ${input.summary}`, body: `${input.agent} is waiting for your OK.`, link: `/chat/${input.conversationId}`, kind: 'approval', approvalId: aid });
 
   return new Promise<{ ok: boolean; choice?: string }>((resolve, reject) => {
     const onAbort = () => {

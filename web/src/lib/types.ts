@@ -179,7 +179,7 @@ export interface Approval {
   summary: string;
   risk: 'low' | 'medium' | 'high';
   scope: { kind: 'domain'; value: string } | null;
-  preview?: CommerceCard | null;
+  preview?: CommerceCard | AutomationCard | null;
   alwaysAsk?: boolean;
   status: string;
   created_at: number;
@@ -258,6 +258,9 @@ export interface Schedule {
   conversation_id: string | null;
   /** Notify on every run, or only when the check finds something new. */
   notify?: 'always' | 'when_new';
+  /** 'auto': its runs act without asking (except purchases and `restrict`). */
+  autonomy?: 'auto' | 'ask';
+  restrict?: string[];
 }
 export interface Notification {
   id: string;
@@ -359,3 +362,16 @@ export interface ImagesCardData {
   items: { url: string; caption?: string; source?: string; site: string }[];
 }
 export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData;
+
+/** Shown when the agent proposes a routine or watcher, before it exists. */
+export interface AutomationCard {
+  type: 'automation';
+  kind: 'routine' | 'watcher';
+  title: string;
+  when: string;
+  next?: number;
+  prompt: string;
+  notify?: 'always' | 'when_new';
+  restrict: string[];
+  source?: string;
+}

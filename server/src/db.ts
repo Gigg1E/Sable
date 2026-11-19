@@ -99,6 +99,8 @@ addColumn('uploads', 'name', 'TEXT');
 addColumn('uploads', 'path', 'TEXT');
 addColumn('schedules', 'notify', 'TEXT');
 addColumn('schedules', 'last_result', 'TEXT');
+addColumn('schedules', 'autonomy', 'TEXT');
+addColumn('schedules', 'restrict_tools', 'TEXT');
 addColumn('conversations', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
 
 type Row = Record<string, unknown>;

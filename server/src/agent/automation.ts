@@ -65,3 +65,25 @@ export function blockNotify(conversationId: string, title: string, body: string)
   if (last && Date.now() - last.created_at < 12 * 3600_000 && norm(`${last.title} ${last.body ?? ''}`) === norm(`${title} ${body}`)) return 'Not sent: the user already got this exact notification recently.';
   return null;
 }
+
+/**
+ * Approving a routine approves the steps its runs take ("autonomy: auto"), except tools that
+ * always need a person (purchases) and anything the user restricted when approving it.
+ */
+export interface Preapproval {
+  restrict: string[];
+}
+export function preapprovalFor(conversationId: string): Preapproval | null {
+  const row = get<{ autonomy: string | null; restrict_tools: string | null }>('SELECT autonomy, restrict_tools FROM schedules WHERE conversation_id = ?', conversationId);
+  if (!row || row.autonomy !== 'auto') return null;
+  let restrict: string[] = [];
+  try {
+    restrict = JSON.parse(row.restrict_tools ?? '[]');
+  } catch {
+    /* none */
+  }
+  return { restrict };
+}
+export function isRestricted(p: Preapproval, toolName: string) {
+  return p.restrict.some((r) => r && toolName.toLowerCase().includes(r.toLowerCase()));
+}

@@ -6,7 +6,7 @@ import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
-import { shouldNotifyAfterRun } from './automation.js';
+import { isRestricted, preapprovalFor, shouldNotifyAfterRun, type Preapproval } from './automation.js';
 import { attachmentForModel, attachmentInfo, claimUploads, readImage } from '../uploads.js';
 import { decide, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
@@ -19,6 +19,8 @@ interface ActiveRun {
   controller: AbortController;
   /** Messages the user slipped in while this run works; picked up at the next step. */
   inbox: string[];
+  /** Set for runs of an approved routine: its steps don't ask again (with exceptions). */
+  preapproved: Preapproval | null;
 }
 const active = new Map<string, ActiveRun>();
 
@@ -321,6 +323,12 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
     logActivity({ ...base, tool: tool.name, status: 'blocked', summary, input: call.args, output: decision.reason });
     return finish('blocked', `Blocked by the user's permission settings (${decision.reason}). Don't try to work around this; tell the user if it matters.`, true);
   }
+  // An approved routine's run: the user already said yes to its steps when they approved it.
+  const pre = active.get(o.runId)?.preapproved;
+  if (decision.action === 'ask' && pre && !tool.alwaysAsk && !isRestricted(pre, tool.name)) {
+    decision.action = 'allow';
+    decision.reason = 'Pre-approved with the routine';
+  }
   const ctxBase = { runId: o.runId, conversationId: o.conversationId, callId: call.id, agent: o.agent.name, signal: o.signal };
   let approved: ToolPreview | undefined;
   let choice: string | undefined;
@@ -479,7 +487,7 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
   }
 
   const controller = new AbortController();
-  active.set(runId, { runId, conversationId, controller, inbox: [] });
+  active.set(runId, { runId, conversationId, controller, inbox: [], preapproved: source === 'schedule' ? preapprovalFor(conversationId) : null });
   emit({ type: 'run.status', runId, conversationId, status: 'running' });
   void execute(runId, conversationId, controller, source);
   return runId;

@@ -518,7 +518,7 @@ export function apiRouter() {
   );
 
   // ── Schedules ──
-  const scheduleJson = (s: any) => ({ ...s, spec: parseJson(s.spec, {}), enabled: !!s.enabled, notify: s.notify ?? (s.kind === 'interval' ? 'when_new' : 'always') });
+  const scheduleJson = (s: any) => ({ ...s, spec: parseJson(s.spec, {}), enabled: !!s.enabled, notify: s.notify ?? (s.kind === 'interval' ? 'when_new' : 'always'), autonomy: s.autonomy ?? 'ask', restrict: parseJson(s.restrict_tools, []) });
   r.get('/schedules', h(() => all('SELECT * FROM schedules ORDER BY created_at DESC').map(scheduleJson)));
   r.post(
     '/schedules',
@@ -544,7 +544,8 @@ export function apiRouter() {
       const enabled = req.body?.enabled === undefined ? !!s.enabled : !!req.body.enabled;
       const next = enabled ? computeNextRun(s.kind, parseJson(s.spec, {})) : s.next_run;
       const notify = req.body?.notify === 'always' || req.body?.notify === 'when_new' ? req.body.notify : null;
-      run('UPDATE schedules SET enabled = ?, next_run = ?, notify = COALESCE(?, notify) WHERE id = ?', enabled && next != null ? 1 : 0, next, notify, s.id);
+      const autonomy = req.body?.autonomy === 'auto' || req.body?.autonomy === 'ask' ? req.body.autonomy : null;
+      run('UPDATE schedules SET enabled = ?, next_run = ?, notify = COALESCE(?, notify), autonomy = COALESCE(?, autonomy) WHERE id = ?', enabled && next != null ? 1 : 0, next, notify, autonomy, s.id);
       emit({ type: 'schedule.changed' });
     }),
   );

@@ -350,7 +350,7 @@ registerTool({
   label: 'Schedule task',
   group: 'Schedules',
   description:
-    'Schedule work to run in the background later or on repeat. At each run the agent receives `prompt` as an instruction. kind: once (at = ISO date-time), interval (every_minutes ≥ 10; use 15-60 for checks), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are in the server\'s local time zone. notify: "always" for reminders and briefings the user wants every time (default for once/daily/weekly); "when_new" for checks ("tell me when X emails me"), which only notify when something new happened and never report that nothing changed (default for interval). To change an existing schedule use schedule_update, never create a second one.',
+    'Set a routine: a time, a topic (title) and a prompt. At each run you receive the prompt in a fresh background chat and do it: tell the user something (a reminder or briefing) or do a job yourself (e.g. "email Sam the results at 8pm", "add the dentist appointment to my calendar"). Write the prompt with every detail the run will need. If something essential is missing (the time, who to email, the subject), ask the user BEFORE creating the routine. The user reviews and approves it; once approved, its runs act without asking again except for purchases and any tools listed in restrict (e.g. ["send"] to keep asking before sending email). kind: once (at = ISO date-time), interval (every_minutes ≥ 10; use 15-60 for checks), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are in the server\'s local time zone. notify: "always" for reminders and briefings the user wants every time (default for once/daily/weekly); "when_new" for checks ("tell me when X emails me"), which only notify when something new happened and never report that nothing changed (default for interval). To change an existing schedule use schedule_update, never create a second one.',
   parameters: {
     type: 'object',
     properties: {
@@ -362,11 +362,28 @@ registerTool({
       time: { type: 'string' },
       weekday: { type: 'integer' },
       notify: { type: 'string', enum: ['always', 'when_new'] },
+      restrict: { type: 'array', items: { type: 'string' }, description: 'Tool names (or parts, like "send" or "delete") that should still ask the user during runs' },
     },
     required: ['title', 'prompt', 'kind'],
   },
   risk: 'medium',
   defaultPolicy: 'ask',
+  alwaysAsk: true,
+  async preview(a) {
+    const spec: ScheduleSpec = { at: a.at, every_minutes: a.every_minutes, time: a.time, weekday: a.weekday };
+    const next = computeNextRun(a.kind, spec);
+    if (next == null) return { refuse: 'That time is in the past or invalid. Ask the user for a valid time.' };
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const when =
+      a.kind === 'once' ? new Date(next).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      : a.kind === 'interval' ? `Every ${Math.max(10, Number(a.every_minutes) || 60)} minutes`
+      : a.kind === 'daily' ? `Every day at ${a.time ?? '09:00'}`
+      : `Every ${days[Number(a.weekday ?? 1)] ?? 'week'} at ${a.time ?? '09:00'}`;
+    return {
+      summary: `Routine “${a.title}”`,
+      card: { type: 'automation', kind: 'routine', title: String(a.title), when, next, prompt: String(a.prompt), notify: a.notify ?? defaultNotify(String(a.kind)), restrict: Array.isArray(a.restrict) ? a.restrict.map(String) : [] },
+    };
+  },
   summarize: (a) => `Schedule “${a.title}” (${a.kind}${a.time ? ' ' + a.time : ''}${a.at ? ' ' + a.at : ''}${a.every_minutes ? ' every ' + a.every_minutes + 'm' : ''})`,
   async run(a, ctx) {
     const spec: ScheduleSpec = { at: a.at, every_minutes: a.every_minutes, time: a.time, weekday: a.weekday };
@@ -374,12 +391,14 @@ registerTool({
     if (next == null) return 'That time is in the past or invalid; nothing scheduled.';
     const sid = id('sch_');
     const mode = a.notify === 'always' || a.notify === 'when_new' ? a.notify : defaultNotify(String(a.kind));
+    const autonomy = ctx.choice === 'ask' ? 'ask' : 'auto';
+    const restrict = Array.isArray(a.restrict) ? a.restrict.map(String) : [];
     run(
-      'INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, notify, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)',
-      sid, String(a.title), String(a.prompt), String(a.kind), JSON.stringify(spec), next, mode, now(),
+      'INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, notify, autonomy, restrict_tools, created_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)',
+      sid, String(a.title), String(a.prompt), String(a.kind), JSON.stringify(spec), next, mode, autonomy, JSON.stringify(restrict), now(),
     );
     emit({ type: 'schedule.changed', conversationId: ctx.conversationId });
-    return `Scheduled ${sid}; next run ${new Date(next).toString()}. Notifies ${mode === 'always' ? 'every run' : 'only when something new happens'}.`;
+    return `Scheduled ${sid}; next run ${new Date(next).toString()}. Notifies ${mode === 'always' ? 'every run' : 'only when something new happens'}. ${autonomy === 'auto' ? `Its runs act without asking${restrict.length ? ` (except: ${restrict.join(', ')})` : ''}.` : 'Its runs ask the user before each action that needs approval.'}`;
   },
 });
 

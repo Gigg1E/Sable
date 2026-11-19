@@ -38,8 +38,9 @@ export function fireSchedule(sid: string): string | undefined {
       mode === 'when_new'
         ? `This is an automatic check that runs ${s.kind === 'interval' ? 'repeatedly' : 'on a schedule'}. The user ONLY wants to hear about something new. If nothing new happened since the last check, do NOT call notify, and reply with one short line starting "Nothing new". If something new happened, reply with what's new (it will be sent to the user).`
         : 'Reply with the result for the user; it will be sent to them as a notification.';
+    const missing = ' If you can\'t finish because something is missing or unclear, call notify with one short question; the user\'s answer will arrive in this chat and you can finish then.';
     const last = s.last_result ? `\n\nLast check (${new Date(previousRun ?? now()).toLocaleString()}):\n${s.last_result.slice(0, 800)}` : '';
-    return startRun(cid, `[Scheduled task: ${s.title} · ${s.id}]\n${s.prompt}\n\n(${how})${last}`, 'schedule');
+    return startRun(cid, `[Scheduled task: ${s.title} · ${s.id}]\n${s.prompt}\n\n(${how}${missing})${last}`, 'schedule');
   } catch (err) {
     console.error(`[schedule ${s.id}]`, errorMessage(err));
   }

@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { CreditCard, ShieldAlert } from 'lucide-react';
+import { CalendarClock, CreditCard, Radar, ShieldAlert } from 'lucide-react';
 import { cx } from '../lib/format';
 import { useState } from 'react';
 import { api } from '../lib/api';
@@ -8,7 +8,7 @@ import { useStore } from '../lib/store';
 import type { Approval } from '../lib/types';
 import { toolIcon } from './ToolCall';
 import { CartCard, money } from './CommerceCards';
-import type { CartLikeCard } from '../lib/types';
+import type { AutomationCard, CartLikeCard } from '../lib/types';
 import { Badge, Button } from './ui';
 
 function argPreview(a: Approval): string | null {
@@ -28,17 +28,59 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
   const rememberLabel = approval.scope?.kind === 'domain' ? `Always allow ${approval.scope.value}` : 'Always allow';
   const [checked, setChecked] = useState(false);
   const [method, setMethod] = useState<string | null>(null);
-  const purchase = approval.preview && approval.preview.type !== 'products' ? (approval.preview as CartLikeCard) : null;
+  const automation = approval.preview?.type === 'automation' ? (approval.preview as AutomationCard) : null;
+  const purchase = approval.preview && approval.preview.type !== 'products' && !automation ? (approval.preview as CartLikeCard) : null;
 
-  async function decide(decision: 'approve' | 'deny', remember = false) {
-    setBusy(decision + remember);
+  async function decide(decision: 'approve' | 'deny', remember = false, choice?: string) {
+    setBusy(decision + remember + (choice ?? ''));
     try {
-      await api.post(`/approvals/${approval.id}/decision`, { decision, remember, ...(method ? { choice: method } : {}) });
+      await api.post(`/approvals/${approval.id}/decision`, { decision, remember, ...(choice ?? method ? { choice: choice ?? method } : {}) });
       useStore.setState((s) => ({ approvals: s.approvals.filter((a) => a.id !== approval.id) }));
     } catch (err) {
       toast({ title: 'Could not record decision', body: (err as Error).message, tone: 'error' });
       setBusy(null);
     }
+  }
+
+  if (automation) {
+    return (
+      <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden rounded-lg border border-tint/35 bg-panel shadow-2">
+        <div className="flex items-center gap-2 border-b border-tint/20 bg-tint-soft px-3.5 py-2 text-[12px]">
+          {automation.kind === 'routine' ? <CalendarClock className="size-3.5 text-tint" /> : <Radar className="size-3.5 text-tint" />}
+          <span className="font-semibold text-tint">{automation.kind === 'routine' ? 'New routine' : 'New watcher'}</span>
+          <span className="text-fg-3">·</span>
+          <span className="truncate text-fg-2">{approval.agent} wants to set this up</span>
+        </div>
+        <div className="space-y-3 p-3.5 text-[13px]">
+          <div>
+            <div className="text-[15px] font-semibold">{automation.title}</div>
+            <div className="mt-0.5 text-fg-2">
+              {automation.when}
+              {automation.source ? ` · ${automation.source}` : ''}
+              {automation.notify === 'when_new' ? ' · tells you only when something new happens' : ''}
+            </div>
+          </div>
+          <div className="rounded-md border border-line bg-sunken px-3 py-2.5">
+            <div className="mb-1 text-[11.5px] text-fg-3">{automation.kind === 'routine' ? 'Each time it runs, it will' : 'When it fires, it will'}</div>
+            <p className="whitespace-pre-wrap leading-relaxed">{automation.prompt}</p>
+          </div>
+          <p className="text-[12.5px] leading-relaxed text-fg-2">
+            <b className="text-fg">Approve</b> lets its runs take these steps without asking you again{automation.restrict.length ? <>, except <b className="text-fg">{automation.restrict.join(', ')}</b></> : ''}. Purchases always ask. Choose <b className="text-fg">Ask me each time</b> to approve its actions as they happen.
+          </p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" loading={busy === 'denyfalse'} onClick={() => void decide('deny')}>
+              Don't set up
+            </Button>
+            <Button size="sm" loading={busy === 'approvefalseask'} onClick={() => void decide('approve', false, 'ask')}>
+              Ask me each time
+            </Button>
+            <Button variant="primary" size="sm" loading={busy === 'approvefalseauto'} onClick={() => void decide('approve', false, 'auto')}>
+              Approve
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
   }
 
   if (purchase) {

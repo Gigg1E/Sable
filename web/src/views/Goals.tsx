@@ -298,6 +298,14 @@ export function RoutinesView() {
                       {s.notify === 'when_new' ? 'Only when new' : 'Every run'}
                     </button>
                   </Tip>
+                  <Tip label={s.autonomy === 'auto' ? `Its runs act without asking${s.restrict?.length ? ` (except ${s.restrict.join(', ')})` : ''}; purchases always ask. Click to ask each time.` : 'Its runs ask before actions that need approval. Click to let it act on its own.'}>
+                    <button
+                      onClick={() => void api.patch(`/schedules/${s.id}`, { autonomy: s.autonomy === 'auto' ? 'ask' : 'auto' }).then(() => load())}
+                      className={cx('h-6 shrink-0 rounded-md border px-2 text-[11.5px] transition-colors', s.autonomy === 'auto' ? 'border-ok/30 bg-ok/10 text-ok' : 'border-line text-fg-3 hover:text-fg-2')}
+                    >
+                      {s.autonomy === 'auto' ? 'Runs on its own' : 'Asks first'}
+                    </button>
+                  </Tip>
                   <span className="w-36 font-mono text-[11.5px] text-fg-3">{s.enabled && s.next_run ? clockTime(s.next_run) : 'paused'}</span>
                   <div className="ml-auto flex w-[132px] items-center justify-end gap-0.5">
                     <IconButton label="Run now" onClick={() => void api.post<{ runId: string | null }>(`/schedules/${s.id}/run`).then(() => load())}>

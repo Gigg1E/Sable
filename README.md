@@ -82,6 +82,8 @@ Data (database, workspace, keys) lives in the `sable-data` volume. The container
 npm run dev          # API on :8787 (auto-reload) + Vite on :5173 with HTTP proxying
 ```
 
+How routines, watchers, webhooks and Spaces fit together (and what needs your approval): **[docs/automations.md](docs/automations.md)**.
+
 ## Watchers, webhooks and notification channels
 
 ### Watchers: “tell me when this changes”
