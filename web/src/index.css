@@ -381,3 +381,19 @@
 .streaming > .prose-sable:last-child::after {
   content: none;
 }
+
+/* Graphs (Mafs) in Sable's colors */
+.graph-card .MafsView {
+  --mafs-bg: transparent;
+  --mafs-fg: var(--fg-2);
+  --mafs-origin-color: var(--fg-3);
+  --mafs-line-color: color-mix(in oklab, var(--line) 80%, transparent);
+  --mafs-blue: var(--tint);
+  --mafs-orange: var(--accent);
+  --grid-line-subdivision-color: color-mix(in oklab, var(--line) 45%, transparent);
+  font-family: var(--font-sans, inherit);
+}
+/* Coordinate labels sit next to draggable points; let the pointer through to the handle. */
+.graph-card .MafsView text {
+  pointer-events: none;
+}

@@ -6,6 +6,7 @@ import './agent/tools/web.js';
 import './agent/tools/present.js';
 import './agent/tools/outputs.js';
 import './agent/tools/connect.js';
+import './agent/tools/graph.js';
 import './agent/tools/workspace.js';
 import './shop/tools.js';
 import { resumeShopLink } from './shop/auth.js';

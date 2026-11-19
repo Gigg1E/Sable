@@ -4,6 +4,8 @@ import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
+  // Packages hoisted to the root (radix, mafs) must share the app's single React copy.
+  resolve: { dedupe: ['react', 'react-dom'] },
   plugins: [
     react(),
     tailwindcss(),

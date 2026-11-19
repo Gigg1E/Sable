@@ -368,7 +368,7 @@ export interface ImagesCardData {
   type: 'images';
   items: { url: string; caption?: string; source?: string; site: string }[];
 }
-export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData | CredentialCardData;
+export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData | CredentialCardData | import('../components/GraphCard').GraphCardData;
 
 /** Shown when the agent proposes a routine or watcher, before it exists. */
 export interface AutomationCard {

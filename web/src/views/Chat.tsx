@@ -467,7 +467,7 @@ export function ChatView({ id }: { id: string }) {
                               src={imageUrl(a.id)}
                               alt=""
                               loading="lazy"
-                              className={cx('block w-auto max-w-[260px] object-cover', t.message.attachments!.length > 1 ? 'h-32' : 'h-48')}
+                              className={cx('block w-auto max-w-[min(360px,80vw)] object-contain', t.message.attachments!.length > 1 ? 'max-h-32' : 'max-h-64')}
                               style={a.width && a.height ? { aspectRatio: `${a.width} / ${a.height}` } : undefined}
                             />
                           </motion.button>

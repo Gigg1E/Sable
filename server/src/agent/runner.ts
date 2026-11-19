@@ -306,7 +306,15 @@ async function agentLoop(o: LoopOptions): Promise<string> {
 }
 
 async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: string; isError: boolean; cards?: Card[] }> {
-  const tool = o.tools.find((t) => t.name === call.name);
+  let tool = o.tools.find((t) => t.name === call.name);
+  // The main agent asked for a real tool that just wasn't loaded for this message: load it instead of failing.
+  if (!tool && o.persist) {
+    const found = mainTools().find((t) => t.name === call.name);
+    if (found) {
+      o.tools.push(found);
+      tool = found;
+    }
+  }
   const base = { conversationId: o.conversationId, runId: o.runId, callId: call.id, parentCallId: o.parentCallId, agent: o.agent.name, name: call.name };
   const finish = (status: string, content: string, isError: boolean, cards?: Card[]) => {
     emit({ type: 'tool.end', ...base, status, preview: truncate(content, 600) });

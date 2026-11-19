@@ -1,6 +1,9 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { ChevronDown, Download, ExternalLink, File, FileCode2, FileImage, FileSpreadsheet, FileText, FileArchive, Globe } from 'lucide-react';
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, lazy, Suspense, useContext, useEffect, useState } from 'react';
+
+// The graph library is only loaded when a graph is shown.
+const GraphCard = lazy(() => import('./GraphCard'));
 import { cx } from '../lib/format';
 import { onServerEvent } from '../lib/store';
 import { usePanel } from '../lib/panel';
@@ -296,5 +299,11 @@ export function CardView({ card }: { card: AnyCard }) {
   if (card.type === 'links') return <LinksCard card={card} />;
   if (card.type === 'images') return <ImagesCard card={card} />;
   if (card.type === 'credential') return <CredentialCard card={card} />;
+  if (card.type === 'graph')
+    return (
+      <Suspense fallback={<div className="my-2.5 h-[400px] animate-pulse rounded-xl border border-line bg-panel" />}>
+        <GraphCard card={card} />
+      </Suspense>
+    );
   return <CommerceCardView card={card as CommerceCard} />;
 }

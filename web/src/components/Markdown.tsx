@@ -1,6 +1,10 @@
 import { memo, useRef, type ComponentPropsWithoutRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
+import { normalizeMath } from '../lib/mathText';
 import { cx } from '../lib/format';
 import { CopyButton } from './ui';
 import { FileRef } from './Cards';
@@ -74,8 +78,8 @@ function P({ node, children, ...props }: ComponentPropsWithoutRef<'p'> & { node?
 export const Markdown = memo(function Markdown({ text, className, streaming }: { text: string; className?: string; streaming?: boolean }) {
   return (
     <div className={cx('prose-sable', streaming && 'streaming', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={{ a: A, pre: Pre, p: P }}>
-        {fileLinks(text)}
+      <ReactMarkdown remarkPlugins={[remarkGfm, [remarkMath, { singleDollarTextMath: false }]]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: false }]]} components={{ a: A, pre: Pre, p: P }}>
+        {normalizeMath(fileLinks(text))}
       </ReactMarkdown>
     </div>
   );
