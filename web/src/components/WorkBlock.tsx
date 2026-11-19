@@ -38,6 +38,8 @@ export function describeCall(call: ToolCall, label?: string): string {
   if (n === 'run_script') return `Running a ${a.language ?? ''} script`.replace('  ', ' ');
   if (n === 'file_write') return `Writing ${a.path}`;
   if (n === 'file_edit') return `Editing ${a.path}`;
+  if (n === 'connect_define') return `Setting up the ${a.name} connection`;
+  if (n === 'connect_read' || n === 'connect_write') return `Calling ${a.name}`;
   if (n === 'file_read') return `Reading ${a.path}`;
   if (n === 'file_list') return 'Looking through files';
   if (n === 'memory_save') return 'Saving to memory';
@@ -82,6 +84,7 @@ function describeDone(calls: ToolCall[]) {
   const calendar = n((c) => c.name.startsWith('calendar_'));
   const shows = n((c) => c.name.startsWith('show_') || c.name === 'shop_show');
   const spaces = n((c) => c.name.startsWith('space_'));
+  const conns = calls.filter((c) => c.name.startsWith('connect_')).map((c) => String((c.args as { name?: string }).name ?? ''));
   const reminders = n((c) => c.name.startsWith('schedule_') || c.name.startsWith('watch_create'));
   const agents = calls.filter((c) => c.name === 'delegate').map((c) => String((c.args as { agent?: string }).agent ?? 'a sub-agent'));
   if (searches) parts.push(searches === 1 ? 'searched the web' : `searched the web ${searches} times`);
@@ -92,10 +95,12 @@ function describeDone(calls: ToolCall[]) {
   if (writes.length) parts.push(writes.length <= 2 ? `wrote ${[...new Set(writes)].join(' and ')}` : `wrote ${plural(writes.length, 'file')}`);
   if (reads) parts.push('looked through files');
   if (memory) parts.push('checked memory');
+  if (calls.some((c) => c.name === 'connect_define')) parts.push(`set up the ${conns[0]} connection`);
+  else if (conns.length) parts.push(`checked ${[...new Set(conns)].join(' and ')}`);
   if (spaces) parts.push(calls.some((c) => c.name === 'space_create') ? 'built a space' : 'updated a space');
   if (reminders) parts.push(reminders === 1 ? 'set a reminder' : `set ${reminders} reminders`);
   if (agents.length) parts.push(`asked ${[...new Set(agents)].join(' and ')}`);
-  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows + spaces + reminders;
+  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows + spaces + reminders + conns.length;
   if (calls.length - known > 0) parts.push(known ? `${plural(calls.length - known, 'other step')}` : `took ${plural(calls.length, 'step')}`);
   if (!parts.length && shows) parts.push('prepared what to show');
   const text = parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts.join(' and ');

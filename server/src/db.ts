@@ -79,6 +79,10 @@ CREATE INDEX IF NOT EXISTS hook_events_h ON hook_events(hook_id, ts);
 CREATE TABLE IF NOT EXISTS uploads (
   id TEXT PRIMARY KEY, mime TEXT NOT NULL, size INTEGER NOT NULL, width INTEGER, height INTEGER, created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS connections (
+  name TEXT PRIMARY KEY, base_url TEXT NOT NULL, auth TEXT NOT NULL, read_methods TEXT NOT NULL, purpose TEXT NOT NULL,
+  credential_help TEXT, secret_enc TEXT, created_at INTEGER NOT NULL, last_used INTEGER
+);
 CREATE TABLE IF NOT EXISTS push_subs (endpoint TEXT PRIMARY KEY, sub TEXT NOT NULL, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS notifications (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, body TEXT, link TEXT, kind TEXT,

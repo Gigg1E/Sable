@@ -7,6 +7,7 @@ import { usePanel } from '../lib/panel';
 import type { AnyCard, CommerceCard, FileCardData, ImagesCardData, LinkItem, LinksCardData } from '../lib/types';
 import { CommerceCardView } from './CommerceCards';
 import { Markdown } from './Markdown';
+import { CredentialCard } from './Connections';
 import { CopyButton } from './ui';
 
 export function fmtBytes(n: number) {
@@ -294,5 +295,6 @@ export function CardView({ card }: { card: AnyCard }) {
   if (card.type === 'file') return <FileCard card={card} />;
   if (card.type === 'links') return <LinksCard card={card} />;
   if (card.type === 'images') return <ImagesCard card={card} />;
+  if (card.type === 'credential') return <CredentialCard card={card} />;
   return <CommerceCardView card={card as CommerceCard} />;
 }

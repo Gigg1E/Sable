@@ -184,7 +184,7 @@ export interface Approval {
   summary: string;
   risk: 'low' | 'medium' | 'high';
   scope: { kind: 'domain'; value: string } | null;
-  preview?: CommerceCard | AutomationCard | null;
+  preview?: CommerceCard | AutomationCard | ConnectionCard | null;
   alwaysAsk?: boolean;
   status: string;
   created_at: number;
@@ -367,7 +367,7 @@ export interface ImagesCardData {
   type: 'images';
   items: { url: string; caption?: string; source?: string; site: string }[];
 }
-export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData;
+export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData | CredentialCardData;
 
 /** Shown when the agent proposes a routine or watcher, before it exists. */
 export interface AutomationCard {
@@ -395,4 +395,36 @@ export interface EmailAccount {
   smtpPort?: number;
   isDefault?: boolean;
   enabled?: boolean;
+}
+
+export interface ConnectionInfo {
+  name: string;
+  baseUrl: string;
+  host: string;
+  auth: { style: 'bearer' | 'header' | 'query' | 'basic' | 'aws-sigv4' | 'none'; header?: string; param?: string; region?: string; service?: string };
+  readMethods: string[];
+  purpose: string;
+  credentialHelp: string;
+  hasSecret: boolean;
+  createdAt: number;
+  lastUsed: number | null;
+}
+export interface ConnectionCard {
+  type: 'connection';
+  name: string;
+  baseUrl: string;
+  auth: ConnectionInfo['auth'];
+  readMethods: string[];
+  purpose: string;
+  credentialHelp: string;
+  docsUrl?: string;
+  change: boolean;
+  dropsCredential: boolean;
+}
+export interface CredentialCardData {
+  type: 'credential';
+  name: string;
+  host: string;
+  style: string;
+  help: string;
 }

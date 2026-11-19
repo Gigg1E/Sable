@@ -1,5 +1,5 @@
 import { motion } from 'motion/react';
-import { CalendarClock, CreditCard, Radar, ShieldAlert } from 'lucide-react';
+import { CalendarClock, CreditCard, Plug, Radar, ShieldAlert } from 'lucide-react';
 import { cx } from '../lib/format';
 import { useState } from 'react';
 import { api } from '../lib/api';
@@ -8,7 +8,8 @@ import { useStore } from '../lib/store';
 import type { Approval } from '../lib/types';
 import { toolIcon } from './ToolCall';
 import { CartCard, money } from './CommerceCards';
-import type { AutomationCard, CartLikeCard } from '../lib/types';
+import type { AutomationCard, CartLikeCard, ConnectionCard } from '../lib/types';
+import { AUTH_LABEL } from './Connections';
 import { Badge, Button } from './ui';
 
 function argPreview(a: Approval): string | null {
@@ -29,7 +30,8 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
   const [checked, setChecked] = useState(false);
   const [method, setMethod] = useState<string | null>(null);
   const automation = approval.preview?.type === 'automation' ? (approval.preview as AutomationCard) : null;
-  const purchase = approval.preview && approval.preview.type !== 'products' && !automation ? (approval.preview as CartLikeCard) : null;
+  const connection = approval.preview?.type === 'connection' ? (approval.preview as ConnectionCard) : null;
+  const purchase = approval.preview && approval.preview.type !== 'products' && !automation && !connection ? (approval.preview as CartLikeCard) : null;
 
   async function decide(decision: 'approve' | 'deny', remember = false, choice?: string) {
     setBusy(decision + remember + (choice ?? ''));
@@ -40,6 +42,65 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
       toast({ title: 'Could not record decision', body: (err as Error).message, tone: 'error' });
       setBusy(null);
     }
+  }
+
+  if (connection) {
+    const c = connection;
+    return (
+      <motion.div layout initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden rounded-lg border border-tint/35 bg-panel shadow-2">
+        <div className="flex items-center gap-2 border-b border-tint/20 bg-tint-soft px-3.5 py-2 text-[12px]">
+          <Plug className="size-3.5 text-tint" />
+          <span className="font-semibold text-tint">{c.change ? 'Change connection' : 'New connection'}</span>
+          <span className="text-fg-3">·</span>
+          <span className="truncate text-fg-2">{approval.agent} built this from the API docs</span>
+        </div>
+        <div className="space-y-3 p-3.5 text-[13px]">
+          <div className="flex flex-wrap items-baseline gap-x-2">
+            <span className="font-mono text-[15px] font-semibold">{c.name}</span>
+            <span className="text-fg-2">{c.purpose}</span>
+          </div>
+          <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-1.5 rounded-md border border-line bg-sunken px-3 py-2.5 text-[12.5px]">
+            <dt className="text-fg-3">Server</dt>
+            <dd className="break-all font-mono">{c.baseUrl}</dd>
+            <dt className="text-fg-3">Sign-in</dt>
+            <dd>
+              {AUTH_LABEL[c.auth.style]}
+              {c.auth.header ? ` (${c.auth.header})` : c.auth.param ? ` (?${c.auth.param}=)` : c.auth.region ? ` (${c.auth.service}, ${c.auth.region})` : ''}
+            </dd>
+            <dt className="text-fg-3">Runs freely</dt>
+            <dd>{c.readMethods.join(', ')} (reading)</dd>
+            <dt className="text-fg-3">Asks you</dt>
+            <dd>{['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].filter((m) => !c.readMethods.includes(m)).join(', ') || 'nothing'}</dd>
+            {c.docsUrl && (
+              <>
+                <dt className="text-fg-3">Docs</dt>
+                <dd className="truncate">
+                  <a href={c.docsUrl} target="_blank" rel="noopener noreferrer" className="text-tint underline underline-offset-2">
+                    {c.docsUrl.replace(/^https?:\/\//, '')}
+                  </a>
+                </dd>
+              </>
+            )}
+          </dl>
+          {c.readMethods.some((m) => !['GET', 'HEAD', 'OPTIONS'].includes(m)) && <p className="text-[12.5px] text-accent">{c.readMethods.filter((m) => !['GET', 'HEAD', 'OPTIONS'].includes(m)).join(', ')} counts as reading for this API, so pair it with a read-only key.</p>}
+          {c.credentialHelp && (
+            <p className="text-[12.5px] leading-relaxed text-fg-2">
+              <b className="text-fg">Key to create:</b> {c.credentialHelp}
+            </p>
+          )}
+          {c.dropsCredential && <p className="text-[12.5px] text-accent">This changes where the connection points, so its stored key will be removed.</p>}
+          <p className="text-[12px] text-fg-3">After you approve, you'll enter the key in a secure field. The AI never sees it, and it's only sent to this server.</p>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" loading={busy === 'denyfalse'} onClick={() => void decide('deny')}>
+              Don't create
+            </Button>
+            <Button variant="primary" size="sm" loading={busy === 'approvefalse'} onClick={() => void decide('approve')}>
+              {c.change ? 'Save changes' : 'Create connection'}
+            </Button>
+          </div>
+        </div>
+      </motion.div>
+    );
   }
 
   if (automation) {

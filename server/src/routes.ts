@@ -10,6 +10,7 @@ import { syncEmailTools } from './agent/tools/email.js';
 import { setSpaceData } from './agent/tools/personal.js';
 import { ensureHelpers, helperStatus } from './agent/helpers.js';
 import { PROVIDERS, testAccount } from './email.js';
+import { listConnections, removeConnection, setSecret } from './connections.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
   recordFailedLogin, recoveryCodesLeft, requireAuth, sessionCount, setPassword, twoFactorEnabled,
@@ -717,6 +718,26 @@ export function apiRouter() {
     }),
   );
   r.get('/email/providers', h(() => PROVIDERS));
+
+  // ── Self-built connections (credentials go in here and never come back out) ──
+  r.get('/connections', h(() => listConnections()));
+  r.put(
+    '/connections/:name/secret',
+    h((req) => {
+      const value = String(req.body?.value ?? '').trim();
+      if (value.length > 8000) throw new HttpError(400, 'That credential is too long.');
+      setSecret(param(req, 'name'), value);
+      emit({ type: 'connections.changed' });
+      return { ok: true, hasSecret: !!value };
+    }),
+  );
+  r.delete(
+    '/connections/:name',
+    h((req) => {
+      removeConnection(param(req, 'name'));
+      emit({ type: 'connections.changed' });
+    }),
+  );
 
   r.post(
     '/calendars/test',
