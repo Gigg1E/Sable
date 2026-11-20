@@ -226,7 +226,7 @@ export function ChatHome({ into }: { into?: string } = {}) {
               <div className="space-y-px">
                 {upcoming.map((s) => (
                   <div key={s.id} className="flex items-baseline gap-2 py-1.5">
-                    <span className="w-[86px] shrink-0 text-[11.5px] tabular-nums text-fg-3">{clockTime(s.next_run!).replace(/^\w+, /, '')}</span>
+                    <span className="shrink-0 whitespace-nowrap text-[11.5px] tabular-nums text-fg-3 sm:w-[118px]">{clockTime(s.next_run!).replace(/^\w+, /, '')}</span>
                     <span className="truncate text-[13px] text-fg-2">{s.title}</span>
                   </div>
                 ))}

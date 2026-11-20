@@ -45,7 +45,7 @@ function NavItem({ to, label, icon: Icon, count, active, onNavigate }: { to: str
         navigate(to);
         onNavigate?.();
       }}
-      className={cx('group relative flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] transition-colors', active ? 'text-fg' : 'text-fg-2 hover:bg-side-active/70 hover:text-fg')}
+      className={cx('group relative flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] transition-colors pointer-coarse:h-10 pointer-coarse:text-[14px]', active ? 'text-fg' : 'text-fg-2 hover:bg-side-active/70 hover:text-fg')}
     >
       {active && <motion.span layoutId="nav-active" className="absolute inset-0 rounded-md border border-side-line bg-side-active shadow-1 before:absolute before:inset-y-1.5 before:-left-[9px] before:w-[3px] before:rounded-full before:bg-tint" transition={{ type: 'spring', stiffness: 600, damping: 45 }} />}
       <Icon className={cx('relative size-[15px]', active ? 'text-tint' : 'text-fg-3 group-hover:text-fg-2')} strokeWidth={1.8} />
@@ -98,7 +98,7 @@ function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate
           navigate(`/chat/${id}`);
           onNavigate?.();
         }}
-        className={cx('flex h-7 w-full items-center gap-2 rounded-md px-2 pr-7 text-left text-[13px] transition-colors', active ? 'bg-panel-2 text-fg' : 'text-fg-2 hover:bg-panel-2/60 hover:text-fg')}
+        className={cx('flex h-7 w-full items-center gap-2 rounded-md px-2 pr-7 text-left text-[13px] transition-colors pointer-coarse:h-9 pointer-coarse:text-[14px]', active ? 'bg-panel-2 text-fg' : 'text-fg-2 hover:bg-panel-2/60 hover:text-fg')}
       >
         {running || waiting ? <StatusDot state={waiting ? 'waiting' : 'running'} /> : permanent ? <Sparkle className="size-3.5 shrink-0 text-accent" strokeWidth={1.8} /> : kind === 'mail' ? <AtSign className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : auto ? <auto.icon className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : null}
         <span className="min-w-0 flex-1 truncate">{cleanTitle(title)}</span>
