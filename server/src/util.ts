@@ -46,3 +46,15 @@ export function plainText(md: string): string {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+/** "3 days ago" for the model. */
+export function timeAgoText(ts: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 90) return 'just now';
+  const m = Math.round(s / 60);
+  if (m < 90) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 36) return `${h} h ago`;
+  const d = Math.round(h / 24);
+  return d < 60 ? `${d} days ago` : new Date(ts).toLocaleDateString();
+}

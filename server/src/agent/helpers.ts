@@ -129,6 +129,37 @@ export async function embed(texts: string[]): Promise<number[][] | null> {
   return texts.map((t) => cache.get(t)!);
 }
 
+/**
+ * Embeddings for indexing (the Library): bigger inputs, longer timeout, no cache. Uses the model's
+ * document prompt so queries (embed) and documents land in the same space. null when unavailable.
+ */
+export async function embedDocuments(texts: string[], kind: 'document' | 'query' = 'document'): Promise<number[][] | null> {
+  const base = ollamaBase();
+  const { enabled, embedModel } = helperSettings();
+  if (!base || !enabled || !status.installed || !texts.length) return null;
+  const prefix = /embeddinggemma/i.test(embedModel) ? (kind === 'query' ? 'task: search result | query: ' : 'title: none | text: ') : '';
+  const out: number[][] = [];
+  for (let i = 0; i < texts.length; i += 16) {
+    try {
+      const res = await fetch(`${base}/api/embed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: embedModel, input: texts.slice(i, i + 16).map((t) => prefix + t.slice(0, 6000)) }),
+        signal: AbortSignal.timeout(120_000),
+      });
+      if (!res.ok) return null;
+      const data = (await res.json()) as { embeddings?: number[][] };
+      if (!data.embeddings) return null;
+      out.push(...data.embeddings);
+    } catch {
+      return null;
+    }
+  }
+  return out;
+}
+
+export const embedModelName = () => helperSettings().embedModel;
+
 export function cosine(a: number[], b: number[]) {
   let dot = 0;
   let na = 0;

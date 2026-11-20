@@ -5,6 +5,7 @@ import { chatDir, UPLOAD_DIR, WORKSPACE_DIR } from './config.js';
 import { get, run } from './db.js';
 import type { ImagePart } from './llm/types.js';
 import { id, now, truncate, untrusted } from './util.js';
+import { addItem } from './library.js';
 
 /**
  * Attachments. Images go to the model as pictures; any other file is saved into the workspace
@@ -149,6 +150,15 @@ export function claimUploads(conversationId: string, ids: string[]) {
       fs.renameSync(path.join(WORKSPACE_DIR, u.path), path.join(dir, name));
       fs.rmSync(path.join(WORKSPACE_DIR, path.dirname(u.path)), { recursive: true, force: true });
       run('UPDATE uploads SET path = ? WHERE id = ?', `${chatDir(conversationId)}/uploads/${name}`, uid);
+      // Text you upload is searchable from any chat. It's private: it came from you.
+      if (looksText(name, u.mime ?? '') && (u.size ?? 0) <= 2_000_000) {
+        try {
+          const text = fs.readFileSync(path.join(dir, name), 'utf8');
+          if (text.trim()) addItem({ kind: 'upload', title: name, body: text, source: 'upload', sourceRef: uid, conversationId, trust: 'owner' });
+        } catch {
+          /* unreadable as text */
+        }
+      }
     } catch (err) {
       console.error('Could not move upload into the chat folder:', err);
     }

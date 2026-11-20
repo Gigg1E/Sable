@@ -7,7 +7,7 @@ import type { ToolDef } from './tools/registry.js';
  * and tools_search to load anything else.
  */
 
-export const CORE_TOOLS = new Set(['tools_search', 'memory_save', 'memory_search', 'notify', 'delegate', 'goal_create', 'goal_update', 'show_graph', 'reminder_set']);
+export const CORE_TOOLS = new Set(['tools_search', 'memory_save', 'memory_search', 'notify', 'delegate', 'goal_create', 'goal_update', 'show_graph', 'reminder_set', 'library_search']);
 const SMALL_INSTALL = 22;
 
 function groups(all: ToolDef[]) {

@@ -2,6 +2,7 @@ import { agentFetch } from '../../net.js';
 import { getSettings } from '../../settings.js';
 import { truncate, untrusted } from '../../util.js';
 import { registerTool } from './registry.js';
+import { addItem, wasForgotten } from '../../library.js';
 
 const MAX_BYTES = 3_000_000;
 
@@ -141,6 +142,15 @@ registerTool({
       out = `Title: ${title}\nURL: ${res.url}\nStatus: ${res.status}\n\n${text}`;
     } else {
       out = `URL: ${res.url}\nStatus: ${res.status}\nContent-Type: ${type}\n\n${raw}`;
+    }
+    // Pages Sable reads go into the Library (open unless they hold personal details), so any chat can find them later.
+    if (res.ok && out.length > 400) {
+      try {
+        const title = /^Title: (.*)$/m.exec(out)?.[1]?.trim() || hostOf(res.url) || res.url;
+        if (!wasForgotten(out, res.url)) addItem({ kind: 'page', title, body: out.slice(0, 200_000), source: 'web', url: res.url, conversationId: ctx.conversationId, trust: 'external' });
+      } catch {
+        /* the Library is a bonus; never fail the fetch over it */
+      }
     }
     return untrusted(hostOf(res.url) ?? 'web', truncate(out, Number(a.max_chars) || 20_000));
   },

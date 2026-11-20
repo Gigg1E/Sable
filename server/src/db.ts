@@ -61,6 +61,18 @@ CREATE TABLE IF NOT EXISTS agent_jobs (
   created_at INTEGER NOT NULL, finished_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS agent_jobs_c ON agent_jobs(conversation_id, created_at);
+CREATE TABLE IF NOT EXISTS lib_items (
+  id TEXT PRIMARY KEY, kind TEXT NOT NULL, title TEXT NOT NULL, summary TEXT, body TEXT NOT NULL, source TEXT NOT NULL,
+  source_ref TEXT, url TEXT, conversation_id TEXT, trust TEXT NOT NULL, privacy TEXT NOT NULL, privacy_reason TEXT,
+  privacy_locked INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, hash TEXT NOT NULL, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS lib_items_hash ON lib_items(hash);
+CREATE INDEX IF NOT EXISTS lib_items_updated ON lib_items(updated_at);
+CREATE TABLE IF NOT EXISTS lib_chunks (id TEXT PRIMARY KEY, item_id TEXT NOT NULL, seq INTEGER NOT NULL, text TEXT NOT NULL);
+CREATE INDEX IF NOT EXISTS lib_chunks_item ON lib_chunks(item_id);
+CREATE VIRTUAL TABLE IF NOT EXISTS lib_fts USING fts5(text, chunk_id UNINDEXED, tokenize = 'porter unicode61');
+CREATE TABLE IF NOT EXISTS lib_vec (chunk_id TEXT NOT NULL, model TEXT NOT NULL, dim INTEGER NOT NULL, vec BLOB NOT NULL, PRIMARY KEY (chunk_id, model));
+CREATE TABLE IF NOT EXISTS lib_forgotten (hash TEXT PRIMARY KEY, at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, text TEXT NOT NULL, note TEXT, due_at INTEGER NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL
 );

@@ -14,6 +14,7 @@ import { listConnections, removeConnection, setSecret } from './connections.js';
 import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unlinkGoogle } from './google.js';
 import { cancelJob, continueJob, getJob, listJobs } from './agent/subagents.js';
 import { isFrozen, setFrozen, verifyActivity } from './safety.js';
+import { addItem, forgetItem, getItem, libraryStats, libSnippet, listItems, search, setPrivacy } from './library.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
@@ -627,6 +628,45 @@ export function apiRouter() {
       }
     }),
   );
+
+  // ── Library ──
+  r.get(
+    '/library',
+    h((req) => ({
+      items: listItems({ kind: req.query.kind ? String(req.query.kind) : undefined, privacy: req.query.privacy ? String(req.query.privacy) : undefined, q: req.query.q ? String(req.query.q) : undefined, before: Number(req.query.before) || undefined }),
+      stats: libraryStats(),
+    })),
+  );
+  r.get(
+    '/library/search',
+    h(async (req) => (await search(String(req.query.q ?? ''), { limit: 30 })).map((h) => ({ ...h.item, body: undefined, snippet: libSnippet(h.chunk, 300), score: h.score }))),
+  );
+  r.get(
+    '/library/:id',
+    h((req) => {
+      const it = getItem(param(req, 'id'));
+      if (!it) throw new HttpError(404, 'That item is gone.');
+      return it;
+    }),
+  );
+  r.post(
+    '/library',
+    h((req) => {
+      const title = String(req.body?.title ?? '').trim();
+      const body = String(req.body?.body ?? '').trim();
+      if (!body) throw new HttpError(400, 'Write something to save.');
+      return addItem({ kind: 'note', title: title || body.split('\n')[0].slice(0, 80), body, source: 'you', trust: 'owner', privacy: req.body?.privacy === 'open' || req.body?.privacy === 'private' ? req.body.privacy : undefined });
+    }),
+  );
+  r.patch(
+    '/library/:id',
+    h((req) => {
+      if (req.body?.privacy !== 'open' && req.body?.privacy !== 'private') throw new HttpError(400, 'privacy must be open or private');
+      setPrivacy(param(req, 'id'), req.body.privacy);
+      return getItem(param(req, 'id'));
+    }),
+  );
+  r.delete('/library/:id', h((req) => ({ forgotten: forgetItem(param(req, 'id')) })));
 
   // ── Reminders (one-off) ──
   r.get('/reminders', h(() => listReminders()));

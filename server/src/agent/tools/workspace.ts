@@ -11,6 +11,7 @@ import { proxyEnv } from '../../net.js';
 import { getSettings } from '../../settings.js';
 import { id, truncate } from '../../util.js';
 import { registerTool, type Card } from './registry.js';
+import { libraryFile } from '../../libraryHooks.js';
 
 /** Resolve a model-supplied path inside the workspace, refusing anything that escapes it. */
 async function safePath(p: string): Promise<string> {
@@ -306,6 +307,8 @@ registerTool({
     const card = await announce(wrel);
     const shown = isOutput(ctx.conversationId, wrel);
     const where = chatView(ctx.conversationId, wrel);
+    // What Sable makes for you (outputs/) is shared through the Library: "how did I do X?" finds it from any chat.
+    if (shown) libraryFile(ctx.conversationId, wrel, target);
     return {
       content: `Wrote ${String(a.content).length} characters to ${where}. ${shown ? 'The user sees it as a file card with a download button.' : 'This is not shown to the user (it is not in outputs/); call show_file if they should get it.'}`,
       cards: shown && card ? [card] : [],
@@ -337,6 +340,7 @@ registerTool({
     if (!count) return `No exact match for that text in ${chatView(ctx.conversationId, wrel)}. Read the file and copy the text exactly (spaces and line breaks included).`;
     if (count > 1 && !a.all) return `That text appears ${count} times. Include more surrounding text so it is unique, or set all to true.`;
     await fs.writeFile(target, a.all ? text.split(old).join(String(a.new ?? '')) : text.replace(old, () => String(a.new ?? '')));
+    if (isOutput(ctx.conversationId, wrel)) libraryFile(ctx.conversationId, wrel, target);
     const card = await announce(wrel);
     const shown = isOutput(ctx.conversationId, wrel);
     return { content: `Edited ${chatView(ctx.conversationId, wrel)} (${a.all ? count : 1} change${(a.all ? count : 1) === 1 ? '' : 's'}).`, cards: shown && card ? [card] : [] };
