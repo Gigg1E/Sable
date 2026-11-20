@@ -18,6 +18,7 @@ import { usePanel } from '../lib/panel';
 import { SidePanel, usePanelAutoOpen } from '../components/SidePanel';
 import type { AnyCard, Goal, Job, Message, Schedule, Watcher } from '../lib/types';
 import { SubagentView } from '../components/SubagentCard';
+import { Signature } from '../components/Signature';
 import { Sparkline } from '../components/Sparkline';
 import { ImageViewer } from '../components/ImageViewer';
 import { imageUrl } from '../lib/images';
@@ -461,8 +462,8 @@ export function ChatView({ id }: { id: string }) {
               {turns.map((t, i) =>
                 t.kind === 'user' ? (
                   <motion.div key={t.message.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
-                    {/^\[Sub-agent [^\]]*\]/.test(t.message.content) ? (
-                      <SubagentReport text={t.message.content} />
+                    {WAKE.test(t.message.content) ? (
+                      <WakeLine text={t.message.content} />
                     ) : (
                       <>
                     <TurnHeader who={t.message.agent === 'Schedule' ? 'Routine' : 'You'} time={t.message.created_at} />
@@ -585,16 +586,31 @@ export function ChatView({ id }: { id: string }) {
   );
 }
 
-/** A background sub-agent handing its result back: a slim line, since its card already shows the result. */
-function SubagentReport({ text }: { text: string }) {
-  const head = /^\[Sub-agent ([^:]+): ([^·\]]+)/.exec(text);
-  const ok = head?.[1] === 'finished';
+/** Messages that wake a chat on their own: background results, follow-ups, watchers, webhooks. */
+const WAKE = /^\[(Sub-agent [^\]]*|Follow-up you scheduled: [^\]]*|Watcher triggered: [^\]]*|Webhook received: [^\]]*)\]/;
+
+/** A wake-up shown as one slim line with its signature, since what happens next is Sable's reply. */
+function WakeLine({ text }: { text: string }) {
+  const head = WAKE.exec(text)?.[1] ?? '';
+  let kind = 'agent';
+  let label = head;
+  if (head.startsWith('Sub-agent')) {
+    const m = /^Sub-agent ([^:]+): ([^·]+)/.exec(head);
+    label = `${m?.[2]?.trim() ?? 'Sub-agent'} ${m?.[1] ?? 'reported back'} · result handed back`;
+  } else if (head.startsWith('Follow-up')) {
+    kind = 'reminder';
+    label = `Following up: ${head.replace(/^Follow-up you scheduled: /, '').replace(/ · \S+$/, '')}`;
+  } else if (head.startsWith('Watcher')) {
+    kind = 'watch';
+    label = `${head.replace(/^Watcher triggered: /, '').replace(/ · \S+$/, '')} fired`;
+  } else if (head.startsWith('Webhook')) {
+    kind = 'hook';
+    label = `${head.replace(/^Webhook received: /, '')} called in`;
+  }
   return (
     <div className="flex items-center gap-2 pl-[26px] text-[12.5px] text-fg-3">
-      <span className={cx('size-1.5 rounded-full', ok ? 'bg-ok' : 'bg-danger')} />
-      <span>
-        <span className="text-fg-2">{head?.[2]?.trim() ?? 'Sub-agent'}</span> {head?.[1] ?? 'reported back'} · result handed back
-      </span>
+      <Signature kind={kind} size={20} />
+      <span className="truncate">{label}</span>
     </div>
   );
 }

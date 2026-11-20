@@ -4,7 +4,7 @@ import { emit } from '../events.js';
 import { agentFetch } from '../net.js';
 import { notify, pushTo } from '../push.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
-import { activeRunFor, createConversation, quickAnswer, startRun } from './runner.js';
+import { activeRunFor, createConversation, quickAnswer, startRun, wakeChat } from './runner.js';
 import { htmlToText } from './tools/web.js';
 import { registerTool } from './tools/registry.js';
 import { fmtMoney, shopVariantSnapshot } from '../shop/tools.js';
@@ -42,6 +42,8 @@ export interface WatchActions {
   prompt?: string;
   /** POST a JSON payload to this URL when the condition is met. */
   webhook?: string;
+  /** 'here': wake the chat that set it up (with its context) instead of the watcher's own background chat. */
+  deliver?: 'here' | 'background';
 }
 
 export interface Extracted {
@@ -406,6 +408,8 @@ async function trigger(w: WatcherRow, actions: WatchActions, prev: string | null
 
 /** Run the watcher's instructions in its own background chat (pre-approved if the user approved it that way). */
 function wake(w: WatcherRow, body: string) {
+  const deliver = parseJson<WatchActions>(w.actions as unknown as string, { notify: true }).deliver;
+  if (deliver === 'here' && w.conversation_id && wakeChat(w.conversation_id, `[Watcher triggered: ${w.title} · ${w.id}]\n${body}`)) return;
   let cid = w.run_conversation_id;
   if (!cid || !get('SELECT id FROM conversations WHERE id = ?', cid)) {
     cid = createConversation(`👁 ${w.title}`, 'watch');
@@ -630,6 +634,7 @@ registerTool({
       calendar_contains: { type: 'string', description: 'calendar: only events whose title/location/notes contain this' },
       notify: { type: 'boolean', description: 'Tell the user when it fires (default true)' },
       on_trigger: { type: 'string', description: 'What you should do when it fires' },
+      deliver: { type: 'string', enum: ['here', 'background'], description: "Where on_trigger runs. 'here': this chat wakes up with everything said so far (use when it belongs to this conversation: the package we've been tracking, this application). 'background' (default): the watcher's own chat (recurring or standalone things)." },
       webhook_url: { type: 'string', description: 'Optional: a saved webhook output name (see webhook_outputs) or URL to push to when it fires, e.g. the user\'s Discord' },
       restrict: { type: 'array', items: { type: 'string' }, description: 'Tool names (or parts, like "send") that should still ask during its runs' },
     },
@@ -667,7 +672,7 @@ registerTool({
   async run(a, ctx) {
     const src = (a.source ?? 'web') as WatcherRow['source'] | 'push';
     if (src === 'push') {
-      const h = createHook({ name: String(a.title), verify: 'none', action: { notify: a.notify !== false, prompt: a.on_trigger || undefined } });
+      const h = createHook({ name: String(a.title), verify: 'none', action: { notify: a.notify !== false, prompt: a.on_trigger || undefined, here: a.deliver === 'here' ? ctx.conversationId : undefined } });
       const url = hookUrl(h);
       return `Push URL created for "${a.title}":\n${url.startsWith('/') ? `<your Sable address>${url}` : url}\nGive this to the other service. Each call ${a.on_trigger ? 'wakes you with the payload' : 'notifies the user'}. The user can copy it any time from Webhooks.`;
     }
@@ -683,7 +688,7 @@ registerTool({
       extract: (a.extract ?? { kind: 'text' }) as ExtractSpec,
       condition: cond,
       interval_min: Number(a.every_minutes) || (src === 'web' ? 60 : 15),
-      actions: { notify: a.notify !== false, prompt: a.on_trigger || undefined, webhook: a.webhook_url || undefined },
+      actions: { notify: a.notify !== false, prompt: a.on_trigger || undefined, webhook: a.webhook_url || undefined, deliver: a.deliver === 'here' ? 'here' : undefined },
       conversationId: ctx.conversationId,
       source: src,
       sourceConfig,

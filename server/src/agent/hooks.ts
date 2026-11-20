@@ -4,7 +4,7 @@ import { all, get, run } from '../db.js';
 import { emit } from '../events.js';
 import { notify, publicBase } from '../push.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
-import { activeRunFor, createConversation, startRun } from './runner.js';
+import { activeRunFor, createConversation, startRun, wakeChat } from './runner.js';
 import { registerTool } from './tools/registry.js';
 
 /**
@@ -24,6 +24,8 @@ export interface HookAction {
   title?: string;
   /** Instruction for the agent; the payload is attached as untrusted data. */
   prompt?: string;
+  /** Wake this chat (the one that created the webhook) instead of the webhook's own chat. */
+  here?: string;
 }
 export interface HookRow {
   id: string;
@@ -154,7 +156,10 @@ async function handle(req: Request, res: Response) {
       await notify({ title: truncate(title, 140), body: summarizePayload(body, text), link: '/webhooks', kind: 'hook' });
       detail += 'notified';
     }
-    if (action.prompt) {
+    const wakeText = `[Webhook received: ${h.name}]\n${action.prompt}\n\n<untrusted source="webhook ${h.name}">\n${truncate(typeof body === 'string' ? body : JSON.stringify(body, null, 2), 20_000)}\n</untrusted>`;
+    if (action.prompt && action.here && wakeChat(action.here, wakeText)) {
+      detail += (detail ? ', ' : '') + 'woke its chat';
+    } else if (action.prompt) {
       let cid = h.conversation_id;
       if (!cid || !get('SELECT id FROM conversations WHERE id = ?', cid) || activeRunFor(cid)) {
         cid = createConversation(`⚡ ${h.name}`, 'hook');
@@ -196,6 +201,7 @@ registerTool({
       notify: { type: 'boolean', description: 'Push a notification on each call (default true)' },
       title_template: { type: 'string', description: 'Notification title; may use {{body.field}} and {{headers.name}}' },
       on_receive: { type: 'string', description: 'Optional instruction for you to carry out with each payload' },
+      deliver: { type: 'string', enum: ['here', 'background'], description: "Where on_receive runs: 'here' wakes this chat with its context; 'background' (default) uses the webhook's own chat" },
       verify: { type: 'string', enum: ['none', 'github', 'hmac-sha256'], description: 'Signature verification (github = X-Hub-Signature-256). A secret is generated.' },
     },
     required: ['name'],
@@ -203,11 +209,11 @@ registerTool({
   risk: 'high',
   defaultPolicy: 'ask',
   summarize: (a) => `Create webhook “${a.name}”${a.on_receive ? ' that wakes the agent' : ''}`,
-  async run(a) {
+  async run(a, ctx) {
     const h = createHook({
       name: String(a.name),
       verify: (a.verify as Verify) ?? 'none',
-      action: { notify: a.notify !== false, title: a.title_template || undefined, prompt: a.on_receive || undefined },
+      action: { notify: a.notify !== false, title: a.title_template || undefined, prompt: a.on_receive || undefined, here: a.deliver === 'here' ? ctx.conversationId : undefined },
     });
     const url = hookUrl(h);
     return `Webhook ${h.id} created.\nURL: ${url.startsWith('/') ? `<your Sable address>${url}` : url}${h.secret ? `\nSigning secret (configure it in the sending service): ${h.secret}` : ''}\nThe user can copy it any time from Webhooks.`;

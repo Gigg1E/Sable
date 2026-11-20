@@ -10,6 +10,17 @@ Sable has five kinds of automation, each with one job:
 | **Webhooks** | Places Sable **pushes to** (Discord, Slack, any URL), or links Sable makes for other things to push to. | "When a game price drops, post it to my Discord" |
 | **Spaces** | Live mini apps that tie it together. | A shopping list whose prices update from watchers |
 
+## Chats that wake themselves
+
+Some automations belong to a conversation rather than standing on their own. When you set one up from a chat, it can be delivered **here**: that chat wakes up with everything it already knows, instead of a fresh background chat starting from nothing.
+
+- **Follow-ups** ("I'll check back on the refund Friday"): Sable schedules a moment for *this* chat to wake, with a note to itself. When it wakes, it checks what it needs to and tells you. The card in the chat reads "Sable follows up: …" and can be cancelled. Follow-ups also appear under Routines → Reminders.
+- **Watchers and webhooks** set up in a chat can choose `deliver: here` (the package we've been tracking, a store calling back about this order). Recurring or standalone ones keep their own background chat, as before.
+- A wake-up shows in the chat as one slim line with its icon ("store-refunds called in", "Following up: Refund for order #5521"), followed by Sable's reply. If a task is already running in that chat, the event joins it at its next step.
+- Background **sub-agents** already report back this way.
+
+**Reminder or follow-up?** A reminder is a plain notification at a time ("class at 10:30"). A follow-up is Sable picking the conversation back up. Sable chooses based on whether the moment needs the chat's context.
+
 ## Reminders
 
 - Ask in chat ("remind me about class at 10:30 tonight") or press **New reminder** on the Routines page. Quick buttons fill in "in 10 min", "in 1 hour" and so on.

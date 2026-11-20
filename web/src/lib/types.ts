@@ -276,6 +276,7 @@ export interface Reminder {
   due_at: number;
   conversation_id: string | null;
   created_at: number;
+  wake?: number;
 }
 export interface ReminderCardData {
   type: 'reminder';
@@ -283,6 +284,8 @@ export interface ReminderCardData {
   text: string;
   note?: string;
   due: number;
+  /** A follow-up: wakes the chat instead of notifying. */
+  wake?: boolean;
 }
 export type JobStep = { k: 'text'; text: string } | { k: 'tool'; id: string; summary: string; status?: string; preview?: string };
 export interface Job {

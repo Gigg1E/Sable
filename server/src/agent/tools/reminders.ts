@@ -3,7 +3,7 @@ import { registerTool } from './registry.js';
 
 /** One-off reminders: a time and a message, gone once they fire. */
 
-const card = (r: { id: string; text: string; note: string | null; due_at: number }) => ({ type: 'reminder', id: r.id, text: r.text, note: r.note ?? undefined, due: r.due_at });
+const card = (r: { id: string; text: string; note: string | null; due_at: number; wake?: number }) => ({ type: 'reminder', id: r.id, text: r.text, note: r.wake ? undefined : (r.note ?? undefined), due: r.due_at, wake: !!r.wake });
 
 registerTool({
   name: 'reminder_set',
@@ -79,5 +79,32 @@ registerTool({
   summarize: (a) => `Cancel reminder ${a.id}`,
   async run(a) {
     return deleteReminder(String(a.id)) ? 'Cancelled.' : 'No upcoming reminder with that id.';
+  },
+});
+
+registerTool({
+  name: 'follow_up',
+  label: 'Follow up later',
+  group: 'Schedules',
+  description:
+    "\"I'll remind you\" instead of \"I'll set a reminder\": schedule a moment when THIS chat wakes up again, with a note to yourself, and you decide then what to tell the user (and can check things first). Use it when the reminder needs this conversation's context or is something you own: \"check whether the essay got submitted, he was worried about citations\", \"see if the refund came through\". For a plain ping (\"remind me at 10 about class\") use reminder_set. Give at (ISO) or in_minutes.",
+  parameters: {
+    type: 'object',
+    properties: {
+      about: { type: 'string', description: 'Short label the user sees, e.g. "Essay citations"' },
+      note: { type: 'string', description: 'Your note to yourself for when you wake: what to check, what matters' },
+      at: { type: 'string' },
+      in_minutes: { type: 'number' },
+    },
+    required: ['about', 'note'],
+  },
+  risk: 'low',
+  defaultPolicy: 'auto',
+  summarize: (a) => `Follow up: ${a.about}`,
+  async run(a, ctx) {
+    const due = parseDue(a.at, a.in_minutes);
+    if (typeof due === 'string') return `Not set: ${due}`;
+    const r = createReminder({ text: String(a.about), note: String(a.note), due, conversationId: ctx.conversationId, wake: true });
+    return { content: `Follow-up ${r.id} set for ${whenText(r.due_at)}. This chat wakes then with your note. The user sees a chip and can cancel or move it.`, cards: [card(r)] };
   },
 });

@@ -582,6 +582,25 @@ export function createConversation(title = 'New chat', kind = 'chat') {
 }
 
 /**
+ * Wake a chat with an event (a watcher firing, a webhook, a follow-up, a background job's result):
+ * it joins the running task if there is one, otherwise starts a new turn in that same chat, so the
+ * chat answers with everything it already knows.
+ */
+export function wakeChat(conversationId: string, text: string): boolean {
+  if (!get('SELECT id FROM conversations WHERE id = ?', conversationId)) return false;
+  if (activeRunFor(conversationId)) {
+    interject(conversationId, text);
+    return true;
+  }
+  try {
+    startRun(conversationId, text, 'wake');
+  } catch {
+    interject(conversationId, text);
+  }
+  return true;
+}
+
+/**
  * Reflexes: a few commands handled instantly, without the model (so they work even when it's down).
  * Returns true when the text was a reflex; the exchange is still written into the chat.
  */
@@ -616,7 +635,7 @@ export function reflex(conversationId: string, text: string): boolean {
   return true;
 }
 
-export function startRun(conversationId: string, text: string, source: 'user' | 'schedule' = 'user', attachments: string[] = []): string {
+export function startRun(conversationId: string, text: string, source: 'user' | 'schedule' | 'wake' = 'user', attachments: string[] = []): string {
   const conv = get<{ id: string; title: string }>('SELECT id, title FROM conversations WHERE id = ?', conversationId);
   if (!conv) throw new HttpError(404, 'Conversation not found');
   if (activeRunFor(conversationId)) throw new HttpError(409, "I'm still working on the last request in this chat. Stop it or wait for it to finish.");
@@ -645,7 +664,7 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
   return runId;
 }
 
-async function execute(runId: string, conversationId: string, controller: AbortController, source: 'user' | 'schedule') {
+async function execute(runId: string, conversationId: string, controller: AbortController, source: 'user' | 'schedule' | 'wake') {
   const s = getSettings();
   try {
     const model = await resolveModel(s.main.providerId, s.main.model);
@@ -682,7 +701,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
     });
     setRunStatus(runId, conversationId, 'done');
     // Background runs notify only when there's something to say (see automation.ts).
-    if (source !== 'user' ? shouldNotifyAfterRun(conversationId, runId, answer) : connectedClients() === 0) {
+    if (source === 'schedule' ? shouldNotifyAfterRun(conversationId, runId, answer) : connectedClients() === 0) {
       const title = get<{ title: string }>('SELECT title FROM conversations WHERE id = ?', conversationId)?.title ?? 'Task';
       void notify({ title: `${s.persona.name} · ${title}`, body: truncate(answer.replace(/[#*_>`]/g, ''), 180), link: `/chat/${conversationId}`, kind: source === 'schedule' ? 'schedule' : 'run' });
     }
@@ -696,7 +715,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
         thinking: null, tool_calls: null, tool_call_id: null, tool_name: null, is_error: 1, raw: null, raw_model: null,
       });
       setRunStatus(runId, conversationId, 'error', msg);
-      if (source !== 'user') void notify({ title: `${s.persona.name} hit a problem`, body: truncate(msg, 160), link: `/chat/${conversationId}`, kind: 'run' });
+      if (source === 'schedule') void notify({ title: `${s.persona.name} hit a problem`, body: truncate(msg, 160), link: `/chat/${conversationId}`, kind: 'run' });
     }
   } finally {
     active.delete(runId);

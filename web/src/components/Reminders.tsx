@@ -45,9 +45,12 @@ export function ReminderCard({ card }: { card: ReminderCardData }) {
         <Signature kind="reminder" size={36} />
       )}
       <div className="min-w-0 flex-1">
-        <div className={cx('truncate text-[13.5px] font-medium', state === 'cancelled' && 'text-fg-3 line-through')}>{live?.text ?? card.text}</div>
+        <div className={cx('truncate text-[13.5px] font-medium', state === 'cancelled' && 'text-fg-3 line-through')}>
+          {card.wake && <span className="font-normal text-fg-3">Sable follows up: </span>}
+          {live?.text ?? card.text}
+        </div>
         <div className="truncate text-[12px] text-fg-3">
-          {state === 'done' ? `Went off · ${whenText(due)}` : state === 'cancelled' ? 'Cancelled' : `${whenText(due)} · ${untilText(due)}`}
+          {state === 'done' ? `${card.wake ? 'Followed up' : 'Went off'} · ${whenText(due)}` : state === 'cancelled' ? 'Cancelled' : `${whenText(due)} · ${untilText(due)}`}
           {(live?.note ?? card.note) && state === 'set' ? ` · ${live?.note ?? card.note}` : ''}
         </div>
       </div>
@@ -152,7 +155,10 @@ export function RemindersSection() {
               <motion.div key={r.id} layout {...listItem} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0">
                 <Signature kind="reminder" size={28} play={false} />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13.5px] font-medium">{r.text}</div>
+                  <div className="truncate text-[13.5px] font-medium">
+                    {r.wake ? <span className="font-normal text-fg-3">Sable follows up: </span> : null}
+                    {r.text}
+                  </div>
                   {r.note && <div className="truncate text-[12.5px] text-fg-3">{r.note}</div>}
                 </div>
                 <div className="shrink-0 text-right">

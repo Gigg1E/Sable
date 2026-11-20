@@ -1,6 +1,7 @@
 import { all, get, run } from './db.js';
 import { emit } from './events.js';
 import { notify } from './push.js';
+import { wakeChat } from './agent/runner.js';
 import { errorMessage, id, now } from './util.js';
 
 /**
@@ -16,6 +17,8 @@ export interface Reminder {
   due_at: number;
   conversation_id: string | null;
   created_at: number;
+  /** 1: a follow-up. Instead of a notification, it wakes the chat it was set in, with the note. */
+  wake: number;
 }
 
 export function listReminders(): Reminder[] {
@@ -36,9 +39,9 @@ export function parseDue(at?: unknown, inMinutes?: unknown): number | string {
   return t;
 }
 
-export function createReminder(input: { text: string; note?: string; due: number; conversationId?: string }): Reminder {
-  const r: Reminder = { id: id('rem_'), text: input.text.trim().slice(0, 200), note: input.note?.trim().slice(0, 1000) || null, due_at: input.due, conversation_id: input.conversationId ?? null, created_at: now() };
-  run('INSERT INTO reminders (id, text, note, due_at, conversation_id, created_at) VALUES (?, ?, ?, ?, ?, ?)', r.id, r.text, r.note, r.due_at, r.conversation_id, r.created_at);
+export function createReminder(input: { text: string; note?: string; due: number; conversationId?: string; wake?: boolean }): Reminder {
+  const r: Reminder = { id: id(input.wake ? 'fup_' : 'rem_'), text: input.text.trim().slice(0, 200), note: input.note?.trim().slice(0, 4000) || null, due_at: input.due, conversation_id: input.conversationId ?? null, created_at: now(), wake: input.wake ? 1 : 0 };
+  run('INSERT INTO reminders (id, text, note, due_at, conversation_id, created_at, wake) VALUES (?, ?, ?, ?, ?, ?, ?)', r.id, r.text, r.note, r.due_at, r.conversation_id, r.created_at, r.wake);
   emit({ type: 'reminder.changed', conversationId: r.conversation_id ?? undefined });
   return r;
 }
@@ -72,6 +75,8 @@ function fire(r: Reminder) {
   // Delete first, so a slow push service can't make it fire twice.
   if (!run('DELETE FROM reminders WHERE id = ?', r.id).changes) return;
   emit({ type: 'reminder.changed' });
+  // A follow-up wakes its chat: Sable decides what to say with everything that chat knows.
+  if (r.wake && r.conversation_id && wakeChat(r.conversation_id, `[Follow-up you scheduled: ${r.text} · ${r.id}]\n${r.note ?? ''}\n\n(Earlier in this chat you said you'd follow up on this. Check whatever you need, then tell the user. If it no longer matters, say so in one line.)`)) return;
   const late = now() - r.due_at > 5 * 60_000 ? ` (was due ${whenText(r.due_at)}; Sable was offline)` : '';
   void notify({ title: `⏰ ${r.text}`, body: `${r.note ?? ''}${late}`.trim(), link: r.conversation_id ? `/chat/${r.conversation_id}` : '/routines', kind: 'reminder' }).catch((err) =>
     console.error(`[reminder ${r.id}]`, errorMessage(err)),
