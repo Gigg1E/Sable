@@ -1,6 +1,7 @@
 import { describeMailbox, emailAccount, emailAccounts, readMail, searchMail, sendMail } from '../../email.js';
 import { getSettings } from '../../settings.js';
 import { redact } from '../../safety.js';
+import { resolveRecipient } from '../../people.js';
 import { untrusted } from '../../util.js';
 import { registerTool, unregisterWhere } from './registry.js';
 
@@ -57,7 +58,7 @@ export function syncEmailTools() {
     description: "Send an email from the user's mailbox. Write it as the user would (plain text). Double-check the recipient address.",
     parameters: {
       type: 'object',
-      properties: { account: which, to: { type: 'string' }, cc: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' } },
+      properties: { account: which, to: { type: 'string', description: 'Email address(es), or the name of someone you know ("Jordan", "my sister"); names are filled in with their saved email' }, cc: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' } },
       required: ['to', 'subject', 'body'],
     },
     risk: 'high',
@@ -66,7 +67,9 @@ export function syncEmailTools() {
     async run(a) {
       const acc = emailAccount(a.account);
       if (!/@/.test(String(a.to))) return 'That recipient is not an email address. Ask the user for it.';
-      const id = await sendMail(acc, { to: String(a.to), cc: a.cc ? String(a.cc) : undefined, subject: redact(String(a.subject)), text: redact(String(a.body)) });
+      // Names ("Jordan", "my sister") become the saved address here, so the model never needs it.
+      const resolve = (list: string) => list.split(',').map((x) => x.trim()).filter(Boolean).map((x) => resolveRecipient(x, 'email')).join(', ');
+      const id = await sendMail(acc, { to: resolve(String(a.to)), cc: a.cc ? resolve(String(a.cc)) : undefined, subject: redact(String(a.subject)), text: redact(String(a.body)) });
       return `Sent from ${acc.address} to ${a.to} (message id ${id}).`;
     },
   });

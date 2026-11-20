@@ -73,6 +73,10 @@ CREATE INDEX IF NOT EXISTS lib_chunks_item ON lib_chunks(item_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS lib_fts USING fts5(text, chunk_id UNINDEXED, tokenize = 'porter unicode61');
 CREATE TABLE IF NOT EXISTS lib_vec (chunk_id TEXT NOT NULL, model TEXT NOT NULL, dim INTEGER NOT NULL, vec BLOB NOT NULL, PRIMARY KEY (chunk_id, model));
 CREATE TABLE IF NOT EXISTS lib_forgotten (hash TEXT PRIMARY KEY, at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS people (
+  id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'person', relation TEXT, aliases TEXT, contacts TEXT,
+  preferred TEXT, notes TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, text TEXT NOT NULL, note TEXT, due_at INTEGER NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL
 );

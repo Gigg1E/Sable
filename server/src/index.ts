@@ -9,6 +9,7 @@ import './agent/tools/connect.js';
 import './agent/tools/graph.js';
 import './agent/tools/reminders.js';
 import './agent/tools/library.js';
+import './agent/tools/people.js';
 import { sweepJobs } from './agent/subagents.js';
 import { startReminders } from './reminders.js';
 import { queueIndex } from './library.js';

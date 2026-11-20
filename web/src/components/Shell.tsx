@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Library, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
+  Activity, Brain, CalendarClock, Library, Users, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -230,6 +230,7 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
     { to: '/webhooks', label: 'Webhooks', icon: Webhook },
     { to: '/spaces', label: 'Spaces', icon: LayoutGrid },
     { to: '/library', label: 'Library', icon: Library },
+    { to: '/people', label: 'People', icon: Users },
     { to: '/memory', label: 'Memory', icon: Brain },
     { to: '/activity', label: 'Activity', icon: Activity },
   ];
@@ -541,6 +542,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
               { to: '/watchers', label: 'Watchers', icon: Radar },
               { to: '/webhooks', label: 'Webhooks', icon: Webhook },
               { to: '/library', label: 'Library', icon: Library },
+    { to: '/people', label: 'People', icon: Users },
     { to: '/memory', label: 'Memory', icon: Brain },
               { to: '/activity', label: 'Activity', icon: Activity },
               { to: '/settings', label: 'Settings', icon: Settings },

@@ -2,6 +2,7 @@ import { all } from '../db.js';
 import { getSettings, type AgentProfile } from '../settings.js';
 import { describeMailbox, emailAccounts } from '../email.js';
 import { listReminders, whenText } from '../reminders.js';
+import { peopleLine } from '../people.js';
 import { listMemories, type MemoryRow } from './tools/personal.js';
 
 function clock() {
@@ -53,6 +54,7 @@ ${s.persona.about ? `\n## About the user (written by them)\n${s.persona.about}\n
 - Use tools instead of guessing. Check facts that may have changed (prices, hours, news) on the web.
 - When a decision is genuinely the user's (a budget, a date, choosing between options), ask a short question instead of assuming.
 - Learning how the user works: when they correct how you handled something ("no, use a watcher for that", "send those to my Discord instead", "don't search the web for this, check my email") or tell you how they want a kind of request done, do it their way AND save it with memory_save kind "howto" as "When <situation>: <what to do, which tools>". If an existing how-to is wrong or outdated, update or forget it.
+- People: you know the people (and pets) in the user's life, listed below. Resolve "my best friend", "my sister", "Mom" from that list without asking. When the user mentions someone new with a relation or a way to reach them, save it with person_save. To message someone, pass their name as the recipient (email_send to "Jordan"); the address is filled in. If they have several ways to be reached and no preference, ask only "Email or Discord?", then save the answer as preferred.
 - Memory: when you learn a lasting fact that will matter later, save it with memory_save: kind "me" for the user themself, "other" for people, places and things in their life (e.g. someone's email address). Never save tasks or requests ("watch my email" is a watcher, not a memory). Don't save trivia or secrets. Use memory_forget when asked to forget something.
 - Spaces: when the user wants a tracker, dashboard, planner, checklist or board, build a Space (space_create) as a polished, responsive mini-app, and update it later with space_update.
 - Reminders: a one-off "remind me…" is reminder_set (a time and a short text; it notifies once, then disappears, no approval needed). Don't make a routine for it.
@@ -84,6 +86,7 @@ ${memories.filter((m) => m.kind === 'me' || !m.kind).map((m) => `- [${m.id}] ${m
 ${routines.length ? `Routines: ${routines.map((r) => r.title).join('; ')}` : 'Routines: none'}
 ${reminderLine()}
 ${mailboxLine()}
+${peopleLine() ? `People you know (private): ${peopleLine()}` : 'People you know: none yet'}
 ${watchers.length ? `Watchers: ${watchers.map((w) => `${w.title} (${w.source ?? 'web'})`).join('; ')}` : 'Watchers: none'}
 ${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}${ctx.learnNote ? `\n${ctx.learnNote}\n` : ''}
 

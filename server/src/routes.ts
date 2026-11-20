@@ -14,6 +14,7 @@ import { listConnections, removeConnection, setSecret } from './connections.js';
 import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unlinkGoogle } from './google.js';
 import { cancelJob, continueJob, getJob, listJobs } from './agent/subagents.js';
 import { isFrozen, setFrozen, verifyActivity } from './safety.js';
+import { deletePerson, listPeople, savePerson } from './people.js';
 import { addItem, forgetItem, getItem, libraryStats, libSnippet, listItems, search, setPrivacy } from './library.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
@@ -667,6 +668,29 @@ export function apiRouter() {
     }),
   );
   r.delete('/library/:id', h((req) => ({ forgotten: forgetItem(param(req, 'id')) })));
+
+  // ── People ──
+  r.get('/people', h(() => listPeople()));
+  r.post(
+    '/people',
+    h((req) => {
+      const b = req.body ?? {};
+      if (!String(b.name ?? '').trim()) throw new HttpError(400, 'A name is needed.');
+      return savePerson({ id: b.id ? String(b.id) : undefined, name: String(b.name).trim(), kind: b.kind === 'pet' ? 'pet' : 'person', relation: b.relation ?? undefined, aliases: Array.isArray(b.aliases) ? b.aliases.map(String) : undefined, contacts: Array.isArray(b.contacts) ? b.contacts : undefined, preferred: b.preferred ?? undefined, notes: b.notes ?? undefined });
+    }),
+  );
+  r.put(
+    '/people/:id',
+    h((req) => {
+      // A full edit from the People page: replace lists instead of merging.
+      const b = req.body ?? {};
+      run('UPDATE people SET name = ?, kind = ?, relation = ?, aliases = ?, contacts = ?, preferred = ?, notes = ?, updated_at = ? WHERE id = ?',
+        String(b.name ?? '').trim() || 'Someone', b.kind === 'pet' ? 'pet' : 'person', b.relation || null, JSON.stringify(Array.isArray(b.aliases) ? b.aliases : []), JSON.stringify(Array.isArray(b.contacts) ? b.contacts : []), b.preferred || null, b.notes || null, now(), param(req, 'id'));
+      emit({ type: 'people.changed' });
+      return listPeople().find((p) => p.id === param(req, 'id'));
+    }),
+  );
+  r.delete('/people/:id', h((req) => ({ deleted: deletePerson(param(req, 'id')) })));
 
   // ── Reminders (one-off) ──
   r.get('/reminders', h(() => listReminders()));
