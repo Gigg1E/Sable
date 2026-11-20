@@ -337,6 +337,14 @@ The browser receives live updates over Server-Sent Events (`/api/events`). Runs 
 
 ## Security notes
 
+### Guardrails (ideas borrowed from Oni)
+
+- **Untrusted content can't trigger actions on its own.** Once a task has read something untrusted (a web page, an email, an API reply, a webhook or watcher payload), anything that reaches outside Sable needs your OK, even tools you set to run automatically: sending, posting to a webhook, running a script, calling an API. Saving files in the chat folder and managing reminders still run. A sub-agent inherits this from the task that started it, and its report counts as untrusted when it comes back. Routines and watchers you approved keep their pre-approval.
+- **Freeze.** The snowflake in the status bar, or `/freeze` in any chat, makes Sable observe-only at once. It can still search and read, but nothing that changes, sends or buys runs, and waiting approvals are denied. `/thaw` (or **Unfreeze** on the banner) turns it back on.
+- **Instant commands** that don't involve the AI, so they work even if the model is down: `/freeze`, `/thaw`, `/status` (what's running, approvals waiting, whether the activity log is intact), `/help`.
+- **Secrets are redacted on the way out.** Known secret values (provider keys, mailbox passwords, channel tokens, connection keys) and secret-looking strings (API keys, tokens, private keys, `password=…`) are replaced with `[REDACTED]` in tool results the model sees, notifications, webhook and channel posts, emails Sable sends, and the activity log.
+- **Tamper-evident activity log.** Each entry is sealed to the one before it with an HMAC (key in `data/audit.key`, or `SABLE_AUDIT_KEY`). The Activity page shows **Log intact**, or where it was changed.
+
 - Sable is single-user per instance. Protect it with a strong password and **two-factor authentication** (Settings → Security), and prefer a private network (Tailscale/VPN) over exposing it to the internet. To host for others, run one instance each ([docs/hosting-securely.md](docs/hosting-securely.md)).
 - Built in: TOTP 2FA with recovery codes, login rate limits, hashed session tokens with "sign out everywhere", per-instance cookie names (`__Host-` on HTTPS), cross-site request blocking (including sibling subdomains), a strict Content Security Policy, and agent-built spaces served sandboxed with no network access.
 - `SABLE_PUBLIC_PORT` starts an optional **public front** that serves only a blank page (`SABLE_PUBLIC_TITLE`) and `/hooks`. Expose that port instead of the app.

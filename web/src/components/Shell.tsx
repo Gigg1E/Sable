@@ -6,6 +6,7 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
 import { api } from '../lib/api';
+import { FreezeButton, FrozenBanner } from './Safety';
 import { cx } from '../lib/format';
 import { navigate, usePath } from '../lib/router';
 import { useStore } from '../lib/store';
@@ -346,6 +347,7 @@ function StatusBar() {
         </span>
       )}
       <span className="flex-1" />
+      <FreezeButton />
       {runs > 0 && (
         <span className="flex items-center gap-1.5">
           <StatusDot state="running" className="scale-75" /> {runs} running
@@ -490,6 +492,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
           </div>
         </motion.aside>
         <div className="flex min-w-0 flex-1 flex-col">
+          <FrozenBanner />
           <main className="relative min-h-0 flex-1">
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.div key={routeKey} className="absolute inset-0 flex flex-col" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>

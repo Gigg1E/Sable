@@ -140,6 +140,21 @@ export function setSecret(name: string, value: string) {
 export function removeConnection(name: string) {
   return run('DELETE FROM connections WHERE name = ?', name.toLowerCase()).changes > 0;
 }
+/** Every stored connection secret, decrypted: only for the redactor, never shown or sent anywhere. */
+export function allConnectionSecrets(): string[] {
+  const out: string[] = [];
+  for (const r of all<{ secret_enc: string | null }>('SELECT secret_enc FROM connections WHERE secret_enc IS NOT NULL')) {
+    try {
+      const v = open(r.secret_enc!);
+      // AWS-style "ACCESS_KEY:SECRET" pairs: redact each half too.
+      out.push(v, ...v.split(/[:\n]/));
+    } catch {
+      /* unreadable with this key */
+    }
+  }
+  return out;
+}
+
 function secretOf(name: string): string | null {
   const r = get<{ secret_enc: string | null }>('SELECT secret_enc FROM connections WHERE name = ?', name.toLowerCase());
   return r?.secret_enc ? open(r.secret_enc) : null;

@@ -1,6 +1,6 @@
 import express, { type NextFunction, type Request, type Response } from 'express';
-import { activeRunFor, activeRuns, cancelRun, createConversation, HttpError, interject, messageJson, quickAnswer, startRun, type MessageRow } from './agent/runner.js';
-import { decideApproval, pendingApprovals, policyFor } from './agent/sentinel.js';
+import { activeRunFor, activeRuns, cancelRun, createConversation, HttpError, interject, messageJson, quickAnswer, reflex, startRun, type MessageRow } from './agent/runner.js';
+import { decideApproval, denyAllApprovals, pendingApprovals, policyFor } from './agent/sentinel.js';
 import { beginOAuth, completeOAuth, mcpStatus, reloadMcp } from './agent/tools/mcp.js';
 import { clearState, forgetOAuth, oauthCallbackUrl, serverForState } from './agent/tools/mcpAuth.js';
 import { computeNextRun, goalJson, type GoalRow, type ScheduleKind, type ScheduleSpec } from './agent/tools/personal.js';
@@ -13,6 +13,7 @@ import { PROVIDERS, testAccount } from './email.js';
 import { listConnections, removeConnection, setSecret } from './connections.js';
 import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unlinkGoogle } from './google.js';
 import { cancelJob, continueJob, getJob, listJobs } from './agent/subagents.js';
+import { isFrozen, setFrozen, verifyActivity } from './safety.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
@@ -374,6 +375,7 @@ export function apiRouter() {
       const attachments = (Array.isArray(req.body?.attachments) ? req.body.attachments : []).map(String).slice(0, 8);
       for (const a of attachments) if (!getUpload(a)) throw new HttpError(400, 'An attached file is missing. Try attaching it again.');
       if (!text && !attachments.length) throw new HttpError(400, 'Message is empty');
+      if (!attachments.length && reflex(param(req, 'id'), text)) return { runId: null, reflex: true };
       return { runId: startRun(param(req, 'id'), text, 'user', attachments) };
     }),
   );
@@ -386,6 +388,18 @@ export function apiRouter() {
     }),
   );
   r.post('/runs/:id/cancel', h((req) => cancelRun(param(req, 'id'))));
+
+  // ── Safety: freeze and the activity log's integrity ──
+  r.get('/safety', h(() => ({ frozen: isFrozen() })));
+  r.post(
+    '/safety/freeze',
+    h((req) => {
+      const on = req.body?.frozen !== false;
+      setFrozen(on, 'app');
+      return { frozen: on, denied: on ? denyAllApprovals() : 0 };
+    }),
+  );
+  r.get('/activity/verify', h(() => verifyActivity()));
 
   // ── Approvals ──
   r.get('/approvals', h(() => pendingApprovals()));

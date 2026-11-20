@@ -125,6 +125,8 @@ addColumn('memories', 'embedding', 'TEXT');
 addColumn('spaces', 'theme', 'TEXT');
 addColumn('conversations', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('agent_jobs', 'outcome', 'TEXT');
+addColumn('activity', 'prev_hash', 'TEXT');
+addColumn('activity', 'hash', 'TEXT');
 addColumn('agent_jobs', 'transcript', 'TEXT');
 
 type Row = Record<string, unknown>;

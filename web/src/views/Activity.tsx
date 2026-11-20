@@ -1,9 +1,10 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Activity as ActivityIcon, ChevronRight } from 'lucide-react';
+import { Activity as ActivityIcon, ChevronRight, ShieldAlert, ShieldCheck } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { toolIcon } from '../components/ToolCall';
 import { Badge, Button, Card, Empty, Page, PageIntro, Segmented, TopBar } from '../components/ui';
 import { api } from '../lib/api';
+import { cx } from '../lib/format';
 import { navigate } from '../lib/router';
 import { onServerEvent } from '../lib/store';
 import type { ActivityItem } from '../lib/types';
@@ -98,7 +99,7 @@ export function ActivityView() {
         <PageIntro
           title="Activity"
           description="An audit log of every action the agent and its sub-agents took, what you approved, and what was blocked."
-          actions={<Segmented id="act" size="sm" value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'flagged', label: 'Approvals & errors' }]} />}
+          actions={<div className="flex items-center gap-2"><Integrity /><Segmented id="act" size="sm" value={filter} onChange={setFilter} options={[{ value: 'all', label: 'All' }, { value: 'flagged', label: 'Approvals & errors' }]} /></div>}
         />
         {items && !groups.length ? (
           <Empty icon={<ActivityIcon className="size-4" />} title="Nothing logged" body="Every tool call is recorded here with its input, output and outcome." />
@@ -125,5 +126,23 @@ export function ActivityView() {
         )}
       </Page>
     </>
+  );
+}
+
+/** Each entry is chained to the one before (HMAC), so editing or deleting history is detectable. */
+function Integrity() {
+  const [v, setV] = useState<{ ok: boolean; checked: number; message: string } | null>(null);
+  useEffect(() => {
+    void api.get<{ ok: boolean; checked: number; message: string }>('/activity/verify').then(setV).catch(() => {});
+  }, []);
+  if (!v) return null;
+  return (
+    <span
+      title={`${v.message} Each entry is sealed to the one before it, so changing or removing past entries is detectable.`}
+      className={cx('inline-flex h-7 items-center gap-1.5 rounded-md border px-2 text-[12px]', v.ok ? 'border-ok/30 bg-ok/10 text-ok' : 'border-danger/40 bg-danger/10 text-danger')}
+    >
+      {v.ok ? <ShieldCheck className="size-3.5" /> : <ShieldAlert className="size-3.5" />}
+      {v.ok ? 'Log intact' : 'Log was changed'}
+    </span>
   );
 }

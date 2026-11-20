@@ -3,7 +3,8 @@ import { emit, onEvent } from '../events.js';
 import { resolveModel } from '../llm/index.js';
 import { notify } from '../push.js';
 import { getSettings, type AgentProfile } from '../settings.js';
-import { errorMessage, id, now, parseJson, truncate } from '../util.js';
+import { errorMessage, id, now, parseJson, truncate, untrusted } from '../util.js';
+import { clearTaint, markTainted, taintOf, untrustedSource } from '../safety.js';
 import type { Preapproval } from './automation.js';
 import { subagentSystemPrompt } from './prompt.js';
 import type { ChatMessage } from '../llm/types.js';
@@ -221,6 +222,8 @@ export function continueJob(jid: string, note?: string): Job {
     role: 'user',
     content: `Continue the task where you left off. Don't repeat work you already did; use what you found above.${note ? `\nExtra instruction: ${note}` : ''}`,
   });
+  const src = untrustedSource(JSON.stringify(resume));
+  if (src) markTainted(job.id, src);
   job.status = 'running';
   job.background = true;
   job.finished_at = null;
@@ -235,8 +238,11 @@ function reportBack(job: Job) {
   const verb = job.status === 'done' ? 'finished' : job.status === 'cancelled' ? 'was cancelled' : 'failed';
   void notify({ title: `${job.agent_name} ${verb}`, body: truncate((job.result ?? '').replace(/\s+/g, ' '), 160), link: `/chat/${job.conversation_id}`, kind: 'agent' }).catch(() => {});
   if (job.status === 'cancelled') return;
+  // A report written from untrusted content (web pages, email) stays untrusted when it comes back.
+  const taint = taintOf(job.id);
+  clearTaint(job.id);
   const stoppedNote = job.outcome?.stopped === 'limit' ? ' It stopped at its step limit; continue it (delegate with continue) if the result is incomplete.' : '';
-  const msg = `[Sub-agent ${verb}: ${job.agent_name} · ${job.id}]\nTask: ${truncate(job.task, 600)}\n\nResult:\n${truncate(job.result ?? '', 30_000)}\n\n(This is the background job you started. Continue what the user asked with this result and tell them the outcome.${stoppedNote} If other jobs you started are still running, say what's still pending and stop; you'll be woken again.)`;
+  const msg = `[Sub-agent ${verb}: ${job.agent_name} · ${job.id}]\nTask: ${truncate(job.task, 600)}\n\nResult:\n${taint ? untrusted(`sub-agent report (it read ${taint})`, truncate(job.result ?? '', 30_000)) : truncate(job.result ?? '', 30_000)}\n\n(This is the background job you started. Continue what the user asked with this result and tell them the outcome.${stoppedNote} If other jobs you started are still running, say what's still pending and stop; you'll be woken again.)`;
   try {
     if (activeRunFor(job.conversation_id)) interject(job.conversation_id, msg);
     else startRun(job.conversation_id, msg);
@@ -298,8 +304,10 @@ registerTool({
     const cards = jobs.map(({ job }) => ({ type: 'subagent', jobId: job.id, agent: job.agent_name, task: truncate(job.task, 300), background }));
 
     if (background) {
+      const parentTaint = taintOf(ctx.runId);
       for (const { job, profile } of jobs) {
-        // Its own run id, so its tool calls and approvals don't tie up the chat.
+        // Its own run id, so its tool calls and approvals don't tie up the chat. It inherits taint.
+        if (parentTaint) markTainted(job.id, parentTaint);
         void runJob(job, profile, { runId: job.id, preapproved }).then(reportBack);
       }
       return {

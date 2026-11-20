@@ -111,6 +111,13 @@ export function requestApproval(input: {
 }
 
 /** Record the user's decision. `remember` widens the policy so the same kind of call won't ask again. */
+/** Freeze: deny everything that's waiting for the user. Returns how many were denied. */
+export function denyAllApprovals(): number {
+  const rows = all<{ id: string }>("SELECT id FROM approvals WHERE status = 'pending'");
+  for (const r of rows) decideApproval(r.id, false, false);
+  return rows.length;
+}
+
 export function decideApproval(aid: string, approve: boolean, remember: boolean, choice?: string) {
   const row = get<ApprovalRow>('SELECT * FROM approvals WHERE id = ?', aid);
   if (!row) throw Object.assign(new Error('Approval not found'), { status: 404 });

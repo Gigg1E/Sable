@@ -6,11 +6,12 @@ import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt } from './prompt.js';
+import { appendActivity, clearTaint, isFrozen, setFrozen, verifyActivity, isReadOnlyTool, markTainted, redact, taintEscalates, taintOf, untrustedSource } from '../safety.js';
 import { isRestricted, preapprovalFor, shouldNotifyAfterRun, type Preapproval } from './automation.js';
 import { searchTools, selectTools } from './routing.js';
 import { relevantMemories, toolsMentioned } from './tools/personal.js';
 import { attachmentForModel, attachmentInfo, claimUploads, readImage } from '../uploads.js';
-import { decide, requestApproval } from './sentinel.js';
+import { decide, denyAllApprovals, requestApproval } from './sentinel.js';
 import { getTool, listTools, registerTool, toSpec, validateArgs, type Card, type ToolContext, type ToolDef, type ToolPreview } from './tools/registry.js';
 
 // ───────────────────────── Active runs ─────────────────────────
@@ -100,10 +101,10 @@ function setRunStatus(runId: string, conversationId: string, status: string, err
 
 function logActivity(e: { conversationId: string; runId: string; agent: string; tool: string; status: string; summary: string; input: unknown; output?: string; ms?: number }) {
   const aid = id('act_');
-  run(
-    'INSERT INTO activity (id, ts, conversation_id, run_id, agent, tool, status, summary, input, output, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    aid, now(), e.conversationId, e.runId, e.agent, e.tool, e.status, e.summary, truncate(JSON.stringify(e.input), 4000), truncate(e.output ?? '', 4000), e.ms ?? null,
-  );
+  appendActivity({
+    id: aid, ts: now(), conversation_id: e.conversationId, run_id: e.runId, agent: e.agent, tool: e.tool, status: e.status, summary: e.summary,
+    input: truncate(redact(JSON.stringify(e.input)), 4000), output: truncate(redact(e.output ?? ''), 4000), duration_ms: e.ms ?? null,
+  });
   emit({ type: 'activity', id: aid });
 }
 
@@ -433,6 +434,18 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
   if (invalid) return finish('error', `Invalid arguments: ${invalid} Check the tool schema and try again.`, true);
 
   const decision = decide(tool, call.args);
+  // Frozen: observe only. Nothing that changes anything runs, approved or not.
+  if (isFrozen() && !isReadOnlyTool(tool.name)) {
+    decision.action = 'deny';
+    decision.reason = 'Sable is frozen (observe only). Unfreeze it to act again';
+  }
+  // Untrusted content (a web page, an email, an API reply) is in this task: actions that reach
+  // outside Sable need the user's OK, so injected instructions can't make them happen on their own.
+  const taint = taintOf(o.runId);
+  if (decision.action === 'allow' && taint && taintEscalates(tool)) {
+    decision.action = 'ask';
+    decision.reason = `This task has read untrusted content (${taint}), so actions that reach outside Sable need your OK`;
+  }
   if (decision.action === 'deny') {
     logActivity({ ...base, tool: tool.name, status: 'blocked', summary, input: call.args, output: decision.reason });
     return finish('blocked', `Blocked by the user's permission settings (${decision.reason}). Don't try to work around this; tell the user if it matters.`, true);
@@ -469,6 +482,8 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
     });
     if (ownRun) setRunStatus(o.runId, o.conversationId, 'running');
     choice = decisionResult.choice;
+    // Frozen while the approval was waiting: the answer no longer matters.
+    if (decisionResult.ok && isFrozen() && !isReadOnlyTool(tool.name)) decisionResult.ok = false;
     if (!decisionResult.ok) {
       logActivity({ ...base, tool: tool.name, status: 'denied', summary, input: call.args });
       return finish('denied', 'The user denied this action. Do not retry it; continue without it or ask the user what they would prefer.', true);
@@ -488,7 +503,10 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
   const t0 = Date.now();
   try {
     const result = await tool.run(call.args, ctx);
-    const out = typeof result === 'string' ? result : result.content;
+    // Secrets never reach the model (or a cloud provider) through a tool result.
+    const out = redact(typeof result === 'string' ? result : result.content);
+    const src = untrustedSource(out);
+    if (src) markTainted(o.runId, src);
     const cards = typeof result === 'string' ? undefined : result.cards;
     logActivity({ ...base, tool: tool.name, status: decision.action === 'ask' ? 'approved' : 'ok', summary, input: call.args, output: out, ms: Date.now() - t0 });
     return finish('ok', truncate(out, 40_000), false, cards);
@@ -563,6 +581,41 @@ export function createConversation(title = 'New chat', kind = 'chat') {
   return cid;
 }
 
+/**
+ * Reflexes: a few commands handled instantly, without the model (so they work even when it's down).
+ * Returns true when the text was a reflex; the exchange is still written into the chat.
+ */
+export function reflex(conversationId: string, text: string): boolean {
+  const m = /^\/(freeze|stop-all|thaw|unfreeze|status|help)\b/i.exec(text.trim());
+  if (!m) return false;
+  const cmd = m[1].toLowerCase();
+  let reply: string;
+  if (cmd === 'freeze' || cmd === 'stop-all') {
+    setFrozen(true, 'reflex');
+    const n = denyAllApprovals();
+    reply = `Frozen. I'll only look, not act, until you send /thaw.${n ? ` Denied ${n} pending request${n > 1 ? 's' : ''}.` : ''}`;
+  } else if (cmd === 'thaw' || cmd === 'unfreeze') {
+    setFrozen(false, 'reflex');
+    reply = 'Unfrozen. Acting normally again.';
+  } else if (cmd === 'status') {
+    const runs = activeRuns().length;
+    const pending = all<{ n: number }>("SELECT count(*) n FROM approvals WHERE status = 'pending'")[0]?.n ?? 0;
+    const jobs = all<{ n: number }>("SELECT count(*) n FROM agent_jobs WHERE status = 'running'")[0]?.n ?? 0;
+    const chain = verifyActivity();
+    reply = [
+      `${isFrozen() ? 'Frozen (observe only)' : 'Running normally'}.`,
+      `${runs} task${runs === 1 ? '' : 's'} working, ${jobs} sub-agent${jobs === 1 ? '' : 's'} running, ${pending} approval${pending === 1 ? '' : 's'} waiting.`,
+      `Activity log: ${chain.ok ? chain.message : `⚠ ${chain.message}`}`,
+    ].join('\n');
+  } else {
+    reply = 'Instant commands (no AI involved):\n/freeze: stop acting, only look; denies pending approvals\n/thaw: act again\n/status: what is running and whether the activity log is intact';
+  }
+  const base = { conversation_id: conversationId, run_id: null, thinking: null, tool_calls: null, tool_call_id: null, tool_name: null, is_error: 0, raw: null, raw_model: null } as const;
+  insertMessage({ ...base, id: id('msg_'), role: 'user', agent: null, content: text.trim() });
+  insertMessage({ ...base, id: id('msg_'), role: 'assistant', agent: getSettings().persona.name, content: reply });
+  return true;
+}
+
 export function startRun(conversationId: string, text: string, source: 'user' | 'schedule' = 'user', attachments: string[] = []): string {
   const conv = get<{ id: string; title: string }>('SELECT id, title FROM conversations WHERE id = ?', conversationId);
   if (!conv) throw new HttpError(404, 'Conversation not found');
@@ -600,6 +653,9 @@ async function execute(runId: string, conversationId: string, controller: AbortC
     const history = loadHistory(conversationId, s.main.contextMessages);
     const lastUser = [...history.messages].reverse().find((m) => m.role === 'user');
     const query = typeof lastUser?.content === 'string' ? lastUser.content.slice(0, 2000) : '';
+    // Woken by an email, a webhook or a watcher: their content is untrusted from the first step.
+    const wakeSource = typeof lastUser?.content === 'string' ? untrustedSource(lastUser.content) : undefined;
+    if (wakeSource) markTainted(runId, wakeSource);
     const memories = await relevantMemories(query);
     // How-to memories that name tools make sure those tools are loaded.
     const allTools = mainTools();
@@ -645,6 +701,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
   } finally {
     active.delete(runId);
     loadedTools.delete(runId);
+    clearTaint(runId);
   }
 }
 
