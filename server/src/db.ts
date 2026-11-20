@@ -55,6 +55,12 @@ CREATE TABLE IF NOT EXISTS schedules (
   next_run INTEGER, last_run INTEGER, enabled INTEGER NOT NULL DEFAULT 1, conversation_id TEXT,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS agent_jobs (
+  id TEXT PRIMARY KEY, conversation_id TEXT NOT NULL, agent_id TEXT NOT NULL, agent_name TEXT NOT NULL, task TEXT NOT NULL,
+  background INTEGER NOT NULL DEFAULT 0, status TEXT NOT NULL, steps TEXT, result TEXT, model TEXT,
+  created_at INTEGER NOT NULL, finished_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS agent_jobs_c ON agent_jobs(conversation_id, created_at);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, text TEXT NOT NULL, note TEXT, due_at INTEGER NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL
 );

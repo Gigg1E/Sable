@@ -12,6 +12,7 @@ import { CommerceCardView } from './CommerceCards';
 import { Markdown } from './Markdown';
 import { CredentialCard } from './Connections';
 import { ReminderCard } from './Reminders';
+import { SubagentCard } from './SubagentCard';
 import { CopyButton } from './ui';
 
 export function fmtBytes(n: number) {
@@ -301,6 +302,7 @@ export function CardView({ card }: { card: AnyCard }) {
   if (card.type === 'images') return <ImagesCard card={card} />;
   if (card.type === 'credential') return <CredentialCard card={card} />;
   if (card.type === 'reminder') return <ReminderCard card={card} />;
+  if (card.type === 'subagent') return <SubagentCard card={card} />;
   if (card.type === 'graph')
     return (
       <Suspense fallback={<div className="my-2.5 h-[400px] animate-pulse rounded-xl border border-line bg-panel" />}>

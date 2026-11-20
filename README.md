@@ -30,7 +30,7 @@ The web app installs on phones and desktops (PWA), with push notifications for a
 | **Background work** | Runs live on the server, not in your browser tab. Close the app and the work continues. **Reminders** go off once at the time you said and then disappear ("remind me about class at 10:30"). **Routines** run on a schedule (once, every N minutes, daily, weekly). |
 | **Approvals (the Sentinel)** | Every tool call goes through a policy check: *Auto*, *Ask* or *Off*, per tool. Web access is approved per domain ("Always allow example.com"). Approvals show up in the chat, in the Inbox and as push notifications. |
 | **Activity log** | A complete, searchable record of every action each agent took, approved, or was blocked from taking. |
-| **Sub-agents** | Configurable specialists, each with its own provider, model, effort and toolset. The defaults are a **Coder** (Claude, with files and scripts) and a **Researcher** (Ollama, with web search and fetch). |
+| **Sub-agents** | Configurable specialists, each with its own provider, model, effort and toolset, plus a built-in **Helper** on the main model. Sable can run **several at once** and run long ones **in the background**: each is watched until it finishes and its result comes back into the chat. Every sub-agent gets a live card showing its task, steps and result. The defaults are a **Coder** (Claude, with files and scripts) and a **Researcher** (Ollama, with web search and fetch). |
 | **Memory** | The agent saves lasting facts about you. You can see, edit and delete every one, and tell it to forget. |
 | **Spaces** | Ask for a tracker, dashboard, planner or board, and the agent builds a sandboxed mini-app that saves its own data and can ask the agent questions. |
 | **Connectors** | Plug in any **MCP server** (email, calendar, notes, GitHub, Home Assistant…). Connector actions ask for approval until you allow them. |
@@ -285,6 +285,15 @@ The main model must support vision. On Ollama, use something like `gemma3`, `qwe
 | ⚡ Summarizer | `llama3.2:3b` | fetch, files | 0.2 |
 
 If the model isn't installed yet, a **Download** button on the card pulls it through Ollama and shows progress. Every field is editable, including the provider, model, tools, *temperature*, *context window* (Ollama `num_ctx`) and instructions. The main agent reads each specialist's "when to use it" description to decide whom to delegate to.
+
+### Several at once, and in the background
+
+- **In parallel:** Sable can hand out several tasks in one go ("research these three laptops"), up to 6. They run side by side, and Sable waits for all of them.
+- **In the background:** for long jobs (deep research, many pages), Sable starts the sub-agent and answers you right away. The job works like a watcher on itself. When it finishes you get a notification, a short "Helper finished · result handed back" line appears in the chat, and Sable picks up the result and continues in the same chat. You can keep chatting meanwhile.
+- **You see everything:** each sub-agent has a card in the chat with its task, every tool step as it happens (including ones waiting for your OK), how long it's taken, and its full result. Cards are saved, so they're still there later. **Stop** cancels one sub-agent without stopping the rest.
+- **Helper** is always available: a general sub-agent on your main model with the same tools as Sable (except delegating), so this works before you've set up any specialists.
+- Running sub-agents are listed in the chat side panel's Reminders tab. A background job can't survive a server restart. It's marked stopped, and Sable tells you.
+- Approvals still apply. A sub-agent's risky steps ask you like Sable's do, unless they're part of a routine you approved.
 
 > Ollama loads models on demand. With several specialists on one GPU, set `OLLAMA_MAX_LOADED_MODELS` / `OLLAMA_KEEP_ALIVE` on the Ollama side to control swapping.
 

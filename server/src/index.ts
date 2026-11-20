@@ -8,6 +8,7 @@ import './agent/tools/outputs.js';
 import './agent/tools/connect.js';
 import './agent/tools/graph.js';
 import './agent/tools/reminders.js';
+import { sweepJobs } from './agent/subagents.js';
 import { startReminders } from './reminders.js';
 import './agent/tools/workspace.js';
 import './shop/tools.js';
@@ -128,6 +129,7 @@ app.listen(PORT, HOST, () => {
   setTimeout(() => void backfillMemoryEmbeddings(), 60_000).unref();
   startScheduler();
   startReminders();
+  sweepJobs();
   startWatchers();
   resumeShopLink();
 });

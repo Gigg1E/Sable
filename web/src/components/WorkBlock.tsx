@@ -64,7 +64,11 @@ export function describeCall(call: ToolCall, label?: string): string {
   if (n === 'shop_checkout') return 'Preparing checkout';
   if (n === 'shop_buy') return 'Placing the order';
   if (n === 'shop_orders') return 'Checking your orders';
-  if (n === 'delegate') return `Handing off to ${a.agent ?? 'a sub-agent'}`;
+  if (n === 'delegate') {
+    const count = Array.isArray(a.tasks) ? a.tasks.length : 1;
+    const who = count > 1 ? `${count} sub-agents` : (a.tasks?.[0]?.agent ?? a.agent ?? 'a helper');
+    return a.wait === false ? `Starting ${who} in the background` : `Handing off to ${who}`;
+  }
   return label ?? n.replace(/_/g, ' ');
 }
 
@@ -91,7 +95,12 @@ function describeDone(calls: ToolCall[]) {
   const reminders = n((c) => c.name === 'reminder_set');
   const routines = n((c) => c.name === 'schedule_create');
   const watchers = n((c) => c.name === 'watch_create');
-  const agents = calls.filter((c) => c.name === 'delegate').map((c) => String((c.args as { agent?: string }).agent ?? 'a sub-agent'));
+  const agents = calls
+    .filter((c) => c.name === 'delegate')
+    .flatMap((c) => {
+      const x = c.args as { agent?: string; tasks?: { agent?: string }[] };
+      return Array.isArray(x.tasks) && x.tasks.length ? x.tasks.map((t) => t.agent ?? 'helper') : [x.agent ?? 'helper'];
+    });
   if (searches) parts.push(searches === 1 ? 'searched the web' : `searched the web ${searches} times`);
   if (pages) parts.push(`read ${plural(pages, 'page')}`);
   if (shop) parts.push('checked stores');
@@ -107,8 +116,9 @@ function describeDone(calls: ToolCall[]) {
   if (reminders) parts.push(reminders === 1 ? 'set a reminder' : `set ${reminders} reminders`);
   if (routines) parts.push(routines === 1 ? 'set up a routine' : `set up ${routines} routines`);
   if (watchers) parts.push(watchers === 1 ? 'set up a watcher' : `set up ${watchers} watchers`);
-  if (agents.length) parts.push(`asked ${[...new Set(agents)].join(' and ')}`);
-  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows + spaces + reminders + routines + watchers + conns.length + connLists;
+  const bg = calls.some((c) => c.name === 'delegate' && (c.args as { wait?: boolean }).wait === false);
+  if (agents.length) parts.push(bg ? `started ${agents.length > 1 ? `${agents.length} tasks` : agents[0]} in the background` : agents.length > 1 ? `handed off ${agents.length} tasks` : `asked ${agents[0]}`);
+  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + n((c) => c.name === 'delegate') + shows + spaces + reminders + routines + watchers + conns.length + connLists;
   if (calls.length - known > 0) parts.push(known ? `${plural(calls.length - known, 'other step')}` : `took ${plural(calls.length, 'step')}`);
   if (!parts.length && shows) parts.push('prepared what to show');
   const text = parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts.join(' and ');

@@ -12,6 +12,7 @@ import { ensureHelpers, helperStatus } from './agent/helpers.js';
 import { PROVIDERS, testAccount } from './email.js';
 import { listConnections, removeConnection, setSecret } from './connections.js';
 import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unlinkGoogle } from './google.js';
+import { cancelJob, getJob, listJobs } from './agent/subagents.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
@@ -590,6 +591,18 @@ export function apiRouter() {
     }),
   );
   r.post('/schedules/:id/run', h((req) => ({ runId: fireSchedule(param(req, 'id')) ?? null })));
+
+  // ── Sub-agent jobs ──
+  r.get('/jobs', h((req) => listJobs(req.query.conversationId ? String(req.query.conversationId) : undefined)));
+  r.get(
+    '/jobs/:id',
+    h((req) => {
+      const j = getJob(param(req, 'id'));
+      if (!j) throw new HttpError(404, 'Not found');
+      return j;
+    }),
+  );
+  r.post('/jobs/:id/cancel', h((req) => ({ cancelled: cancelJob(param(req, 'id')) })));
 
   // ── Reminders (one-off) ──
   r.get('/reminders', h(() => listReminders()));

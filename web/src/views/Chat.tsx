@@ -16,7 +16,8 @@ import { onServerEvent, useStore, type Streaming } from '../lib/store';
 import { useQueue } from '../lib/queue';
 import { usePanel } from '../lib/panel';
 import { SidePanel, usePanelAutoOpen } from '../components/SidePanel';
-import type { AnyCard, Goal, Message, Schedule, Watcher } from '../lib/types';
+import type { AnyCard, Goal, Job, Message, Schedule, Watcher } from '../lib/types';
+import { SubagentView } from '../components/SubagentCard';
 import { Sparkline } from '../components/Sparkline';
 import { ImageViewer } from '../components/ImageViewer';
 import { imageUrl } from '../lib/images';
@@ -346,6 +347,17 @@ export function ChatView({ id }: { id: string }) {
   }, [id, loadConversation]);
 
   const turns = useMemo(() => groupTurns(messages ?? []), [messages]);
+  // Sub-agents still working whose card isn't in the chat yet (the ones Sable is waiting on).
+  const [jobs, setJobs] = useState<Job[]>([]);
+  useEffect(() => {
+    const load = () => void api.get<Job[]>(`/jobs?conversationId=${id}`).then(setJobs).catch(() => {});
+    load();
+    return onServerEvent((ev) => {
+      if (ev.type === 'job.update' && ev.conversationId === id) setJobs((cur) => [ev.job as Job, ...cur.filter((j) => j.id !== (ev.job as Job).id)]);
+    });
+  }, [id]);
+  const shownJobs = useMemo(() => new Set((messages ?? []).flatMap((m) => (m.cards ?? []).filter((c) => c.type === 'subagent').map((c) => (c as { jobId: string }).jobId))), [messages]);
+  const liveJobs = jobs.filter((j) => j.status === 'running' && !shownJobs.has(j.id)).sort((a, b) => a.created_at - b.created_at);
   const running = !!runState;
   const waiting = runState?.status === 'waiting' || approvals.length > 0;
   const lastIsAgent = turns[turns.length - 1]?.kind === 'agent';
@@ -449,6 +461,10 @@ export function ChatView({ id }: { id: string }) {
               {turns.map((t, i) =>
                 t.kind === 'user' ? (
                   <motion.div key={t.message.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+                    {/^\[Sub-agent [^\]]*\]/.test(t.message.content) ? (
+                      <SubagentReport text={t.message.content} />
+                    ) : (
+                      <>
                     <TurnHeader who={t.message.agent === 'Schedule' ? 'Routine' : 'You'} time={t.message.created_at} />
                     {!!t.message.attachments?.length && (
                       <div className="mb-2 ml-[26px] flex flex-wrap gap-2">
@@ -480,12 +496,21 @@ export function ChatView({ id }: { id: string }) {
                         {t.message.content.replace(/^\[Scheduled task: [^\]]*\]\n/, '')}
                       </div>
                     )}
+                      </>
+                    )}
                   </motion.div>
                 ) : (
                   <AgentTurn key={t.key} messages={t.messages} agentName={agentName} streaming={i === turns.length - 1 ? streaming : undefined} working={running && i === turns.length - 1} waiting={waiting && i === turns.length - 1} />
                 ),
               )}
               {running && !lastIsAgent && <AgentTurn messages={[]} agentName={agentName} streaming={streaming} working waiting={waiting} />}
+              {liveJobs.length > 0 && (
+                <div className="space-y-0 pl-[26px]">
+                  {liveJobs.map((j) => (
+                    <SubagentView key={j.id} jobId={j.id} initial={j} />
+                  ))}
+                </div>
+              )}
 
               <AnimatePresence>
                 {approvals.map((a) => (
@@ -557,5 +582,19 @@ export function ChatView({ id }: { id: string }) {
         </div>
       )}
     </>
+  );
+}
+
+/** A background sub-agent handing its result back: a slim line, since its card already shows the result. */
+function SubagentReport({ text }: { text: string }) {
+  const head = /^\[Sub-agent ([^:]+): ([^·\]]+)/.exec(text);
+  const ok = head?.[1] === 'finished';
+  return (
+    <div className="flex items-center gap-2 pl-[26px] text-[12.5px] text-fg-3">
+      <span className={cx('size-1.5 rounded-full', ok ? 'bg-ok' : 'bg-danger')} />
+      <span>
+        <span className="text-fg-2">{head?.[2]?.trim() ?? 'Sub-agent'}</span> {head?.[1] ?? 'reported back'} · result handed back
+      </span>
+    </div>
   );
 }

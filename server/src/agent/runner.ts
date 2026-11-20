@@ -5,7 +5,7 @@ import type { AssistantMessage, ChatMessage, ToolCall } from '../llm/types.js';
 import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
-import { mainSystemPrompt, subagentSystemPrompt } from './prompt.js';
+import { mainSystemPrompt } from './prompt.js';
 import { isRestricted, preapprovalFor, shouldNotifyAfterRun, type Preapproval } from './automation.js';
 import { searchTools, selectTools } from './routing.js';
 import { relevantMemories, toolsMentioned } from './tools/personal.js';
@@ -162,7 +162,7 @@ function loadHistory(conversationId: string, limit: number): { messages: ChatMes
 
 // ───────────────────────── The agent loop ─────────────────────────
 
-interface LoopOptions {
+export interface LoopOptions {
   runId: string;
   conversationId: string;
   agent: { id: string; name: string };
@@ -181,9 +181,11 @@ interface LoopOptions {
   persist: boolean;
   parentCallId?: string;
   progress?: ToolContext['progress'];
+  /** Steps the user already approved (an approved routine, or a background job it started). */
+  preapproved?: Preapproval | null;
 }
 
-async function agentLoop(o: LoopOptions): Promise<string> {
+export async function agentLoop(o: LoopOptions): Promise<string> {
   const { llm } = resolveProvider(o.providerId);
   let toolSpecs = o.tools.map(toSpec);
   let lastText = '';
@@ -270,8 +272,10 @@ async function agentLoop(o: LoopOptions): Promise<string> {
       return final.content;
     }
 
-    for (const call of final.toolCalls) {
-      const result = await executeTool(call, o);
+    // Sub-agent hand-offs in the same step run side by side; everything else runs in order.
+    const parallel = final.toolCalls.map((call) => (call.name === 'delegate' ? executeTool(call, o) : null));
+    for (const [i, call] of final.toolCalls.entries()) {
+      const result = await (parallel[i] ?? executeTool(call, o));
       const toolMsg: ChatMessage = { role: 'tool', toolCallId: call.id, name: call.name, content: result.content, isError: result.isError };
       o.messages.push(toolMsg);
       if (o.persist) {
@@ -337,7 +341,7 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
     return finish('blocked', `Blocked by the user's permission settings (${decision.reason}). Don't try to work around this; tell the user if it matters.`, true);
   }
   // An approved routine's run: the user already said yes to its steps when they approved it.
-  const pre = active.get(o.runId)?.preapproved;
+  const pre = o.preapproved ?? active.get(o.runId)?.preapproved;
   if (decision.action === 'ask' && pre && !tool.alwaysAsk && !isRestricted(pre, tool.name)) {
     decision.action = 'allow';
     decision.reason = 'Pre-approved with the routine';
@@ -359,13 +363,14 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
     }
   }
   if (decision.action === 'ask') {
-    setRunStatus(o.runId, o.conversationId, 'waiting');
+    const ownRun = active.has(o.runId);
+    if (ownRun) setRunStatus(o.runId, o.conversationId, 'waiting');
     emit({ type: 'tool.waiting', ...base });
     const decisionResult = await requestApproval({
       runId: o.runId, conversationId: o.conversationId, callId: call.id, agent: o.agent.name, tool, args: call.args,
       summary: approved?.summary ?? summary, scope: decision.scope, preview: approved?.card, signal: o.signal,
     });
-    setRunStatus(o.runId, o.conversationId, 'running');
+    if (ownRun) setRunStatus(o.runId, o.conversationId, 'running');
     choice = decisionResult.choice;
     if (!decisionResult.ok) {
       logActivity({ ...base, tool: tool.name, status: 'denied', summary, input: call.args });
@@ -399,72 +404,21 @@ async function executeTool(call: ToolCall, o: LoopOptions): Promise<{ content: s
 }
 
 // ───────────────────────── Sub-agents ─────────────────────────
+// The delegate tool and background jobs live in subagents.ts.
 
 export function enabledSubagents(): AgentProfile[] {
   return getSettings().subagents.filter((a) => a.enabled);
 }
 
-registerTool({
-  name: 'delegate',
-  label: 'Delegate',
-  group: 'Agents',
-  description:
-    'Hand a self-contained task to a specialist sub-agent and get its result back. The sub-agent cannot see this conversation, so include all needed details in `task`.',
-  parameters: {
-    type: 'object',
-    properties: {
-      agent: { type: 'string', description: 'Sub-agent id' },
-      task: { type: 'string', description: 'Complete, self-contained instructions' },
-    },
-    required: ['agent', 'task'],
-  },
-  risk: 'low',
-  defaultPolicy: 'auto',
-  summarize: (a) => {
-    const p = getSettings().subagents.find((s) => s.id === a.agent);
-    return `${p?.name ?? a.agent}: ${truncate(String(a.task), 90)}`;
-  },
-  async run(a, ctx) {
-    const profile = enabledSubagents().find((s) => s.id === a.agent);
-    if (!profile) return `No enabled sub-agent "${a.agent}". Available: ${enabledSubagents().map((s) => s.id).join(', ') || 'none'}.`;
-    const s = getSettings();
-    const model = await resolveModel(profile.providerId, profile.model || (profile.providerId === s.main.providerId ? s.main.model : ''));
-    const tools = profile.tools.map((n) => getTool(n)).filter((t): t is ToolDef => !!t && t.name !== 'delegate');
-    ctx.progress?.(`${profile.name} is on it (${model})`, 'tool');
-    return agentLoop({
-      runId: ctx.runId,
-      conversationId: ctx.conversationId,
-      agent: { id: profile.id, name: profile.name },
-      providerId: profile.providerId,
-      model,
-      effort: profile.effort,
-      temperature: profile.temperature,
-      contextLength: profile.contextLength,
-      system: subagentSystemPrompt(profile),
-      messages: [{ role: 'user', content: String(a.task) }],
-      tools,
-      maxSteps: profile.maxSteps ?? 12,
-      signal: ctx.signal,
-      persist: false,
-      parentCallId: ctx.callId,
-      progress: ctx.progress,
-    });
-  },
-});
+/** Hook for subagents.ts: describe the delegate tool with the current agents. */
+let delegateDecorator: ((t: ToolDef) => ToolDef) | null = null;
+export function setDelegateDecorator(f: (t: ToolDef) => ToolDef) {
+  delegateDecorator = f;
+}
 
-function mainTools(): ToolDef[] {
-  const subs = enabledSubagents();
+export function mainTools(): ToolDef[] {
   return listTools()
-    .filter((t) => (t.name === 'delegate' ? subs.length > 0 : true))
-    .map((t) =>
-      t.name === 'delegate'
-        ? {
-            ...t,
-            description: `${t.description}\nAvailable sub-agents:\n${subs.map((s) => `- ${s.id} (${s.name}): ${s.description}`).join('\n')}`,
-            parameters: { ...t.parameters, properties: { ...t.parameters.properties, agent: { type: 'string', enum: subs.map((s) => s.id) } } },
-          }
-        : t,
-    )
+    .map((t) => (t.name === 'delegate' && delegateDecorator ? delegateDecorator(t) : t))
     .filter((t) => (getSettings().policies[t.name] ?? t.defaultPolicy) !== 'deny');
 }
 

@@ -284,6 +284,28 @@ export interface ReminderCardData {
   note?: string;
   due: number;
 }
+export type JobStep = { k: 'text'; text: string } | { k: 'tool'; id: string; summary: string; status?: string; preview?: string };
+export interface Job {
+  id: string;
+  conversation_id: string;
+  agent_id: string;
+  agent_name: string;
+  task: string;
+  background: boolean;
+  status: 'running' | 'done' | 'error' | 'cancelled';
+  steps: JobStep[];
+  result: string | null;
+  model: string | null;
+  created_at: number;
+  finished_at: number | null;
+}
+export interface SubagentCardData {
+  type: 'subagent';
+  jobId: string;
+  agent: string;
+  task: string;
+  background?: boolean;
+}
 export interface Notification {
   id: string;
   title: string;
@@ -383,7 +405,7 @@ export interface ImagesCardData {
   type: 'images';
   items: { url: string; caption?: string; source?: string; site: string }[];
 }
-export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData | CredentialCardData | ReminderCardData | import('../components/GraphCard').GraphCardData;
+export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData | CredentialCardData | ReminderCardData | SubagentCardData | import('../components/GraphCard').GraphCardData;
 
 /** Shown when the agent proposes a routine or watcher, before it exists. */
 export interface AutomationCard {

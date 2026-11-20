@@ -6,7 +6,7 @@ import { cx } from '../lib/format';
 import { usePanel, type PanelTab } from '../lib/panel';
 import { navigate } from '../lib/router';
 import { onServerEvent } from '../lib/store';
-import type { FileCardData, Message, Reminder, Schedule, SpaceSummary, Watcher } from '../lib/types';
+import type { FileCardData, Job, Message, Reminder, Schedule, SpaceSummary, Watcher } from '../lib/types';
 import { untilText, whenText } from '../lib/when';
 import { SpaceFrame, useSpace } from '../views/Spaces';
 import { FileGlyph, fmtBytes } from './Cards';
@@ -179,11 +179,11 @@ function when(t: number | null) {
   return d.toLocaleString(undefined, sameDay ? { hour: 'numeric', minute: '2-digit' } : { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-function RemindersTab({ schedules, watchers, reminders }: { schedules: Schedule[]; watchers: Watcher[]; reminders: Reminder[] }) {
+function RemindersTab({ schedules, watchers, reminders, jobs }: { schedules: Schedule[]; watchers: Watcher[]; reminders: Reminder[]; jobs: Job[] }) {
   const upcoming = schedules.filter((s) => s.enabled).sort((a, b) => (a.next_run ?? Infinity) - (b.next_run ?? Infinity));
   const paused = schedules.filter((s) => !s.enabled);
   const kind = (s: Schedule) => (s.kind === 'once' ? 'once' : s.kind === 'interval' ? `every ${s.spec.every_minutes} min` : s.kind === 'daily' ? `daily ${s.spec.time ?? ''}` : 'weekly');
-  if (!schedules.length && !watchers.length && !reminders.length)
+  if (!schedules.length && !watchers.length && !reminders.length && !jobs.length)
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
         <BellRing className="size-6 text-fg-3" />
@@ -203,7 +203,11 @@ function RemindersTab({ schedules, watchers, reminders }: { schedules: Schedule[
   );
   return (
     <div className="min-h-0 flex-1 overflow-auto p-2">
-      {reminders.length > 0 && <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium text-fg-3">Reminders</div>}
+      {jobs.length > 0 && <div className="px-2 pb-1 pt-1.5 text-[11px] font-medium text-fg-3">Sub-agents working</div>}
+      {jobs.map((j) => (
+        <Row key={j.id} title={j.agent_name} sub={j.task} right={j.background ? 'background' : undefined} dot="bg-tint animate-pulse" to={`/chat/${j.conversation_id}`} />
+      ))}
+      {reminders.length > 0 && <div className="px-2 pb-1 pt-3 text-[11px] font-medium text-fg-3">Reminders</div>}
       {reminders.map((m) => (
         <Row key={m.id} title={m.text} sub={untilText(m.due_at)} right={whenText(m.due_at)} dot="bg-accent" to="/routines" />
       ))}
@@ -267,6 +271,7 @@ export function SidePanel({ conversationId, messages }: { conversationId: string
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [watchers, setWatchers] = useState<Watcher[]>([]);
   const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
   const [spaces, setSpaces] = useState<SpaceSummary[]>([]);
   const box = useRef<HTMLDivElement>(null);
 
@@ -275,6 +280,7 @@ export function SidePanel({ conversationId, messages }: { conversationId: string
     void api.get<Schedule[]>('/schedules').then(setSchedules);
     void api.get<Watcher[]>('/watchers').then(setWatchers);
     void api.get<Reminder[]>('/reminders').then(setReminders);
+    void api.get<Job[]>('/jobs').then((l) => setJobs(l.filter((j) => j.status === 'running')));
   }, []);
   const loadSpaces = useCallback(() => void api.get<SpaceSummary[]>('/spaces').then(setSpaces), []);
   useEffect(() => {
@@ -284,6 +290,10 @@ export function SidePanel({ conversationId, messages }: { conversationId: string
     return onServerEvent((ev) => {
       if (ev.type === 'workspace.file' && String(ev.path).startsWith(`chats/${conversationId}/`)) loadFiles();
       if (ev.type === 'schedule.changed' || ev.type === 'watcher.changed' || ev.type === 'reminder.changed') loadReminders();
+      if (ev.type === 'job.update') {
+        const j = ev.job as Job;
+        setJobs((cur) => (j.status === 'running' ? [j, ...cur.filter((x) => x.id !== j.id)] : cur.filter((x) => x.id !== j.id)));
+      }
       if (ev.type === 'space.changed') loadSpaces();
     });
   }, [conversationId, loadFiles, loadReminders, loadSpaces]);
@@ -324,7 +334,7 @@ export function SidePanel({ conversationId, messages }: { conversationId: string
     window.addEventListener('pointerup', up);
   }
 
-  const upcoming = reminders.length + schedules.filter((s) => s.enabled).length + watchers.filter((w) => w.enabled).length;
+  const upcoming = jobs.length + reminders.length + schedules.filter((s) => s.enabled).length + watchers.filter((w) => w.enabled).length;
 
   return (
     <AnimatePresence initial={false}>
@@ -364,7 +374,7 @@ export function SidePanel({ conversationId, messages }: { conversationId: string
           </div>
           <div className="flex min-h-0 flex-1 flex-col">
             {effectiveTab === 'files' && <FilesTab chat={conversationId} files={files} />}
-            {effectiveTab === 'reminders' && <RemindersTab schedules={schedules} watchers={watchers} reminders={reminders} />}
+            {effectiveTab === 'reminders' && <RemindersTab schedules={schedules} watchers={watchers} reminders={reminders} jobs={jobs} />}
             {activeSpace && effectiveTab !== 'files' && <SpaceTab key={activeSpace} id={activeSpace} onGone={() => show('files')} />}
           </div>
           <label className="flex shrink-0 cursor-pointer items-center gap-2 border-t border-line px-3 py-1.5 text-[11.5px] text-fg-3">
