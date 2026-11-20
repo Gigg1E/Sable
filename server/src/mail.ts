@@ -59,7 +59,10 @@ export interface AuthResult {
  */
 export function readAuth(mail: ParsedMail, fromAddr: string): AuthResult {
   const authserv = lower(mailSettings().authservId || 'mx.cloudflare.net');
-  const lines = mail.headerLines.filter((h) => h.key === 'authentication-results').map((h) => h.line.replace(/^authentication-results:\s*/i, '').replace(/\s+/g, ' '));
+  // Topmost first. Cloudflare may record its checks as ARC-Authentication-Results ("i=1; mx.cloudflare.net; …").
+  const lines = mail.headerLines
+    .filter((h) => h.key === 'authentication-results' || h.key === 'arc-authentication-results')
+    .map((h) => h.line.replace(/^(arc-)?authentication-results:\s*/i, '').replace(/^i=\d+;\s*/i, '').replace(/\s+/g, ' '));
   const mine = lines.find((l) => lower(l).startsWith(authserv));
   const fromDomain = lower(fromAddr.split('@')[1] ?? '');
   if (!mine) return { aligned: false, verified: false };

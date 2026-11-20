@@ -626,7 +626,7 @@ export function ChatView({ id }: { id: string }) {
 }
 
 /** Messages that wake a chat on their own: background results, follow-ups, watchers, webhooks. */
-const WAKE = /^\[(Sub-agent [^\]]*|Follow-up you scheduled: [^\]]*|Watcher triggered: [^\]]*|Webhook received: [^\]]*|Scheduled task: [^\]]*)\]/;
+const WAKE = /^\[(Sub-agent [^\]]*|Follow-up you scheduled: [^\]]*|Watcher triggered: [^\]]*|Webhook received: [^\]]*|Scheduled task: [^\]]*|Email from you: [^\]]*)\]/;
 
 /** A wake-up shown as one slim line with its signature, since what happens next is Sable's reply. */
 function WakeLine({ text }: { text: string }) {
@@ -642,6 +642,9 @@ function WakeLine({ text }: { text: string }) {
   } else if (head.startsWith('Watcher')) {
     kind = 'watch';
     label = `${head.replace(/^Watcher triggered: /, '').replace(/ · \S+$/, '')} fired`;
+  } else if (head.startsWith('Email from you')) {
+    kind = 'mail';
+    label = `Email: ${head.replace(/^Email from you: /, '').replace(/ · \S+$/, '')}`;
   } else if (head.startsWith('Scheduled task')) {
     kind = 'schedule';
     label = head.replace(/^Scheduled task: /, '').replace(/ · \S+$/, '');

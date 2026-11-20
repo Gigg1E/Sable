@@ -14,6 +14,7 @@ import { InboxView } from './views/Inbox';
 import { MemoryView } from './views/Memory';
 import { LibraryView } from './views/Library';
 import { PeopleView } from './views/People';
+import { MailView } from './views/Mail';
 import { SettingsView } from './views/Settings';
 import { SpaceView, SpacesList } from './views/Spaces';
 import { WatchersView } from './views/Watchers';
@@ -33,6 +34,7 @@ function Routes() {
   if (path === '/activity') return { key: 'activity', el: <ActivityView /> };
   if (path === '/library') return { key: 'library', el: <LibraryView /> };
   if (path === '/people') return { key: 'people', el: <PeopleView /> };
+  if (path === '/mail') return { key: 'mail', el: <MailView /> };
   if (path === '/memory') return { key: 'memory', el: <MemoryView /> };
   if (path === '/settings' || (m = match('/settings/:section', path))) return { key: 'settings', el: <SettingsView section={m?.section} /> };
   return { key: 'home', el: <ChatHome /> };

@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Library, Users, Sparkle, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
+  Activity, Brain, CalendarClock, Library, Users, Sparkle, AtSign, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -100,7 +100,7 @@ function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate
         }}
         className={cx('flex h-7 w-full items-center gap-2 rounded-md px-2 pr-7 text-left text-[13px] transition-colors', active ? 'bg-panel-2 text-fg' : 'text-fg-2 hover:bg-panel-2/60 hover:text-fg')}
       >
-        {running || waiting ? <StatusDot state={waiting ? 'waiting' : 'running'} /> : permanent ? <Sparkle className="size-3.5 shrink-0 text-accent" strokeWidth={1.8} /> : auto ? <auto.icon className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : null}
+        {running || waiting ? <StatusDot state={waiting ? 'waiting' : 'running'} /> : permanent ? <Sparkle className="size-3.5 shrink-0 text-accent" strokeWidth={1.8} /> : kind === 'mail' ? <AtSign className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : auto ? <auto.icon className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : null}
         <span className="min-w-0 flex-1 truncate">{cleanTitle(title)}</span>
       </button>
       <Menu.Root>
@@ -234,6 +234,7 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
     { to: '/watchers', label: 'Watchers', icon: Radar },
     { to: '/webhooks', label: 'Webhooks', icon: Webhook },
     { to: '/spaces', label: 'Spaces', icon: LayoutGrid },
+    { to: '/mail', label: 'Mail', icon: AtSign },
     { to: '/library', label: 'Library', icon: Library },
     { to: '/people', label: 'People', icon: Users },
     { to: '/memory', label: 'Memory', icon: Brain },
@@ -551,7 +552,8 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
               { to: '/routines', label: 'Routines', icon: CalendarClock },
               { to: '/watchers', label: 'Watchers', icon: Radar },
               { to: '/webhooks', label: 'Webhooks', icon: Webhook },
-              { to: '/library', label: 'Library', icon: Library },
+              { to: '/mail', label: 'Mail', icon: AtSign },
+    { to: '/library', label: 'Library', icon: Library },
     { to: '/people', label: 'People', icon: Users },
     { to: '/memory', label: 'Memory', icon: Brain },
               { to: '/activity', label: 'Activity', icon: Activity },

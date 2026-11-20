@@ -112,7 +112,7 @@
 - The rundown saves "Available today: …" to the journal, which later timing decisions use.
 - Setting a phone alarm comes with the app (Phase 4).
 
-## Phase 2: email on your domain
+## Phase 2: email on your domain (built 2026-11-20, see [docs/mail.md](mail.md))
 
 **2.1 An always-on agent mailbox** ([guide](research/email-on-your-domain.md))
 - **Tasks:**

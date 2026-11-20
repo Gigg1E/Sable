@@ -1,6 +1,6 @@
 import { Command } from 'cmdk';
 import { AnimatePresence, motion } from 'motion/react';
-import { Activity, Brain, Library, Users, CalendarClock, Home, Inbox, LayoutGrid, ListChecks, LogOut, MessageSquare, Moon, Plus, Radar, Search, Settings, Sun, SunMoon, Webhook } from 'lucide-react';
+import { Activity, Brain, Library, Users, AtSign, CalendarClock, Home, Inbox, LayoutGrid, ListChecks, LogOut, MessageSquare, Moon, Plus, Radar, Search, Settings, Sun, SunMoon, Webhook } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
@@ -26,6 +26,7 @@ export function CommandPalette({ open, onClose, onSignOut }: { open: boolean; on
     { label: 'Watchers', to: '/watchers', icon: Radar },
     { label: 'Webhooks', to: '/webhooks', icon: Webhook },
     { label: 'Spaces', to: '/spaces', icon: LayoutGrid },
+    { label: 'Mail', to: '/mail', icon: AtSign },
     { label: 'Library', to: '/library', icon: Library },
     { label: 'People', to: '/people', icon: Users },
     { label: 'Memory', to: '/memory', icon: Brain },

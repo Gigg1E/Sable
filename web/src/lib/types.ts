@@ -119,6 +119,20 @@ export interface HookEvent {
   detail: string;
 }
 
+export interface MailSettings {
+  enabled: boolean;
+  domain: string;
+  addresses: { address: string; name: string; purpose: 'agent' | 'personal' }[];
+  inboundSecret: string;
+  authservId: string;
+  allowlist: string[];
+  relay: { host: string; port: number; secure: boolean; user: string; pass: string };
+  dkimSelector: string;
+  backupForward: string;
+  sendPerHour: number;
+  sendPerDay: number;
+}
+
 export interface Settings {
   persona: { name: string; style: string; about: string };
   providers: ProviderConfig[];
@@ -136,6 +150,7 @@ export interface Settings {
   email: { accounts: EmailAccount[] };
   helpers?: { enabled: boolean; embedModel: string };
   google?: { clientId: string; clientSecret: string };
+  mail?: MailSettings;
   publicUrl: string;
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }

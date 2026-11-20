@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Lock, ShoppingBag } from 'lucide-react';
+import { Lock, ShoppingBag, AtSign } from 'lucide-react';
 import { BarChart3, Bell, Bot, CheckCircle2, Code2, Cpu, Download, Globe, Map as MapIcon, PenLine, Plug, Plus, RefreshCw, Search, Shield, Trash2, User, XCircle, Zap } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge, Button, Card, Field, Input, Segmented, Select, Spinner, Textarea, Toggle, TopBar } from '../components/ui';
@@ -16,6 +16,7 @@ import { cx } from '../lib/format';
 import { disablePush, enablePush, pushState } from '../lib/push';
 import { play, setSoundPrefs, soundPrefs } from '../lib/sounds';
 import { navigate } from '../lib/router';
+import { MailSection } from './MailSettings';
 import { onServerEvent, useStore } from '../lib/store';
 import type { AgentProfile, Effort, McpServerConfig, Policy, ProviderConfig, Settings, ToolInfo } from '../lib/types';
 
@@ -26,6 +27,7 @@ const SECTIONS = [
   { id: 'agents', label: 'Sub-agents', icon: Bot },
   { id: 'permissions', label: 'Permissions', icon: Shield },
   { id: 'connectors', label: 'Connectors', icon: Plug },
+  { id: 'mail', label: 'Mail', icon: AtSign },
   { id: 'shopping', label: 'Shopping', icon: ShoppingBag },
   { id: 'network', label: 'Network', icon: Globe },
   { id: 'notifications', label: 'Notifications', icon: Bell },
@@ -981,6 +983,7 @@ export function SettingsView({ section }: { section?: string }) {
                     <ConnectorsSection draft={draft} edit={edit} tools={tools} saveNow={(next) => save(next, true)} />
                   </>
                 )}
+                {active === 'mail' && <MailSection draft={draft} edit={edit} saveNow={(next) => save(next, true)} />}
                 {active === 'security' && <SecuritySection />}
                 {active === 'shopping' && <ShoppingSection draft={draft} edit={edit} />}
                 {active === 'network' && <NetworkSection draft={draft} edit={edit} />}
