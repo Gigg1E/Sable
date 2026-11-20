@@ -34,7 +34,7 @@
 | Look | Animations with meaning; a polished product, not AI-generated ([principles](design/look-and-feel.md)) |
 | Networks | Home internet Xfinity, phone AT&T, domain DNS on Cloudflare, remote access via Tailscale |
 
-## Phase 0: fix, harden, polish
+## Phase 0: fix, harden, polish (done 2026-11-20)
 
 *Current server. No new hardware or accounts.*
 
@@ -66,7 +66,7 @@
   - Visual signatures for the event kinds that already exist (reminder, watcher, approval, sub-agent, file).
 - **Done when:** screenshots and recordings in dark and light, desktop and phone width, pass the "would this look out of place in Linear?" check.
 
-## Phase 1: the foundation (Library, people, chats that wake, main brain)
+## Phase 1: the foundation (Library, people, chats that wake, main brain) (done 2026-11-20)
 
 **1.1 Library, P0** ([design](research/library.md))
 - **Tasks:**
@@ -105,6 +105,12 @@
   - **Morning rundown:** today's plan, plus the "available windows" for reaching you.
   - **Night check:** looks at tomorrow's calendar and flags problems. Alarm-setting waits for the app (Phase 4).
 - **Done when:** a night with an early class and nothing scheduled produces a heads-up in the morning rundown, or the evening before.
+
+**Built:**
+- **Morning rundown** (07:30, into Home) and **Night check** (02:00, its own chat, silent unless it did something) are seeded once as ordinary routines. Change their time or turn them off on the Routines page.
+- The night check sets reminders before early events that have none, adds open loops or follow-ups, and notes clashes.
+- The rundown saves "Available today: …" to the journal, which later timing decisions use.
+- Setting a phone alarm comes with the app (Phase 4).
 
 ## Phase 2: email on your domain
 

@@ -10,6 +10,22 @@ Sable has five kinds of automation, each with one job:
 | **Webhooks** | Places Sable **pushes to** (Discord, Slack, any URL), or links Sable makes for other things to push to. | "When a game price drops, post it to my Discord" |
 | **Spaces** | Live mini apps that tie it together. | A shopping list whose prices update from watchers |
 
+## Wake-ups: morning rundown and night check
+
+Two routines are added on first start. They're ordinary routines, so you can change their time, edit what they do, or turn them off on the Routines page.
+
+- **Morning rundown** (07:30) comes into **Home**. It covers:
+  - today's calendar
+  - open loops and reminders due today
+  - what's arriving
+  - your free windows ("free 12–3, class 6–9:30"), which Sable saves to the journal so it knows when it's a good time to reach you
+- **Night check** (02:00) runs in its own chat and doesn't message you at night. It looks at tomorrow:
+  - If an early or important event has nothing to get you there, it sets a reminder before it.
+  - It adds an open loop or a morning follow-up for anything that needs thought.
+  - It notes clashing events.
+
+  You only hear from it when it did something. Once the phone app exists, it will also be able to set a missing alarm.
+
 ## Chats that wake themselves
 
 Some automations belong to a conversation rather than standing on their own. When you set one up from a chat, it can be delivered **here**: that chat wakes up with everything it already knows, instead of a fresh background chat starting from nothing.

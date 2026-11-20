@@ -173,8 +173,44 @@ export async function digestQuietChats() {
   }
 }
 
+// ───────────── Wake-ups (docs/design/core-concepts.md §6a) ─────────────
+
+const MORNING = `Give the user their morning rundown, here in the main chat. Keep it short and skip anything that's empty:
+- Today's calendar (calendar_events for today), with times.
+- Open loops that matter today, and reminders or follow-ups due today (reminder_list).
+- Anything arriving or waiting on them that you know of (journal, watchers).
+- Their free windows today, worked out from the calendar ("free 12-3, class 6-9:30"). Save them with journal_add kind note, starting with "Available today:", so you know when it's a good time to reach them.
+Finish with at most one useful suggestion. Ask nothing unless something needs their decision.`;
+
+const NIGHT = `Night check. Quietly look at tomorrow:
+- Calendar events and their start times (calendar_events for tomorrow), deadlines in the journal, open loops, reminders already set.
+- If an early or important event has nothing to get the user there on time (no reminder before it), set one with reminder_set at a sensible time before it. If something needs thought, add an open loop or a follow_up for the morning. Note clashing events.
+Don't message the user at night. If you did something, reply with one short line saying what (it goes to their morning). If nothing needs attention, reply only: Nothing new.`;
+
+/** First start: add the morning rundown (into the main chat) and the night check as ordinary, editable routines. */
+function seedWakeups(mainId: string) {
+  if (kvGet<boolean>('wakeups_seeded')) return;
+  const at = (hhmm: string) => {
+    const [h, m] = hhmm.split(':').map(Number);
+    const d = new Date();
+    d.setHours(h, m, 0, 0);
+    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
+    return d.getTime();
+  };
+  run(
+    "INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, notify, autonomy, restrict_tools, conversation_id, created_at) VALUES (?, 'Morning rundown', ?, 'daily', ?, ?, 1, 'always', 'auto', ?, ?, ?)",
+    id('sch_'), MORNING, JSON.stringify({ time: '07:30' }), at('07:30'), JSON.stringify(['send', 'buy', 'delete', 'checkout']), mainId, now(),
+  );
+  run(
+    "INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, notify, autonomy, restrict_tools, created_at) VALUES (?, 'Night check', ?, 'daily', ?, ?, 1, 'when_new', 'auto', ?, ?)",
+    id('sch_'), NIGHT, JSON.stringify({ time: '02:00' }), at('02:00'), JSON.stringify(['send', 'buy', 'delete', 'checkout', 'email', 'webhook']), now(),
+  );
+  kvSet('wakeups_seeded', true);
+  emit({ type: 'schedule.changed' });
+}
+
 export function startBrain() {
-  mainConversationId();
+  seedWakeups(mainConversationId());
   setInterval(() => void digestQuietChats(), 5 * 60_000).unref();
   setTimeout(() => void digestQuietChats(), 60_000).unref();
 }
