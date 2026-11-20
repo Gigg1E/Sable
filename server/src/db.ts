@@ -77,6 +77,11 @@ CREATE TABLE IF NOT EXISTS people (
   id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'person', relation TEXT, aliases TEXT, contacts TEXT,
   preferred TEXT, notes TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS journal (
+  id TEXT PRIMARY KEY, ts INTEGER NOT NULL, day TEXT NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'open', conversation_id TEXT, closed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS journal_day ON journal(day);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, text TEXT NOT NULL, note TEXT, due_at INTEGER NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL
 );
@@ -143,6 +148,9 @@ addColumn('conversations', 'pinned', 'INTEGER NOT NULL DEFAULT 0');
 addColumn('agent_jobs', 'outcome', 'TEXT');
 addColumn('activity', 'prev_hash', 'TEXT');
 addColumn('reminders', 'wake', 'INTEGER NOT NULL DEFAULT 0');
+addColumn('conversations', 'summary', 'TEXT');
+addColumn('conversations', 'summary_upto', 'INTEGER');
+addColumn('conversations', 'digest_at', 'INTEGER');
 addColumn('activity', 'hash', 'TEXT');
 addColumn('agent_jobs', 'transcript', 'TEXT');
 

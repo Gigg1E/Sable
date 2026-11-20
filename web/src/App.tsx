@@ -8,7 +8,7 @@ import { match, navigate, usePath } from './lib/router';
 import { connectEvents, disconnectEvents, useStore } from './lib/store';
 import { ActivityView } from './views/Activity';
 import { AuthScreen } from './views/Auth';
-import { ChatHome, ChatView } from './views/Chat';
+import { MainChat, ChatView } from './views/Chat';
 import { GoalsView, RoutinesView } from './views/Goals';
 import { InboxView } from './views/Inbox';
 import { MemoryView } from './views/Memory';
@@ -35,7 +35,7 @@ function Routes() {
   if (path === '/people') return { key: 'people', el: <PeopleView /> };
   if (path === '/memory') return { key: 'memory', el: <MemoryView /> };
   if (path === '/settings' || (m = match('/settings/:section', path))) return { key: 'settings', el: <SettingsView section={m?.section} /> };
-  return { key: 'home', el: <ChatHome /> };
+  return { key: 'home', el: <MainChat /> };
 }
 
 export function App() {

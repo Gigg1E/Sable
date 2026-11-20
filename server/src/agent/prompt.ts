@@ -3,6 +3,7 @@ import { getSettings, type AgentProfile } from '../settings.js';
 import { describeMailbox, emailAccounts } from '../email.js';
 import { listReminders, whenText } from '../reminders.js';
 import { peopleLine } from '../people.js';
+import { journalForPrompt } from '../brain.js';
 import { listMemories, type MemoryRow } from './tools/personal.js';
 
 function clock() {
@@ -28,7 +29,7 @@ function reminderLine() {
   return list.length ? `Upcoming reminders: ${list.map((r) => `${r.text} (${whenText(r.due_at)}, ${r.id})`).join('; ')}` : 'Upcoming reminders: none';
 }
 
-export function mainSystemPrompt(ctx: { memories?: MemoryRow[]; toolNote?: string; learnNote?: string } = {}): string {
+export function mainSystemPrompt(ctx: { main?: boolean; memories?: MemoryRow[]; toolNote?: string; learnNote?: string } = {}): string {
   const s = getSettings();
   const memories = ctx.memories ?? listMemories(40);
   const routines = all<{ title: string; kind: string }>('SELECT title, kind FROM schedules WHERE enabled = 1 ORDER BY created_at DESC LIMIT 12');
@@ -89,7 +90,7 @@ ${reminderLine()}
 ${mailboxLine()}
 ${peopleLine() ? `People you know (private): ${peopleLine()}` : 'People you know: none yet'}
 ${watchers.length ? `Watchers: ${watchers.map((w) => `${w.title} (${w.source ?? 'web'})`).join('; ')}` : 'Watchers: none'}
-${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}${ctx.learnNote ? `\n${ctx.learnNote}\n` : ''}
+${ctx.main ? `\n## This is your main conversation\nThe user's home chat with you: the big picture of their days. Messages from other places land here. Keep the journal: when something worth remembering happens or is decided, add it with journal_add (kind decision or note). When you or the user commits to doing something later ("I'll send it Friday", "remind me to call the bank" as a task), add an open loop (kind open_loop) and close it with journal_close once it's done. Mention an open loop once when it's relevant; don't nag. Topic chats send short digests into the journal; use them to know what happened elsewhere, and open the Library for details.\n\n${journalForPrompt()}\n` : ''}${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}${ctx.learnNote ? `\n${ctx.learnNote}\n` : ''}
 
 ## Active goals
 ${goals.length ? goals.map((g) => `- ${g.id}: ${g.title} [${g.status}]`).join('\n') : '(none)'}

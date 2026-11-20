@@ -1,11 +1,13 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { ArrowLeft, BellRing, CalendarClock, Download, ExternalLink, Eye, FolderOpen, LayoutGrid, Maximize2, Minimize2, Pin, PinOff, RotateCw, X } from 'lucide-react';
+import { ArrowLeft, BellRing, CalendarClock, Download, ExternalLink, Eye, FolderOpen, LayoutGrid, Maximize2, Minimize2, Pin, PinOff, RotateCw, X, NotebookPen } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
 import { usePanel, type PanelTab } from '../lib/panel';
 import { navigate } from '../lib/router';
 import { onServerEvent } from '../lib/store';
+import { JournalTab } from './Journal';
+import { useMainId } from '../lib/main';
 import type { FileCardData, Job, Message, Reminder, Schedule, SpaceSummary, Watcher } from '../lib/types';
 import { untilText, whenText } from '../lib/when';
 import { SpaceFrame, useSpace } from '../views/Spaces';
@@ -267,6 +269,7 @@ function SpaceTab({ id, onGone }: { id: string; onGone: () => void }) {
 
 export function SidePanel({ conversationId, messages }: { conversationId: string; messages: Message[] }) {
   const { open, tab, width, full, auto, set, show } = usePanel();
+  const isMainChat = useMainId() === conversationId;
   const [files, setFiles] = useState<ChatFile[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [watchers, setWatchers] = useState<Watcher[]>([]);
@@ -355,6 +358,7 @@ export function SidePanel({ conversationId, messages }: { conversationId: string
           {!full && <div onPointerDown={startResize} className="absolute inset-y-0 -left-1 z-10 hidden w-2 cursor-col-resize md:block" aria-hidden />}
           <div className="flex shrink-0 items-center border-b border-line pr-1.5">
             <div className="flex min-w-0 flex-1 items-center overflow-x-auto [scrollbar-width:none]">
+              {isMainChat && <TabButton active={effectiveTab === 'journal'} onClick={() => show('journal')} icon={<NotebookPen className="size-3.5" />} label="Journal" />}
               <TabButton active={effectiveTab === 'files'} onClick={() => show('files')} icon={<FolderOpen className="size-3.5" />} label="Files" count={files.length} />
               <TabButton active={effectiveTab === 'reminders'} onClick={() => show('reminders')} icon={<CalendarClock className="size-3.5" />} label="Reminders" count={upcoming} />
               {spaceTabs.map((s) => (
@@ -373,6 +377,7 @@ export function SidePanel({ conversationId, messages }: { conversationId: string
             </Tip>
           </div>
           <div className="flex min-h-0 flex-1 flex-col">
+            {effectiveTab === 'journal' && (isMainChat ? <JournalTab /> : <FilesTab chat={conversationId} files={files} />)}
             {effectiveTab === 'files' && <FilesTab chat={conversationId} files={files} />}
             {effectiveTab === 'reminders' && <RemindersTab schedules={schedules} watchers={watchers} reminders={reminders} jobs={jobs} />}
             {activeSpace && effectiveTab !== 'files' && <SpaceTab key={activeSpace} id={activeSpace} onGone={() => show('files')} />}

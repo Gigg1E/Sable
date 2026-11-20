@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 /** Side panel and layout preferences, remembered in this browser. */
-export type PanelTab = 'files' | 'reminders' | `space:${string}`;
+export type PanelTab = 'files' | 'reminders' | 'journal' | `space:${string}`;
 
 interface PanelState {
   open: boolean;

@@ -15,6 +15,7 @@ import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unl
 import { cancelJob, continueJob, getJob, listJobs } from './agent/subagents.js';
 import { isFrozen, setFrozen, verifyActivity } from './safety.js';
 import { deletePerson, listPeople, savePerson } from './people.js';
+import { journalAdd, journalClose, journalDelete, journalRecent, mainConversationId, openLoops } from './brain.js';
 import { addItem, forgetItem, getItem, libraryStats, libSnippet, listItems, search, setPrivacy } from './library.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
@@ -668,6 +669,20 @@ export function apiRouter() {
     }),
   );
   r.delete('/library/:id', h((req) => ({ forgotten: forgetItem(param(req, 'id')) })));
+
+  // ── Main chat and journal ──
+  r.get('/main', h(() => ({ id: mainConversationId() })));
+  r.get('/journal', h((req) => ({ open: openLoops(), recent: journalRecent(Math.min(Number(req.query.days) || 14, 90)) })));
+  r.post(
+    '/journal',
+    h((req) => {
+      const text = String(req.body?.text ?? '').trim();
+      if (!text) throw new HttpError(400, 'Write something.');
+      return journalAdd(req.body?.kind === 'open_loop' ? 'open_loop' : 'note', text, mainConversationId());
+    }),
+  );
+  r.patch('/journal/:id', h((req) => ({ ok: journalClose(param(req, 'id'), req.body?.done !== false) })));
+  r.delete('/journal/:id', h((req) => ({ ok: journalDelete(param(req, 'id')) })));
 
   // ── People ──
   r.get('/people', h(() => listPeople()));

@@ -6,6 +6,7 @@ import { notify } from '../push.js';
 import { getSettings, type AgentProfile, type Effort } from '../settings.js';
 import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt } from './prompt.js';
+import { isMain, maybeSummarize, setQuickAnswer } from '../brain.js';
 import { appendActivity, clearTaint, isFrozen, setFrozen, verifyActivity, isReadOnlyTool, markTainted, redact, taintEscalates, taintOf, untrustedSource } from '../safety.js';
 import { isRestricted, preapprovalFor, shouldNotifyAfterRun, type Preapproval } from './automation.js';
 import { searchTools, selectTools } from './routing.js';
@@ -110,8 +111,10 @@ function logActivity(e: { conversationId: string; runId: string; agent: string; 
 
 /** Rebuild model-ready history: newest messages first-fit, tool calls always paired with results. */
 function loadHistory(conversationId: string, limit: number): { messages: ChatMessage[]; trimmed: boolean } {
-  let rows = all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? AND role IN ('user','assistant','tool') ORDER BY rowid", conversationId);
-  let trimmed = false;
+  // Long chats keep a rolling summary of their older part (brain.ts); only what comes after it is replayed.
+  const conv = get<{ summary: string | null; summary_upto: number | null }>('SELECT summary, summary_upto FROM conversations WHERE id = ?', conversationId);
+  let rows = all<MessageRow>("SELECT * FROM messages WHERE conversation_id = ? AND role IN ('user','assistant','tool') AND rowid > ? ORDER BY rowid", conversationId, conv?.summary ? (conv.summary_upto ?? 0) : 0);
+  let trimmed = !!conv?.summary;
   if (rows.length > limit) {
     rows = rows.slice(rows.length - limit);
     trimmed = true;
@@ -158,6 +161,12 @@ function loadHistory(conversationId: string, limit: number): { messages: ChatMes
     }
   }
   flush();
+  if (conv?.summary && out.length) {
+    const first = out[0];
+    if (first.role === 'user' && typeof first.content === 'string') {
+      out[0] = { ...first, content: `[Summary of this conversation so far, written by you earlier]\n${conv.summary}\n\n[The conversation continues]\n${first.content}` };
+    }
+  }
   return { messages: out, trimmed };
 }
 
@@ -691,7 +700,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
       effort: s.main.effort,
       temperature: s.main.temperature,
       contextLength: s.main.contextLength,
-      system: mainSystemPrompt({ memories, learnNote: correction ? 'The user\'s last message sounds like a correction or a standing instruction about how to handle this kind of request. Follow it, and if it should apply next time too, save it with memory_save kind "howto".' : '', toolNote: picked.method === 'all' ? '' : 'Only the tools relevant to this request are loaded. If you need a tool you don\'t see (email, calendar, watchers, routines, webhooks, shopping, files, spaces…), call tools_search first.' }),
+      system: mainSystemPrompt({ main: isMain(conversationId), memories, learnNote: correction ? 'The user\'s last message sounds like a correction or a standing instruction about how to handle this kind of request. Follow it, and if it should apply next time too, save it with memory_save kind "howto".' : '', toolNote: picked.method === 'all' ? '' : 'Only the tools relevant to this request are loaded. If you need a tool you don\'t see (email, calendar, watchers, routines, webhooks, shopping, files, spaces…), call tools_search first.' }),
       messages: history.messages,
       historyTrimmed: history.trimmed,
       tools: picked.tools,
@@ -721,6 +730,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
     active.delete(runId);
     loadedTools.delete(runId);
     clearTaint(runId);
+    void maybeSummarize(conversationId);
   }
 }
 
@@ -759,3 +769,6 @@ export async function quickAnswer(system: string, prompt: string, signal?: Abort
   }
   return text;
 }
+
+// The brain (summaries, digests) uses the main model through this.
+setQuickAnswer(quickAnswer);

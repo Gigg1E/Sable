@@ -10,6 +10,8 @@ import './agent/tools/graph.js';
 import './agent/tools/reminders.js';
 import './agent/tools/library.js';
 import './agent/tools/people.js';
+import './agent/tools/journal.js';
+import { startBrain } from './brain.js';
 import { sweepJobs } from './agent/subagents.js';
 import { startReminders } from './reminders.js';
 import { queueIndex } from './library.js';
@@ -133,6 +135,7 @@ app.listen(PORT, HOST, () => {
   startScheduler();
   startReminders();
   queueIndex(); // embed anything added while the helper model was offline
+  startBrain();
   sweepJobs();
   startWatchers();
   resumeShopLink();

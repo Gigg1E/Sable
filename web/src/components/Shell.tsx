@@ -278,8 +278,9 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
           const row = (c: (typeof conversations)[number]) => (
             <ChatRow key={c.id} id={c.id} title={c.title} kind={c.kind} pinned={!!c.pinned} active={path === `/chat/${c.id}`} running={!!runs[c.id]} waiting={waitingConvs.has(c.id)} onNavigate={onNavigate} />
           );
-          const pinnedList = conversations.filter((c) => c.pinned);
-          const chats = conversations.filter((c) => !c.pinned && !AUTOMATION_KINDS[c.kind]);
+          // The main chat is Home, not a list entry.
+          const pinnedList = conversations.filter((c) => c.pinned && c.kind !== 'main');
+          const chats = conversations.filter((c) => !c.pinned && !AUTOMATION_KINDS[c.kind] && c.kind !== 'main');
           const autos = conversations.filter((c) => !c.pinned && AUTOMATION_KINDS[c.kind]);
           const autoBusy = autos.some((c) => runs[c.id] || waitingConvs.has(c.id));
           return (

@@ -18,6 +18,7 @@ import { usePanel } from '../lib/panel';
 import { SidePanel, usePanelAutoOpen } from '../components/SidePanel';
 import type { AnyCard, Goal, Job, Message, Schedule, Watcher } from '../lib/types';
 import { SubagentView } from '../components/SubagentCard';
+import { useMainId } from '../lib/main';
 import { Signature } from '../components/Signature';
 import { Sparkline } from '../components/Sparkline';
 import { ImageViewer } from '../components/ImageViewer';
@@ -34,6 +35,20 @@ export async function startChat(text: string, attachments: string[] = []) {
   }
 }
 
+// ───────────────────────── Home: the main chat ─────────────────────────
+
+/** Home is the main chat. Until it has its first message, it shows the welcome screen. */
+export function MainChat() {
+  const id = useMainId();
+  const messages = useStore((s) => (id ? s.messages[id] : undefined));
+  const loadConversation = useStore((s) => s.loadConversation);
+  useEffect(() => {
+    if (id) void loadConversation(id).catch(() => {});
+  }, [id, loadConversation]);
+  if (!id || !messages) return null;
+  return messages.length ? <ChatView id={id} /> : <ChatHome into={id} />;
+}
+
 // ───────────────────────── Home ─────────────────────────
 
 const STARTERS = [
@@ -43,7 +58,7 @@ const STARTERS = [
   { icon: Plane, label: 'Plan something', text: 'Help me plan ' },
 ];
 
-export function ChatHome() {
+export function ChatHome({ into }: { into?: string } = {}) {
   const name = useStore((s) => s.settings?.persona.name ?? 'Sable');
   const approvals = useStore((s) => s.approvals);
   const conversations = useStore((s) => s.conversations);
@@ -67,7 +82,7 @@ export function ChatHome() {
   const upcoming = schedules.filter((s) => s.enabled && s.next_run).sort((a, b) => a.next_run! - b.next_run!).slice(0, 4);
   const running = conversations.filter((c) => runs[c.id]);
   // Recent conversations you had (automation runs live in their own sidebar section).
-  const recent = conversations.filter((c) => !runs[c.id] && !['schedule', 'watch', 'hook'].includes(c.kind)).slice(0, 6);
+  const recent = conversations.filter((c) => !runs[c.id] && !['schedule', 'watch', 'hook', 'main'].includes(c.kind)).slice(0, 6);
 
   return (
     <>
@@ -77,7 +92,7 @@ export function ChatHome() {
           <h1 className="text-[22px] font-semibold tracking-[-0.02em]">What should {name} take on?</h1>
           <p className="mt-1 text-[13.5px] text-fg-2">Describe an outcome. It plans the steps, asks before anything sensitive, and keeps working in the background.</p>
           <div className="mt-5">
-            <Composer ref={composer} onSend={startChat} autoFocus minRows={2} />
+            <Composer ref={composer} onSend={into ? (text, attachments) => void api.post(`/conversations/${into}/messages`, { text, attachments }).catch((err) => useStore.getState().toast({ title: 'Could not send', body: (err as Error).message, tone: 'error' })) : startChat} autoFocus minRows={2} />
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {STARTERS.map((s) => (
@@ -418,8 +433,8 @@ export function ChatView({ id }: { id: string }) {
   return (
     <>
       <TopBar
-        title={(conversation?.title ?? 'Chat').replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')}
-        crumbs={{ schedule: 'Routine', watch: 'Watcher', hook: 'Webhook' }[conversation?.kind ?? ''] ?? 'Chats'}
+        title={conversation?.kind === 'main' ? 'Home' : (conversation?.title ?? 'Chat').replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')}
+        crumbs={conversation?.kind === 'main' ? undefined : ({ schedule: 'Routine', watch: 'Watcher', hook: 'Webhook' }[conversation?.kind ?? ''] ?? 'Chats')}
         actions={
           <>
             {running && (
@@ -427,7 +442,7 @@ export function ChatView({ id }: { id: string }) {
                 <Square className="size-3 fill-current" /> Stop
               </Button>
             )}
-            <IconButton label={panelOpen ? 'Hide files, spaces and reminders' : 'Files, spaces and reminders'} onClick={() => setPanel({ open: !panelOpen, full: false })} className={cx(panelOpen && 'text-tint')}>
+            <IconButton label={panelOpen ? 'Hide the side panel' : conversation?.kind === 'main' ? 'Journal, files and reminders' : 'Files, spaces and reminders'} onClick={() => setPanel({ open: !panelOpen, full: false })} className={cx(panelOpen && 'text-tint')}>
               {panelOpen ? <PanelRightClose className="size-4" /> : <PanelRightOpen className="size-4" />}
             </IconButton>
           </>
