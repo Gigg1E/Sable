@@ -36,8 +36,10 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
   async function decide(decision: 'approve' | 'deny', remember = false, choice?: string) {
     setBusy(decision + remember + (choice ?? ''));
     try {
-      await api.post(`/approvals/${approval.id}/decision`, { decision, remember, ...(choice ?? method ? { choice: choice ?? method } : {}) });
+      const r = await api.post<{ status: string }>(`/approvals/${approval.id}/decision`, { decision, remember, ...(choice ?? method ? { choice: choice ?? method } : {}) });
       useStore.setState((s) => ({ approvals: s.approvals.filter((a) => a.id !== approval.id) }));
+      // The task that asked is gone (Sable restarted, or the task was stopped): say so instead of pretending.
+      if (r?.status === 'expired') toast({ title: 'That request had already expired', body: 'The task that asked is no longer running (Sable restarted or it was stopped). Ask again and approve the new request.', tone: 'error' });
     } catch (err) {
       toast({ title: 'Could not record decision', body: (err as Error).message, tone: 'error' });
       setBusy(null);
