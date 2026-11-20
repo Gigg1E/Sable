@@ -84,7 +84,7 @@ Data (database, workspace, keys) lives in the `sable-data` volume. The container
 npm run dev          # API on :8787 (auto-reload) + Vite on :5173 with HTTP proxying
 ```
 
-How routines, watchers, webhooks and Spaces fit together (and what needs your approval): **[docs/automations.md](docs/automations.md)**.
+How routines, watchers, webhooks and Spaces fit together (and what needs your approval): **[docs/automations.md](docs/automations.md)**. Where Sable is headed next (Android app, Telegram, voice, Spaces as full apps): **[docs/roadmap.md](docs/roadmap.md)**.
 
 ## Watchers, webhooks and notification channels
 
