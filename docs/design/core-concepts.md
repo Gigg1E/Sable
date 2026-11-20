@@ -103,6 +103,30 @@ Spaces are **not only cameras.** The examples are dashboards fed by webhooks, im
 4. **No making things up:** the main agent is told that when research comes back incomplete, it says so or continues the research. It doesn't fill gaps from training.
 5. **The card shows it:** "Stopped at step limit · report written · 14 sources", with a Continue button.
 
+## 6a. Wake-ups: Sable checks in on its own
+
+Sable gets **wake-ups**: moments it looks around and decides whether to do anything. Most of the time it does nothing, quietly.
+
+- **Night check (around 2 AM):**
+  - Looks at tomorrow: class at 8, so up at 6 and leave at 7.
+  - Checks your phone's next alarm (once the app exists).
+  - If no alarm covers it, **sets one** (Android lets an app set an alarm in the Clock app) and tells you in the morning rundown. Or it asks first, if you prefer.
+  - Also notices things like "your calendar has two things at once tomorrow".
+- **Morning rundown:** the day's plan, which also sets when Sable can reach you (see 6).
+- **Presence:** with your own cameras (see below), walking into your office can wake Sable. "Good morning, Will. Here's today." Spoken once the voice server exists, a notification until then.
+- **Events:** anything in section 2 (a webhook, email, watcher, follow-up).
+
+## 6b. Your own cameras, not Ring
+
+Ring stays out: it's on your dad's account. Instead, **your own local cameras** on spots you choose (and maybe your office):
+- on your Wi-Fi, streaming to Sable over the local network only (RTSP)
+- never to a cloud
+
+They feed Spaces with live views, presence wake-ups, and "someone's at the door" alerts. That's [Spaces v3](../research/spaces-v3.md) with the go2rtc relay. Recommended camera features, for when you buy:
+- **RTSP or ONVIF** support
+- **works offline** without a vendor cloud
+- **wired or 5 GHz** Wi-Fi
+
 ## 6. Knowing when to reach you
 
 You don't have fixed quiet hours. Your day changes. So Sable builds an **availability picture** from:

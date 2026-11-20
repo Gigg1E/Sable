@@ -1,109 +1,197 @@
-# Sable roadmap: from web app to personal life agent
+# Sable roadmap: phases and goals
 
-*Updated 2026-11-20. This is the plan, not a promise. No code is written from it until we agree on where to start.*
+*Updated 2026-11-20. Each goal has a **done when** so we know it's finished. The rule: **backend first, app last.** The phone app waits until the backend is solid, so we never update the website and the app in parallel.*
 
-- **Design ideas:** [`docs/design/core-concepts.md`](design/core-concepts.md). The main brain, chats that wake themselves, "I'll remind you", Spaces on Sable's engines, notification visuals, when to call.
-- **Research** (with sources):
-  - [Android app](research/android-app.md)
-  - [Private channels, calls, Ring](research/private-channels-calls-ring.md)
-  - [Reaching you (first pass)](research/reaching-you.md)
-  - [Email on your domain](research/email-on-your-domain.md)
-  - [Library (shared database)](research/library.md)
-  - [Voice and the server](research/voice-and-server.md)
-  - [Spaces as full apps](research/spaces-v3.md)
+**Design docs:**
+- [Core concepts](design/core-concepts.md): main brain, chats that wake themselves, reminders vs follow-ups, Spaces on Sable's engines, notification visuals, wake-ups, when to reach you
+- [Look and feel](design/look-and-feel.md): polished, not AI-generated; the intro animation
 
-## The idea
+**Research:**
+- [Library](research/library.md)
+- [Email](research/email-on-your-domain.md)
+- [Private channels and calls](research/private-channels-calls-ring.md)
+- [Android](research/android-app.md)
+- [Spaces v3](research/spaces-v3.md)
+- [Voice and server](research/voice-and-server.md)
+- [Oni notes](research/oni-notes.md)
+- [First channel survey](research/reaching-you.md)
 
-Sable manages **your life**; Oni manages **the server**. Sable is the one assistant you talk to everywhere: its own app, email and eventually your voice. It does small, frequent things on local models and saves big cloud models for when they're worth it. It uses official connections wherever they exist, and keeps private things private.
+## Decisions so far
 
-## What we know
+| Topic | Decision |
+|---|---|
+| Sable vs Oni | Separate. Oni maintains servers; Sable runs your life. **They don't talk to each other.** Sable borrows a few of Oni's ideas ([notes](research/oni-notes.md)) |
+| Order | Fixes and polish → backend foundations → email → Spaces → phone app → AI server |
+| Channels | The **Sable app over Tailscale** is the private channel. Pushes are empty wake-up pings. No Telegram as the main channel |
+| Calls | The app ↔ Sable both ways (Sable calls you, you call Sable). **No paid Google Play, no Android Auto requirement**; the car isn't a priority. Voice comes with the AI server ([Witty](https://github.com/Gigg1E/witty)) |
+| App install | Sideload (adb) plus the **free** limited-distribution registration. No $25 Play account |
+| Library | **Open** half (anything) and **private** half (secrets, personal details, people, messages, memories, actions taken). Private content never goes to cloud models unredacted |
+| Email content | Not stored in the Library; read live. What Sable *sent* is kept as private history |
+| People | Sable learns you, and the people and pets around you (who they are, how to reach them) |
+| Automations | Keep their own chats. The model may deliver important things into the conversation that asked (`follow_up`) |
+| Cameras | Your own local cameras, not Ring |
+| Main chat | The app's home screen |
+| Look | Animations with meaning; a polished product, not AI-generated ([principles](design/look-and-feel.md)) |
+| Networks | Home internet Xfinity, phone AT&T, domain DNS on Cloudflare, remote access via Tailscale |
 
-| Topic | Answer | What it means |
-|---|---|---|
-| Where you are | Florida, USA. AT&T, moving your SIM to an Android (Nothing Phone 4a class) | US rules for SMS/10DLC. Android Auto in the car. Google's sideloading rules hit the US in 2027 |
-| Remote access | Tailscale only, with Tailscale on the phone | The app talks to Sable privately. Anything that must reach Sable from outside (Ring webhooks, Twilio) needs a tiny public relay |
-| Push | Unsure; new to Android | **Recommended:** Google's push (FCM) with **empty wake-up pings**. Google sees that a ping happened, never what it says. The app fetches the content over Tailscale. ([explained](research/private-channels-calls-ring.md#push-notifications-explained)) |
-| Messaging privacy | High priority; sensitive info goes into chats | **The Sable app is the private channel.** Telegram is dropped as the main channel because it isn't end-to-end encrypted. Signal or Matrix only as optional backups |
-| Email | You own a domain and want email to be big | Mailbox hosted off-site (easiest: Fastmail; most private: Stalwart on a VPS). Sable fetches it. [Setup guide](research/email-on-your-domain.md) |
-| Smart home | None, apart from Ring cameras (paid plan) | No Home Assistant work. Ring's **official** Partner API (private-use apps) for doorbell, motion and snapshots |
-| Hardware | 4 spare computers. An AI server is being built for local models | Sable can move to a spare machine anytime. Voice, vision and local models come with the AI server |
-| Model strategy | A big local model most of the time; Ollama's cloud models when nothing private is involved | Needs a **privacy level per chat** (local-only vs cloud-allowed), plus a router |
-| Automations | Keep their own chats, but the model may deliver important things into the conversation | Two delivery modes, "here" and "background", and `follow_up` ([design §2](design/core-concepts.md#2-chats-that-wake-themselves)) |
-| Quiet hours | None fixed; your schedule changes daily | An availability picture from the morning rundown, calendar, location and driving state ([design §6](design/core-concepts.md#6-knowing-when-to-reach-you)) |
-| Calls | Want them, answered from the steering wheel | The app rings through Android's calling framework. Android Auto needs a Play test-track install (beta, test it in the car). Twilio to your AT&T number as fallback |
-| Spaces | Full websites, local network allowed, internet blocked unless approved, theming handled by Sable, not only cameras | [Spaces v3](research/spaces-v3.md) plus [design §3](design/core-concepts.md#3-spaces-built-on-sables-engines-not-rebuilding-them) |
-| Data | One big shared database every chat can read without asking | [The Library](research/library.md) |
-| UI | Should say what something is before you read it | A visual signature per event type ([design §4](design/core-concepts.md#4-notifications-you-understand-before-reading)) |
+## Phase 0: fix, harden, polish
 
-## Where to start: the shallow end first
+*Current server. No new hardware or accounts.*
 
-**Each stage only depends on the ones before it,** and each is useful on its own. The early stages need no new hardware, no phone and no outside accounts.
+**0.1 Sub-agents always report what they found** ([§5](design/core-concepts.md#5-sub-agents-always-report-what-they-found-bug-fix-first))
+- **Tasks:**
+  - Forced final report with tools off when a sub-agent hits its limit or ends on a plan.
+  - Fallback digest of what its tools returned.
+  - Higher limit for research agents.
+  - `continue` for stopped jobs.
+  - Prompt rule: "never fill research gaps from memory".
+  - The card shows stopped/continued state.
+- **Done when:** a researcher stopped at its limit still hands back its findings with sources, and the main agent can continue it.
 
-### Stage 0: fix what's shaky (small)
-1. **Sub-agents always report what they found** ([design §5](design/core-concepts.md#5-sub-agents-always-report-what-they-found-bug-fix-first)). Research has to be trustworthy before Sable does more of it.
-2. **Privacy level per chat:** "local only" or "cloud allowed", with the model picker respecting it. The Library and the channels will lean on this.
+**0.2 Safety upgrades borrowed from Oni** ([notes](research/oni-notes.md))
+- **Tasks:**
+  - **Taint per run:** after untrusted content, actions beyond reading ask you.
+  - **Risk per call** for commands and file writes.
+  - **Freeze:** one tap or one word makes Sable observe-only and denies pending approvals.
+  - **Reflex commands** that skip the model (`/status`, `/freeze`, `/thaw`).
+  - **Redactor** on everything going to channels and cloud models.
+  - **Tamper-evident activity log.**
+- **Done when:** a planted instruction in a fetched page can't make Sable send, buy or delete without a tap; freeze works from the app and a notification; secrets never appear in outgoing text.
 
-### Stage 1: the foundation everything shares
-3. **Library P0:**
-   - hybrid search
-   - memories moved in
-   - notes, pages, chat outputs and uploads go in
-   - sources and trust labels
-   - a Library page
+**0.3 Look and feel pass** ([principles](design/look-and-feel.md))
+- **Tasks:**
+  - The **intro animation** (the mark draws itself, then becomes the sidebar).
+  - Motion tokens and rules.
+  - A pass over chat, sidebar, cards, Inbox and Settings for consistency, empty states and skeletons.
+  - Visual signatures for the event kinds that already exist (reminder, watcher, approval, sub-agent, file).
+- **Done when:** screenshots and recordings in dark and light, desktop and phone width, pass the "would this look out of place in Linear?" check.
 
-   ([research](research/library.md#phases))
-4. **Events wake the chat that asked:** "here" vs "background" delivery for watchers, webhooks, reminders, emails and jobs. Plus `follow_up` ("I'll remind you").
-5. **Main brain chat:**
-   - pinned
-   - rolling summaries
-   - journal and open loops
-   - digests from mini chats
-   - morning rundown, which also sets the day's availability
+## Phase 1: the foundation (Library, people, chats that wake, main brain)
 
-### Stage 2: the phone (when it arrives)
-6. **App shell:**
-   - Capacitor app wrapping the current UI
-   - installed through a **Google Play Internal Testing** track ($25 once; counts as a Play install, which Android Auto needs)
-   - Tailscale on the phone
-7. **Notifications:**
-   - empty FCM pings, content fetched over Tailscale
-   - Approve/Deny and reply right in the notification
-   - the visual signatures (map thumbnails, progress tracks, snapshots, Live Updates)
-8. **Phone signals:**
-   - location and geofences
-   - share-to-Sable
-   - camera
-   - availability signals (Android Auto connected, driving, DND, calendar)
+**1.1 Library, P0** ([design](research/library.md))
+- **Tasks:**
+  - `library.sqlite` with hybrid search (keywords + meaning).
+  - **Open/private classification on the way in**, with a local secret and personal-details check.
+  - Memories moved in.
+  - Notes, web pages, chat outputs and uploads go in.
+  - Sources and trust labels.
+  - `library_*` tools.
+  - A Library page with filters, plus real "forget".
+- **Done when:** "how did I set up X last month?" finds the right chat output from another chat; private items never reach a cloud model unredacted; forgetting an item removes every trace.
 
-### Stage 3: email on your domain
-9. **You set up the mailbox and DNS** with the [guide](research/email-on-your-domain.md). Sable gets the **agent mailbox** rules: allowlist, DMARC check, threaded replies, approvals on your phone, send limits.
+**1.2 People and pets**
+- **Tasks:**
+  - Private people pages: relationship, aliases, ways to reach them, preferences ("prefers Discord").
+  - Learned from conversation, editable by you.
+- **Done when:** "message my best friend that I'm running late" asks only "Discord or email?" the first time, and nothing the second time.
 
-### Stage 4: Spaces v3
-10. **Media and local devices:** "local device" connections, a media proxy, theming tokens injected. Live feeds stop showing as broken.
-11. **Space backends:**
-    - a container per Space
-    - storage and schedules
-    - a manifest with approval cards
-    - Library collections
-    - Spaces can wake their chat
-12. **Ring through its official API** (needs a tiny public relay for its webhooks).
+**1.3 Chats that wake themselves** ([§2](design/core-concepts.md#2-chats-that-wake-themselves))
+- **Tasks:**
+  - "Here" vs "background" delivery for watchers, webhooks, reminders, email and jobs.
+  - `follow_up` (Sable reminds you itself, with context).
+  - Follow-up chips in the chat and side panel.
+- **Done when:** a package watcher set up in a chat wakes *that* chat with the history ("the one we tracked since the 12th").
 
-### Stage 5: the AI server
-13. **Local models and routing:** a big local model as the default, a small router, Ollama cloud models when the chat's privacy level allows.
-14. **Library P3:** captions, transcripts, image search, a reranker.
-15. **Voice** (Witty or Pipecat, with Sable as the brain), **calls from the app**, and "someone's at the door, I'll call you when you're driving".
+**1.4 Main brain chat** ([§1](design/core-concepts.md#1-the-main-brain-and-mini-chats))
+- **Tasks:**
+  - The pinned main chat as home.
+  - Rolling summaries, so it never fills up.
+  - Journal and open loops.
+  - Digests from mini chats.
+- **Done when:** after weeks of use the main chat still loads fast, knows what happened in topic chats, and reminds you of open loops once.
 
-### Later
-16. **Oni bridge:** Oni → Sable for incidents worth telling you; Sable → Oni for read-only health questions and approved requests.
-17. **Optional backup channels:** Signal or Matrix, and Twilio calls to your number.
+**1.5 Wake-ups** ([§6a](design/core-concepts.md#6a-wake-ups-sable-checks-in-on-its-own))
+- **Tasks:**
+  - **Morning rundown:** today's plan, plus the "available windows" for reaching you.
+  - **Night check:** looks at tomorrow's calendar and flags problems. Alarm-setting waits for the app (Phase 4).
+- **Done when:** a night with an early class and nothing scheduled produces a heads-up in the morning rundown, or the evening before.
 
-## Open questions
+## Phase 2: email on your domain
 
-The full lists are at the bottom of each research doc. These are the ones that block planning:
+**2.1 An always-on agent mailbox** ([guide](research/email-on-your-domain.md))
+- **Tasks:**
+  - Decide between moving your existing allowlisted mail service to a spare always-on machine, or an off-site mailbox.
+  - DNS on Cloudflare: SPF, DKIM, DMARC, MTA-STS.
+  - Sable reads it with the email connector.
+- **Done when:** you email Sable from work or school and get a threaded reply, even after Sable's server has restarted.
 
-1. **Stage 0–1 first?** Do you agree with starting there, before the app?
-2. **Library and cloud:** may cloud models ever read Library content? Only for chats marked "cloud allowed"?
-3. **Email import:** which email goes into the Library: everything, or some labels or senders?
-4. **Domain DNS:** who hosts it, and does it already have mail records? Is Fastmail OK, or do you want the self-hosted VPS route?
-5. **Main chat in the app:** should it be the **home screen** (open the app and you're talking to Sable), with mini chats a swipe away?
-6. **Ring relay:** OK to run a tiny public relay (it only checks Ring's signature and forwards) so Ring events can reach Sable?
+**2.2 Agent mailbox rules**
+- **Tasks:**
+  - Allowlist and DMARC/DKIM check.
+  - Email text treated as data.
+  - Approvals on your phone or in the app.
+  - Send limits, and no replies to strangers.
+  - "Send me the file from my Drive" works.
+- **Done when:** spoofed or unknown mail is quarantined and never acted on.
+
+## Phase 3: Spaces v3
+
+**3.1 Spaces as real apps** ([research](research/spaces-v3.md), [§3](design/core-concepts.md#3-spaces-built-on-sables-engines-not-rebuilding-them))
+- **Tasks:**
+  - **Bindings to Sable's engines:** webhooks, watchers, connections, Library collections.
+  - **Wake their chat.**
+  - **Theming tokens injected.**
+  - Local-network access with an approved host list; the internet blocked unless approved.
+  - Then backends: a container per Space, storage, schedules, logs, test and rollback.
+- **Done when:** Sable can build, for example, a "deliveries" Space fed live by webhooks and an email watcher, with its own small database, that looks right in dark and light.
+
+**3.2 Live media and your cameras**
+- **Tasks:**
+  - "Local device" connections.
+  - Media proxy and the go2rtc relay.
+  - Snapshots for vision.
+  - Presence and motion events as wake-ups.
+- **Done when:** a local camera's live view plays smoothly inside a Space, and a motion event can wake a chat.
+
+## Phase 4: the Android app (after your phone arrives *and* Phases 0–2 are stable)
+
+**4.1 App shell:** Capacitor app wrapping the web UI. Sideloaded with adb and registered free. Tailscale always-on. Self-updates from Sable.
+- **Done when:** the app opens straight into the main chat, over Tailscale.
+
+**4.2 Notifications:**
+- **Tasks:**
+  - Empty wake-up pings, content fetched over Tailscale.
+  - Approve/Deny and reply in the notification.
+  - Visual signatures (map, progress, snapshot).
+  - Live Updates, mirrored on the Glyph Bar.
+- **Done when:** an approval can be handled from the lock screen, and Google never sees content.
+
+**4.3 Phone abilities:**
+- **Tasks:**
+  - Location and geofences.
+  - Share-to-Sable.
+  - Camera.
+  - Availability signals (driving, DND, calendar).
+  - **Setting alarms** for the night check.
+- **Done when:** "remind me at the store" fires at the store, and the night check can set a missing alarm.
+
+## Phase 5: the AI server (when the hardware is built)
+
+**5.1 Local models:** a big local model by default, a small router, Ollama cloud models only for open content.
+- **Done when:** private chats never touch a cloud model, and small tasks stay local.
+
+**5.2 Library with media:** captions, transcripts, image search, reranker. Private content processed locally.
+- **Done when:** "find the photo of the receipt from last week" works.
+
+**5.3 Voice and calls:**
+- **Tasks:**
+  - [Witty](https://github.com/Gigg1E/witty) as the voice loop with Sable as the brain.
+  - Talk in the app.
+  - **Sable calls you and you call Sable** (the app rings through Android's calling framework).
+  - Presence greetings spoken.
+- **Done when:** a doorbell or motion event while you're driving becomes a short call, and you can call Sable to ask about your day.
+
+## Back burner
+
+- Android Auto call screen (needs a paid Play account).
+- Twilio/Telnyx calls to your phone number.
+- Telegram, Signal and Matrix as extra channels.
+- Ring (not your account).
+- Fine-tuning a small local model on Sable's own episodes, Oni-style.
+
+## Questions to settle when we get there
+
+- **Phase 2:** how does your current desktop mail service receive mail (Cloudflare Email Routing to a Worker, forwarding, something else)?
+- **Phase 4:** night check: set the alarm **automatically**, or **ask first**?
+- **Phase 1:** Library: should chat outputs and uploads go in automatically, or only when promoted?
+- **Phase 3:** cameras: which models are you considering (to confirm RTSP/ONVIF)?

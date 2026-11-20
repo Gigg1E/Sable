@@ -2,6 +2,21 @@
 
 *Researched 2026-11-20 for a Florida home on AT&T, with Sable reachable only over Tailscale. Items marked **unverified** need checking.*
 
+## Update (2026-11-20)
+
+**Correction:** your home internet is **Xfinity**, not AT&T (AT&T is your phone). The advice doesn't change: Xfinity residential is also widely reported to block outgoing port 25, and home IPs have the same reputation problems (**unverified** for Xfinity's current policy).
+
+**What you already have:**
+- Your domain's DNS is on **Cloudflare**, with email already working.
+- A small mail service runs on your **desktop**, behind Proton VPN in Docker, for another AI project. It only accepts mail from your own addresses and blocks everything else. That's exactly the allowlist rule below.
+
+**The only weakness** is that it lives on your desktop, so it's down when the desktop is.
+
+**The plan for Sable's mailbox:**
+- **Reuse what you built.** Either move that service (or a copy) to one of your spare always-on computers, or have mail land in an off-site mailbox first so nothing is lost while a machine is down.
+- Sable then reads it with its existing email connector.
+- **To decide together:** show me how the current service receives mail (Cloudflare Email Routing to a Worker, forwarding, or something else). Then I can write exact steps.
+
 ## The short version
 
 - **Don't run the mail server at home.**

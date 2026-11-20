@@ -11,6 +11,29 @@ One big shared store that every chat, sub-agent and Space can read **without ask
 
 It keeps learning over time, and only the main chat can write to its own private journal.
 
+## Decisions (from you, 2026-11-20)
+
+- **We build it our own way.** No framework dictates the design; the research below is input, not a template.
+- **Two halves: open and private.**
+  - **Open:** no restrictions. Things from the internet, general pictures, public facts, how-tos about tools. Any model may see it, including cloud models.
+  - **Private:**
+    - anything that could be a **secret** (tokens, API keys, passwords)
+    - **personal details** (your address, phone number, IDs)
+    - **intimate or sensitive images**
+    - **messages and memories**
+    - **people** in your life
+    - **what Sable sent on your behalf** (emails, messages)
+
+    Private content goes **only to local models**. A cloud model gets a redacted version or nothing.
+  - **Classification happens on the way in.** A local check (patterns for secrets and personal details, plus a small local model for anything subtle) marks each item. When unsure, it's private. You can flip any item.
+  - **Today you use cloud models only,** so for now "private" means: never sent to a cloud model unredacted, and kept out of cloud-visible search results. Once the AI server is in, private content gets its full local treatment.
+- **Email content isn't stored in the Library.** Email is read live for context. What *is* kept, as private, is what Sable did: "emailed Sam about the deposit on Nov 3".
+- **People are first-class (private):**
+  - Sable learns **you** most, and the people around you a little: who they are to you (best friend, sister, cat), and how to reach them (Discord, email, phone).
+  - "Send my best friend a message" works without asking for details. Sable knows who that is and only asks *which way* ("Discord or email?"), and remembers your answer as a preference.
+  - Pets count.
+  - People pages are editable, and Sable never shares them outward.
+
 ## Where Sable is today
 
 - **Memories:** one table (`me`, `other`, `howto`) with embeddings stored as JSON. Search loads up to 2,000 rows and scores them in JavaScript. Fine for a few thousand facts, but **not** for files, pages and media.
