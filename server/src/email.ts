@@ -5,6 +5,10 @@ import { AGENT_PROXY } from './net.js';
 import { getSettings, type EmailAccount } from './settings.js';
 import { errorMessage, truncate } from './util.js';
 import { googleAccounts, googleToken } from './google.js';
+import { localMessage, localSearch, mailEnabled, mailSettings, markRead, onLocalMail, sendDomainMail, type MailRow } from './mail.js';
+
+/** A stored Sable-mail message in the shape the email tools and watchers use. */
+const localSummary = (m: MailRow): MailSummary => ({ uid: m.uid, from: m.from_name ? `${m.from_name} <${m.from_addr}>` : m.from_addr, fromAddress: m.from_addr, subject: m.subject ?? '(no subject)', date: new Date(m.date).toString(), unread: !m.read, snippet: m.snippet ?? undefined });
 
 /**
  * Email over IMAP (read, search, watch) and SMTP (send), with an app password. Works with personal
@@ -50,7 +54,11 @@ export function emailAccounts(): EmailAccount[] {
   const manual = (getSettings().email?.accounts ?? []).filter(
     (a) => a.enabled !== false && a.address && a.password && !linked.some((g) => g.address.toLowerCase() === a.address.toLowerCase()),
   );
-  const list = [...manual, ...linked];
+  // Sable's own addresses on your domain (Settings → Mail) are mailboxes too.
+  const own: EmailAccount[] = mailEnabled()
+    ? mailSettings().addresses.map((a): EmailAccount => ({ id: `sable:${a.address.toLowerCase()}`, name: a.purpose === 'agent' ? `${a.name || 'Sable'} (Sable mail)` : `${a.name || a.address} (your domain)`, address: a.address.toLowerCase(), provider: 'sable', password: '', enabled: true }))
+    : [];
+  const list = [...manual, ...linked, ...own];
   // Keep the user's chosen default even when its address moved over to Sign in with Google.
   const def = (getSettings().email?.accounts ?? []).find((a) => a.isDefault)?.address.toLowerCase();
   return def ? list.map((a) => ({ ...a, isDefault: a.address.toLowerCase() === def })) : list;
@@ -58,7 +66,7 @@ export function emailAccounts(): EmailAccount[] {
 
 /** "Gmail <me@gmail.com> (signed in with Google)": what the agent is told about a mailbox. */
 export function describeMailbox(a: EmailAccount) {
-  const how = a.provider === 'google' ? 'signed in with Google' : 'app password';
+  const how = a.provider === 'google' ? 'signed in with Google' : a.provider === 'sable' ? 'Sable\'s own mail on your domain' : 'app password';
   return `${a.name} <${a.address}> (${how}${a.isDefault ? ', default' : ''})`;
 }
 
@@ -135,6 +143,7 @@ async function textOf(source?: Buffer) {
 
 /** Search the inbox: newest first. */
 export async function searchMail(acc: EmailAccount, q: { from?: string; subject?: string; text?: string; sinceDays?: number; unread?: boolean; limit?: number }): Promise<MailSummary[]> {
+  if (acc.provider === 'sable') return localSearch(acc.address, q).map(localSummary);
   return withInbox(acc, async (c) => {
     const criteria: Record<string, unknown> = {};
     if (q.from) criteria.from = q.from;
@@ -151,6 +160,12 @@ export async function searchMail(acc: EmailAccount, q: { from?: string; subject?
 }
 
 export async function readMail(acc: EmailAccount, uid: number) {
+  if (acc.provider === 'sable') {
+    const m = localMessage(acc.address, uid);
+    if (!m) throw new Error('No message with that id in this mailbox.');
+    markRead(uid);
+    return { ...localSummary(m), to: m.to_addrs ?? '', text: truncate(m.text ?? '', 20_000) };
+  }
   return withInbox(acc, async (c) => {
     const m = await c.fetchOne(String(uid), { uid: true, envelope: true, source: true, flags: true }, { uid: true });
     if (!m) throw new Error(`No message with id ${uid}.`);
@@ -162,6 +177,7 @@ export async function readMail(acc: EmailAccount, uid: number) {
 
 /** Highest UID in the inbox right now (the baseline for "new" mail). */
 export async function latestUid(acc: EmailAccount): Promise<number> {
+  if (acc.provider === 'sable') return localSearch(acc.address, { sinceDays: 3650, limit: 1 })[0]?.uid ?? 0;
   return withInbox(acc, async (c) => {
     const mb = c.mailbox;
     return mb ? Math.max(0, Number(mb.uidNext) - 1) : 0;
@@ -170,6 +186,7 @@ export async function latestUid(acc: EmailAccount): Promise<number> {
 
 /** Messages that arrived after `afterUid`, with a short text snippet each. */
 export async function mailAfter(acc: EmailAccount, afterUid: number, max = 25): Promise<MailSummary[]> {
+  if (acc.provider === 'sable') return localSearch(acc.address, { sinceDays: 3650, limit: 500 }).filter((m) => m.uid > afterUid).slice(0, max).reverse().map(localSummary);
   return withInbox(acc, async (c) => {
     const out: MailSummary[] = [];
     for await (const m of c.fetch(`${afterUid + 1}:*`, { uid: true, envelope: true, flags: true, internalDate: true, source: { maxLength: 60_000 } }, { uid: true })) {
@@ -188,6 +205,10 @@ async function smtpAuth(acc: EmailAccount) {
 }
 
 export async function sendMail(acc: EmailAccount, msg: { to: string; cc?: string; subject: string; text: string }) {
+  if (acc.provider === 'sable') {
+    const split = (s?: string) => (s ?? '').split(',').map((x) => x.trim()).filter(Boolean);
+    return (await sendDomainMail({ from: acc.address, to: split(msg.to), cc: split(msg.cc), subject: msg.subject, text: msg.text })).message_id ?? '';
+  }
   const s = server(acc);
   const t = nodemailer.createTransport({
     host: s.smtp,
@@ -256,6 +277,9 @@ const listeners = new Map<string, { client: ImapFlow; stop: boolean }>();
 
 /** Keep a live connection for each account in `ids`; call `onNew(accountId)` when mail arrives. */
 export function syncMailListeners(ids: Set<string>, onNew: (accountId: string) => void) {
+  // Sable's own mailboxes need no connection: new mail is announced as it arrives.
+  onLocalMail((accId) => ids.has(accId) && onNew(accId));
+  ids = new Set([...ids].filter((x) => !x.startsWith('sable:')));
   for (const [id, l] of listeners) {
     if (!ids.has(id)) {
       l.stop = true;

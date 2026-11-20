@@ -590,6 +590,12 @@ export function createConversation(title = 'New chat', kind = 'chat') {
   return cid;
 }
 
+const runDoneHooks = new Set<(conversationId: string, answer: string) => void>();
+/** Called with every finished run's final answer (e.g. Sable mail replies by email). */
+export function onRunDone(f: (conversationId: string, answer: string) => void) {
+  runDoneHooks.add(f);
+}
+
 /**
  * Wake a chat with an event (a watcher firing, a webhook, a follow-up, a background job's result):
  * it joins the running task if there is one, otherwise starts a new turn in that same chat, so the
@@ -709,6 +715,13 @@ async function execute(runId: string, conversationId: string, controller: AbortC
       persist: true,
     });
     setRunStatus(runId, conversationId, 'done');
+    for (const f of runDoneHooks) {
+      try {
+        f(conversationId, answer);
+      } catch (err) {
+        console.error('[run hook]', errorMessage(err));
+      }
+    }
     // Background runs notify only when there's something to say (see automation.ts).
     if (source === 'schedule' ? shouldNotifyAfterRun(conversationId, runId, answer) : connectedClients() === 0) {
       const title = get<{ title: string }>('SELECT title FROM conversations WHERE id = ?', conversationId)?.title ?? 'Task';

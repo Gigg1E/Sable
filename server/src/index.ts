@@ -11,7 +11,10 @@ import './agent/tools/reminders.js';
 import './agent/tools/library.js';
 import './agent/tools/people.js';
 import './agent/tools/journal.js';
-import { startBrain } from './brain.js';
+import { askQuick, startBrain } from './brain.js';
+import { mailInboundRouter, setMailHelpers, summarizeProfiles } from './mail.js';
+import { startMailAgent } from './mailAgent.js';
+import { mainModelIsLocal, redactPersonal } from './library.js';
 import { sweepJobs } from './agent/subagents.js';
 import { startReminders } from './reminders.js';
 import { queueIndex } from './library.js';
@@ -73,6 +76,7 @@ app.use((req, res, next) => {
 });
 
 app.use('/hooks', hooksRouter());
+app.use('/mail-in', mailInboundRouter());
 app.use('/api', apiRouter());
 
 if (fs.existsSync(WEB_DIST)) {
@@ -85,7 +89,7 @@ if (fs.existsSync(WEB_DIST)) {
       },
     }),
   );
-  app.get(/^(?!\/(api|hooks)\/).*/, (_req, res) => res.sendFile(path.join(WEB_DIST, 'index.html')));
+  app.get(/^(?!\/(api|hooks|mail-in)\/).*/, (_req, res) => res.sendFile(path.join(WEB_DIST, 'index.html')));
 } else {
   app.get('/', (_req, res) => res.type('text').send('Sable API is running. Build the web app with `npm run build`, or use `npm run dev` for the dev server.'));
 }
@@ -109,6 +113,7 @@ if (PUBLIC_PORT) {
     next();
   });
   front.use('/hooks', hooksRouter());
+  front.use('/mail-in', mailInboundRouter());
   front.get('/robots.txt', (_req, res) => res.type('text').send('User-agent: *\nDisallow: /\n'));
   front.get('/', (_req, res) => res.type('html').send(page));
   // Everything else looks like nothing is here.
@@ -136,6 +141,9 @@ app.listen(PORT, HOST, () => {
   startReminders();
   queueIndex(); // embed anything added while the helper model was offline
   startBrain();
+  startMailAgent();
+  setMailHelpers(askQuick, { redact: redactPersonal, local: mainModelIsLocal });
+  setInterval(() => void summarizeProfiles(), 30 * 60_000).unref();
   sweepJobs();
   startWatchers();
   resumeShopLink();

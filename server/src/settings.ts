@@ -63,11 +63,37 @@ export interface Channel {
 }
 
 /** A mailbox reached over IMAP/SMTP with an app password. */
+export interface MailAddress {
+  address: string;
+  name: string;
+  /** agent: mail here is instructions for Sable (only from your allowlist). personal: a mailbox for you. */
+  purpose: 'agent' | 'personal';
+}
+export interface MailSettings {
+  enabled: boolean;
+  domain: string;
+  addresses: MailAddress[];
+  /** Shared secret the Cloudflare Email Worker sends with each message. */
+  inboundSecret: string;
+  /** Which receiver's Authentication-Results header to trust (Cloudflare: mx.cloudflare.net). */
+  authservId: string;
+  /** Your own addresses (work, school, personal): the only senders the agent mailbox acts on. */
+  allowlist: string[];
+  /** Outgoing relay (SMTP submission): Resend, SES, SMTP2GO, Postmark… */
+  relay: { host: string; port: number; secure: boolean; user: string; pass: string };
+  /** DKIM selector your relay publishes, for the DNS check (e.g. "resend"). */
+  dkimSelector: string;
+  /** Where the Worker forwards mail when Sable can't be reached (shown in the setup guide). */
+  backupForward: string;
+  sendPerHour: number;
+  sendPerDay: number;
+}
+
 export interface EmailAccount {
   id: string;
   name: string;
   address: string;
-  provider: 'gmail' | 'icloud' | 'yahoo' | 'outlook' | 'custom' | 'google';
+  provider: 'gmail' | 'icloud' | 'yahoo' | 'outlook' | 'custom' | 'google' | 'sable';
   /** Login name if it isn't the address. */
   user?: string;
   /** App password (secret). */
@@ -110,6 +136,8 @@ export interface Settings {
   email: { accounts: EmailAccount[] };
   /** The user's own Google OAuth client, for "Sign in with Google" (Gmail + Calendar). */
   google: { clientId: string; clientSecret: string };
+  /** Sable's own mail on your domain (docs/mail.md). */
+  mail: MailSettings;
   /** Small local model that picks relevant tools and memories (installed in Ollama automatically). */
   helpers: { enabled: boolean; embedModel: string };
   /** Public base URL of this Sable server, used to build inbound webhook URLs. */
@@ -189,6 +217,7 @@ export function defaultSettings(): Settings {
     email: { accounts: [] },
     helpers: { enabled: true, embedModel: 'embeddinggemma' },
     google: { clientId: '', clientSecret: '' },
+    mail: { enabled: false, domain: '', addresses: [], inboundSecret: '', authservId: 'mx.cloudflare.net', allowlist: [], relay: { host: '', port: 587, secure: false, user: '', pass: '' }, dkimSelector: '', backupForward: '', sendPerHour: 20, sendPerDay: 60 },
     publicUrl: env.SABLE_PUBLIC_URL ?? '',
     shopping: { enabled: true, purchases: false, maxOrder: 200, country: 'US', currency: 'USD' },
   };
@@ -207,7 +236,7 @@ export function getSettings(): Settings {
 
 function merge(defaults: Settings, stored: Partial<Settings>): Settings {
   const out = { ...defaults, ...stored } as Settings;
-  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping', 'email', 'helpers', 'google'] as const) {
+  for (const key of ['persona', 'main', 'web', 'scripts', 'anthropic', 'shopping', 'email', 'helpers', 'google', 'mail'] as const) {
     (out as any)[key] = { ...(defaults as any)[key], ...((stored as any)[key] ?? {}) };
   }
   return out;
@@ -245,6 +274,8 @@ export function publicSettings(): Settings {
   }
   if (s.shopping?.clientSecret) s.shopping.clientSecret = MASK;
   if (s.google?.clientSecret) s.google.clientSecret = MASK;
+  if (s.mail?.relay?.pass) s.mail.relay.pass = MASK;
+  if (s.mail?.inboundSecret) s.mail.inboundSecret = MASK;
   return s;
 }
 
@@ -256,6 +287,8 @@ export function updateSettings(next: Settings): Settings {
   }
   if (next.shopping?.clientSecret === MASK) next.shopping.clientSecret = prev.shopping.clientSecret ?? '';
   if (next.google?.clientSecret === MASK) next.google.clientSecret = prev.google?.clientSecret ?? '';
+  if (next.mail?.relay?.pass === MASK) next.mail.relay.pass = prev.mail?.relay?.pass ?? '';
+  if (next.mail?.inboundSecret === MASK) next.mail.inboundSecret = prev.mail?.inboundSecret ?? '';
   for (const c of next.channels ?? []) {
     const old = prev.channels.find((x) => x.id === c.id);
     if (c.token === MASK) c.token = old?.token ?? '';

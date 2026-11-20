@@ -102,6 +102,11 @@ let quick: ((system: string, prompt: string, signal?: AbortSignal) => Promise<st
 export function setQuickAnswer(f: typeof quick) {
   quick = f;
 }
+/** The main model, one-shot (for small jobs like mail profiles). */
+export const askQuick = (system: string, prompt: string, signal?: AbortSignal) => {
+  if (!quick) throw new Error('model not ready');
+  return quick(system, prompt, signal);
+};
 
 const summarizing = new Set<string>();
 

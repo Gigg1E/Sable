@@ -82,6 +82,19 @@ CREATE TABLE IF NOT EXISTS journal (
   status TEXT NOT NULL DEFAULT 'open', conversation_id TEXT, closed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS journal_day ON journal(day);
+CREATE TABLE IF NOT EXISTS mail_messages (
+  uid INTEGER PRIMARY KEY AUTOINCREMENT, mailbox TEXT NOT NULL, folder TEXT NOT NULL, message_id TEXT, in_reply_to TEXT, refs TEXT,
+  thread_id TEXT NOT NULL, from_addr TEXT NOT NULL, from_name TEXT, to_addrs TEXT, cc_addrs TEXT, subject TEXT, date INTEGER NOT NULL,
+  text TEXT, html TEXT, snippet TEXT, auth TEXT, verdict TEXT, attachments TEXT, read INTEGER NOT NULL DEFAULT 0,
+  answered INTEGER NOT NULL DEFAULT 0, conversation_id TEXT, created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS mail_box ON mail_messages(mailbox, folder, uid);
+CREATE INDEX IF NOT EXISTS mail_thread ON mail_messages(thread_id);
+CREATE INDEX IF NOT EXISTS mail_msgid ON mail_messages(message_id);
+CREATE TABLE IF NOT EXISTS mail_profiles (
+  address TEXT PRIMARY KEY, name TEXT, category TEXT, count_in INTEGER NOT NULL DEFAULT 0, count_out INTEGER NOT NULL DEFAULT 0,
+  replied INTEGER NOT NULL DEFAULT 0, first_seen INTEGER NOT NULL, last_seen INTEGER NOT NULL, summary TEXT, summary_at INTEGER, topics TEXT
+);
 CREATE TABLE IF NOT EXISTS reminders (
   id TEXT PRIMARY KEY, text TEXT NOT NULL, note TEXT, due_at INTEGER NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL
 );

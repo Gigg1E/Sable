@@ -15,6 +15,7 @@ import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unl
 import { cancelJob, continueJob, getJob, listJobs } from './agent/subagents.js';
 import { isFrozen, setFrozen, verifyActivity } from './safety.js';
 import { deletePerson, listPeople, savePerson } from './people.js';
+import { checkDns, deleteMail, listMail, listProfiles, mailEnabled, markRead, profileLine, rotateInboundSecret, sendDomainMail, setMailFolder, setProfileCategory, type MailRow } from './mail.js';
 import { isMain, journalAdd, journalClose, journalDelete, journalRecent, mainConversationId, openLoops } from './brain.js';
 import { addItem, forgetItem, getItem, libraryStats, libSnippet, listItems, search, setPrivacy } from './library.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
@@ -90,6 +91,11 @@ function appOrigin(req: Request) {
     }
   }
   return `${req.protocol}://${req.host}`;
+}
+
+/** Unread inbox and held counts for the Mail page tabs. */
+function mailCounts() {
+  return get<{ inbox: number; held: number }>("SELECT sum(folder = 'inbox' AND read = 0) inbox, sum(folder = 'held') held FROM mail_messages") ?? { inbox: 0, held: 0 };
 }
 
 export function apiRouter() {
@@ -684,6 +690,50 @@ export function apiRouter() {
   );
   r.patch('/journal/:id', h((req) => ({ ok: journalClose(param(req, 'id'), req.body?.done !== false) })));
   r.delete('/journal/:id', h((req) => ({ ok: journalDelete(param(req, 'id')) })));
+
+  // ── Sable mail (your domain) ──
+  r.get('/mail', h((req) => ({ messages: listMail(String(req.query.folder ?? 'inbox'), 80, Number(req.query.before) || undefined), enabled: mailEnabled(), counts: mailCounts() })));
+  r.get(
+    '/mail/message/:uid',
+    h((req) => {
+      const m = get<MailRow>('SELECT * FROM mail_messages WHERE uid = ?', Number(param(req, 'uid')));
+      if (!m) throw new HttpError(404, 'That message is gone.');
+      markRead(m.uid);
+      return { ...m, auth: parseJson(m.auth, null), attachments: parseJson(m.attachments, []), profile: profileLine(m.from_addr) };
+    }),
+  );
+  r.post(
+    '/mail/message/:uid/move',
+    h((req) => {
+      const folder = String(req.body?.folder);
+      if (!['inbox', 'held', 'archive'].includes(folder)) throw new HttpError(400, 'Unknown folder');
+      const m = get<MailRow>('SELECT * FROM mail_messages WHERE uid = ?', Number(param(req, 'uid')));
+      if (!m) throw new HttpError(404, 'That message is gone.');
+      setMailFolder(m.uid, folder as MailRow['folder']);
+      // "Trust this sender": releasing from Held can add them to the allowlist.
+      if (req.body?.trust) {
+        const st = structuredClone(getSettings());
+        if (!st.mail.allowlist.map((x) => x.toLowerCase()).includes(m.from_addr)) st.mail.allowlist.push(m.from_addr);
+        updateSettings(st);
+      }
+      return { ok: true };
+    }),
+  );
+  r.delete('/mail/message/:uid', h((req) => void deleteMail(Number(param(req, 'uid')))));
+  r.get('/mail/profiles', h(() => listProfiles()));
+  r.patch('/mail/profiles/:addr', h((req) => void setProfileCategory(param(req, 'addr'), String(req.body?.category ?? 'other'))));
+  r.get('/mail/dns', h(() => checkDns()));
+  r.post('/mail/secret', h(() => ({ secret: rotateInboundSecret() })));
+  r.get('/mail/secret', h(() => ({ secret: getSettings().mail.inboundSecret })));
+  r.post(
+    '/mail/test-send',
+    h(async () => {
+      const to = getSettings().mail.allowlist.find((a) => a.includes('@') && !a.startsWith('@'));
+      if (!to) throw new HttpError(400, 'Add one of your own addresses to the allowlist first; the test goes there.');
+      await sendDomainMail({ to: [to], subject: 'Sable mail test', text: `This is a test from Sable's mail on ${getSettings().mail.domain}. Reply to it to try talking to Sable by email.` });
+      return { to };
+    }),
+  );
 
   // ── People ──
   r.get('/people', h(() => listPeople()));
