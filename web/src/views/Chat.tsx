@@ -117,7 +117,7 @@ export function ChatHome() {
                 <button key={c.id} onClick={() => navigate(`/chat/${c.id}`)} className="flex w-full items-center gap-3 px-3.5 py-2.5 text-left hover:bg-panel-2/60">
                   <StatusDot state={runs[c.id]?.status === 'waiting' ? 'waiting' : 'running'} />
                   <span className="min-w-0 flex-1 truncate text-[13.5px]">{c.title}</span>
-                  <span className="font-mono text-[11px] text-fg-3">{runs[c.id]?.status === 'waiting' ? 'awaiting approval' : 'running'}</span>
+                  <span className="text-[11.5px] tabular-nums text-fg-3">{runs[c.id]?.status === 'waiting' ? 'awaiting approval' : 'running'}</span>
                 </button>
               ))}
               {active.map((g) => {
@@ -171,7 +171,7 @@ export function ChatHome() {
                       <div className="truncate text-[13.5px]">{c.title.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')}</div>
                       {c.preview && <div className="mt-0.5 truncate text-[12.5px] text-fg-3">{c.preview.replace(/[#*_`>]/g, '')}</div>}
                     </div>
-                    <span className="shrink-0 font-mono text-[11px] text-fg-3">{timeAgo(c.updated_at)}</span>
+                    <span className="shrink-0 text-[11.5px] tabular-nums text-fg-3">{timeAgo(c.updated_at)}</span>
                     <ChevronRight className="size-3.5 text-fg-3 opacity-0 transition-opacity group-hover:opacity-100" />
                   </button>
                 ))}
@@ -186,7 +186,7 @@ export function ChatHome() {
               <div className="space-y-px">
                 {upcoming.map((s) => (
                   <div key={s.id} className="flex items-baseline gap-2 py-1.5">
-                    <span className="w-[86px] shrink-0 font-mono text-[11px] text-fg-3">{clockTime(s.next_run!).replace(/^\w+, /, '')}</span>
+                    <span className="w-[86px] shrink-0 text-[11.5px] tabular-nums text-fg-3">{clockTime(s.next_run!).replace(/^\w+, /, '')}</span>
                     <span className="truncate text-[13px] text-fg-2">{s.title}</span>
                   </div>
                 ))}
@@ -229,7 +229,7 @@ function TurnHeader({ who, time, agent }: { who: string; time?: number; agent?: 
     <div className="mb-1.5 flex items-center gap-2">
       {agent ? <Logo size={18} /> : <span className="flex size-[18px] items-center justify-center rounded-full bg-panel-3 text-[10px] font-semibold text-fg-2">Y</span>}
       <span className="text-[13px] font-medium">{who}</span>
-      {time && <span className="font-mono text-[11px] text-fg-3">{new Date(time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>}
+      {time && <span className="text-[11.5px] tabular-nums text-fg-3">{new Date(time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>}
     </div>
   );
 }
@@ -474,7 +474,7 @@ export function ChatView({ id }: { id: string }) {
                               <FileGlyph name={a.name ?? 'file'} />
                               <span className="min-w-0">
                                 <span className="block truncate text-[13px] font-medium">{a.name}</span>
-                                <span className="block font-mono text-[11px] text-fg-3">{fmtBytes(a.size ?? 0)}</span>
+                                <span className="block text-[11.5px] tabular-nums text-fg-3">{fmtBytes(a.size ?? 0)}</span>
                               </span>
                             </a>
                           ) : (
@@ -552,7 +552,7 @@ export function ChatView({ id }: { id: string }) {
                   </div>
                   {queue.map((q, i) => (
                     <motion.div key={q.id} layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="group flex items-center gap-2 px-3 py-1.5 text-[13px]">
-                      <span className="w-4 shrink-0 font-mono text-[11px] text-fg-3">{i + 1}</span>
+                      <span className="w-4 shrink-0 text-[11.5px] tabular-nums text-fg-3">{i + 1}</span>
                       <span className="min-w-0 flex-1 truncate text-fg-2">{q.text || `${q.attachments.length} attachment${q.attachments.length === 1 ? '' : 's'}`}</span>
                       {running && q.text && !q.attachments.length && (
                         <button onClick={() => (queueRemove(id, q.id), void interjectNow(q.text))} className="shrink-0 rounded px-1.5 py-0.5 text-[11.5px] text-fg-3 opacity-100 transition-opacity hover:bg-panel-2 hover:text-fg sm:opacity-0 sm:group-hover:opacity-100">

@@ -1,4 +1,5 @@
 import { redact } from './safety.js';
+import { plainText } from './util.js';
 import * as webpush from 'web-push';
 import { all, kvGet, kvSet, run } from './db.js';
 import { getSettings, type Channel } from './settings.js';
@@ -44,7 +45,7 @@ export interface NotifyInput {
 
 /** Store an in-app notification, broadcast it live, and send a web push to every subscribed device. */
 export async function notify(input: NotifyInput) {
-  input = { ...input, title: redact(input.title), body: input.body ? redact(input.body) : input.body };
+  input = { ...input, title: plainText(redact(input.title)), body: input.body ? plainText(redact(input.body)) : input.body };
   const note = { id: id('n_'), title: input.title, body: input.body ?? '', link: input.link ?? '/', kind: input.kind ?? 'agent', read: 0, created_at: now() };
   run('INSERT INTO notifications (id, title, body, link, kind, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)', note.id, note.title, note.body, note.link, note.kind, note.created_at);
   emit({ type: 'notification', notification: note });

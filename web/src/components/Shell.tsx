@@ -6,6 +6,7 @@ import {
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
 import { api } from '../lib/api';
+import { dur, ease } from '../lib/motion';
 import { FreezeButton, FrozenBanner } from './Safety';
 import { cx } from '../lib/format';
 import { navigate, usePath } from '../lib/router';
@@ -235,7 +236,7 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 items-center gap-2.5 px-3">
-        <Logo size={22} live={anyRunning} />
+        <Logo size={22} live={anyRunning} target />
         <span className="flex-1 truncate text-[14px] font-semibold tracking-[-0.01em]">{name}</span>
         {onCollapse && (
           <IconButton label="Hide sidebar" kbd="Ctrl \\" side="bottom" onClick={onCollapse}>
@@ -332,7 +333,7 @@ function StatusBar() {
   }, []);
   const provider = settings?.providers.find((p) => p.id === settings.main.providerId);
   return (
-    <div className="hidden h-7 shrink-0 items-center gap-4 border-t border-side-line bg-side px-4 font-mono text-[11px] text-fg-3 md:flex">
+    <div className="hidden h-7 shrink-0 items-center gap-4 border-t border-side-line bg-side px-4 text-[11.5px] tabular-nums text-fg-3 md:flex">
       <span className="flex items-center gap-1.5">
         <StatusDot state={connected ? 'ok' : 'waiting'} className="scale-75" />
         {connected ? 'connected' : 'reconnecting'}
@@ -495,7 +496,13 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
           <FrozenBanner />
           <main className="relative min-h-0 flex-1">
             <AnimatePresence mode="popLayout" initial={false}>
-              <motion.div key={routeKey} className="absolute inset-0 flex flex-col" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
+              <motion.div
+                key={routeKey}
+                className="absolute inset-0 flex flex-col"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0, transition: { duration: dur.base, ease: ease.out } }}
+                exit={{ opacity: 0, transition: { duration: dur.quick, ease: ease.in } }}
+              >
                 {children}
               </motion.div>
             </AnimatePresence>

@@ -66,7 +66,7 @@ export function SpacesList() {
                   <div className="p-3.5">
                     <div className="truncate text-[13.5px] font-medium">{s.title}</div>
                     <div className="mt-0.5 line-clamp-2 min-h-[2.6em] text-[12.5px] leading-snug text-fg-3">{s.description || 'No description'}</div>
-                    <div className="mt-2.5 font-mono text-[11px] text-fg-3">updated {timeAgo(s.updated_at)}</div>
+                    <div className="mt-2.5 text-[11.5px] tabular-nums text-fg-3">updated {timeAgo(s.updated_at)}</div>
                   </div>
                 </motion.button>
               ))}

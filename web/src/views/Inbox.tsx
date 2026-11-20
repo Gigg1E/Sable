@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { AlarmClock, Bell, CalendarClock, CheckCheck, Inbox as InboxIcon, MessageSquare, ShieldAlert, Trash2 } from 'lucide-react';
+import { CheckCheck, Inbox as InboxIcon, Trash2 } from 'lucide-react';
+import { Signature } from '../components/Signature';
 import { useCallback, useEffect, useState } from 'react';
 import { ApprovalCard } from '../components/ApprovalCard';
 import { Button, Card, Empty, Page, PageIntro, SectionLabel, TopBar, listItem } from '../components/ui';
@@ -9,7 +10,6 @@ import { navigate } from '../lib/router';
 import { onServerEvent, useStore } from '../lib/store';
 import type { Notification } from '../lib/types';
 
-const KIND_ICON = { approval: ShieldAlert, schedule: CalendarClock, run: MessageSquare, reminder: AlarmClock } as Record<string, typeof Bell>;
 
 export function InboxView() {
   const approvals = useStore((s) => s.approvals);
@@ -70,18 +70,17 @@ export function InboxView() {
           <Card className="overflow-hidden">
             <AnimatePresence initial={false}>
               {notes.map((n) => {
-                const Icon = KIND_ICON[n.kind] ?? Bell;
                 return (
                   <motion.button key={n.id} layout {...listItem} onClick={() => navigate(n.link || '/')} className="flex w-full items-start gap-3 border-b border-line px-4 py-3 text-left last:border-0 hover:bg-panel-2/50">
-                    <span className="relative mt-0.5">
-                      <Icon className="size-4 text-fg-3" />
-                      {!n.read && <span className="absolute -left-2.5 top-1 size-1.5 rounded-full bg-accent" />}
+                    <span className="relative">
+                      <Signature kind={n.kind} size={30} play={!n.read} />
+                      {!n.read && <span className="absolute -left-2 top-3 size-1.5 rounded-full bg-accent" />}
                     </span>
                     <div className="min-w-0 flex-1">
                       <div className={cx('text-[13.5px]', !n.read ? 'font-medium' : 'text-fg-2')}>{n.title}</div>
                       {n.body && <div className="mt-0.5 line-clamp-2 text-[12.5px] text-fg-3">{n.body}</div>}
                     </div>
-                    <span className="shrink-0 font-mono text-[11px] text-fg-3">{timeAgo(n.created_at)}</span>
+                    <span className="shrink-0 text-[11.5px] tabular-nums text-fg-3">{timeAgo(n.created_at)}</span>
                   </motion.button>
                 );
               })}

@@ -7,6 +7,7 @@ import { navigate } from '../lib/router';
 import { onServerEvent, useStore } from '../lib/store';
 import type { Reminder, ReminderCardData } from '../lib/types';
 import { toLocalInput, untilText, whenText } from '../lib/when';
+import { Signature } from './Signature';
 import { Button, Card, Field, IconButton, Input, SectionLabel, Sheet, listItem } from './ui';
 
 /** Re-render every 30 s so "in 5 min" stays true. */
@@ -38,9 +39,11 @@ export function ReminderCard({ card }: { card: ReminderCardData }) {
   const state = !list ? 'loading' : live ? 'set' : due <= Date.now() + 15_000 ? 'done' : 'cancelled';
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="my-2.5 flex max-w-md items-center gap-3 rounded-xl border border-line bg-panel px-3.5 py-3">
-      <span className={cx('flex size-9 shrink-0 items-center justify-center rounded-lg', state === 'set' || state === 'loading' ? 'bg-accent/15 text-accent' : 'bg-panel-2 text-fg-3')}>
-        {state === 'done' ? <Check className="size-4" /> : <AlarmClock className="size-4" />}
-      </span>
+      {state === 'done' || state === 'cancelled' ? (
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-[9px] bg-panel-2 text-fg-3">{state === 'done' ? <Check className="size-4" /> : <AlarmClock className="size-4" />}</span>
+      ) : (
+        <Signature kind="reminder" size={36} />
+      )}
       <div className="min-w-0 flex-1">
         <div className={cx('truncate text-[13.5px] font-medium', state === 'cancelled' && 'text-fg-3 line-through')}>{live?.text ?? card.text}</div>
         <div className="truncate text-[12px] text-fg-3">
@@ -147,14 +150,14 @@ export function RemindersSection() {
           <AnimatePresence initial={false}>
             {(list ?? []).map((r) => (
               <motion.div key={r.id} layout {...listItem} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0">
-                <AlarmClock className="size-4 shrink-0 text-accent" />
+                <Signature kind="reminder" size={28} play={false} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13.5px] font-medium">{r.text}</div>
                   {r.note && <div className="truncate text-[12.5px] text-fg-3">{r.note}</div>}
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-[12.5px] text-fg-2">{whenText(r.due_at)}</div>
-                  <div className="font-mono text-[11px] text-fg-3">{untilText(r.due_at)}</div>
+                  <div className="text-[11.5px] tabular-nums text-fg-3">{untilText(r.due_at)}</div>
                 </div>
                 <div className="flex shrink-0 items-center gap-0.5">
                   {r.conversation_id && (

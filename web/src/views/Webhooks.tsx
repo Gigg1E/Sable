@@ -79,7 +79,7 @@ function HookRow({ h }: { h: Hook }) {
         )}
         <div className="w-28 shrink-0 text-right">
           <div className="font-mono text-[12.5px] tabular">{h.count} calls</div>
-          <div className="font-mono text-[10.5px] text-fg-3">{h.last_received ? timeAgo(h.last_received) : 'never'}</div>
+          <div className="text-[11px] tabular-nums text-fg-3">{h.last_received ? timeAgo(h.last_received) : 'never'}</div>
         </div>
         <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-fg-3">
           <ChevronRight className="size-3.5" />

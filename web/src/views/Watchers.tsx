@@ -66,7 +66,7 @@ function WatcherRow({ w }: { w: Watcher }) {
         <Sparkline points={w.spark} width={96} height={28} className="hidden shrink-0 sm:block" />
         <div className="w-28 shrink-0 text-right">
           <div className={cx('truncate font-mono text-[13px] tabular', w.last_error ? 'text-danger' : 'text-fg')}>{w.last_error ? 'error' : isText ? (w.last_value ? 'tracking' : '—') : (w.last_value ?? '—')}</div>
-          <div className="font-mono text-[10.5px] text-fg-3">{w.last_checked ? `checked ${timeAgo(w.last_checked)}` : 'pending'}</div>
+          <div className="text-[11px] tabular-nums text-fg-3">{w.last_checked ? `checked ${timeAgo(w.last_checked)}` : 'pending'}</div>
         </div>
         <motion.span animate={{ rotate: open ? 90 : 0 }} transition={{ duration: 0.15 }} className="text-fg-3">
           <ChevronRight className="size-3.5" />

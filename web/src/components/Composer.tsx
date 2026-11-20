@@ -190,7 +190,7 @@ export const Composer = forwardRef<
                         <FileGlyph name={f.name} />
                         <div className="min-w-0">
                           <div className="truncate text-[12.5px] font-medium">{f.name}</div>
-                          <div className="font-mono text-[11px] text-fg-3">{fmtBytes(f.size)}</div>
+                          <div className="text-[11.5px] tabular-nums text-fg-3">{fmtBytes(f.size)}</div>
                         </div>
                       </div>
                     )}

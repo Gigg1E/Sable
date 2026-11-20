@@ -59,7 +59,7 @@ function GoalRow({ goal }: { goal: Goal }) {
         <span className="w-10 text-right font-mono text-[11px] text-fg-3 tabular">
           {done}/{goal.steps.length}
         </span>
-        <span className="hidden w-16 text-right font-mono text-[11px] text-fg-3 md:block">{timeAgo(goal.updated_at)}</span>
+        <span className="hidden w-16 text-right text-[11.5px] tabular-nums text-fg-3 md:block">{timeAgo(goal.updated_at)}</span>
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -309,7 +309,7 @@ export function RoutinesView() {
                       {s.autonomy === 'auto' ? 'Runs on its own' : 'Asks first'}
                     </button>
                   </Tip>
-                  <span className="w-36 font-mono text-[11.5px] text-fg-3">{s.enabled && s.next_run ? clockTime(s.next_run) : 'paused'}</span>
+                  <span className="w-36 text-[12px] tabular-nums text-fg-3">{s.enabled && s.next_run ? clockTime(s.next_run) : 'paused'}</span>
                   <div className="ml-auto flex w-[132px] items-center justify-end gap-0.5">
                     <IconButton label="Run now" onClick={() => void api.post<{ runId: string | null }>(`/schedules/${s.id}/run`).then(() => load())}>
                       <Play className="size-3.5" />

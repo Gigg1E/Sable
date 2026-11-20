@@ -3,6 +3,7 @@ import { MotionConfig } from 'motion/react';
 import { useEffect } from 'react';
 import { Logo } from './components/Logo';
 import { Shell } from './components/Shell';
+import { Intro } from './components/Intro';
 import { match, navigate, usePath } from './lib/router';
 import { connectEvents, disconnectEvents, useStore } from './lib/store';
 import { ActivityView } from './views/Activity';
@@ -71,6 +72,7 @@ export function App() {
       )}
       {(auth === 'setup' || auth === 'login') && <AuthScreen mode={auth} />}
       {auth === 'ready' && <Shell routeKey={route.key}>{route.el}</Shell>}
+      <Intro />
       </Tooltip.Provider>
     </MotionConfig>
   );

@@ -49,6 +49,30 @@ Shown when you open the app or site, at most once per session, and **under ~1.2 
 
 It's skippable by tapping, and skipped automatically on fast reloads and with reduce motion. Built with SVG stroke animation and shared-layout transitions (Motion), with no video files.
 
+**Built (Phase 0.3):** `web/src/components/Intro.tsx`.
+- Plays once per browser session.
+- Any click or key skips it, and it never plays with reduce motion.
+- The lockup is drawn at exactly 2× the sidebar header, so it lands at a clean 0.5× scale.
+- On phones, where the sidebar is hidden, it fades out instead of flying.
+- An inline page background in `index.html` stops a black flash before the styles load.
+
+## Motion tokens
+
+`web/src/lib/motion.ts`:
+
+| Token | Value | Use |
+|---|---|---|
+| `ease.out` | `[0.2, 0.8, 0.2, 1]` | Most UI |
+| `ease.in` | `[0.4, 0, 1, 1]` | Things leaving |
+| `dur.quick` | 0.12 s | Hover, press, small state changes |
+| `dur.base` | 0.18 s | Pages, cards, panels |
+| `dur.slow` | 0.32 s | Bigger moments: opening a panel, the intro |
+| `spring` | stiff, almost no bounce | Layout and position changes |
+| `stagger` | 0.03 s | Between list items |
+
+- Page changes rise 6 px and fade in.
+- Timestamps and counters use the main font with tabular numbers, not monospace. Monospace is for code only.
+
 ## Visual signatures
 
 Every kind of event has a signature that's the same everywhere: chat card, notification, Inbox, Live Update. The full table is in [core concepts §4](core-concepts.md#4-notifications-you-understand-before-reading). The rules:
@@ -56,6 +80,7 @@ Every kind of event has a signature that's the same everywhere: chat card, notif
 - **Icon plus one color per kind.** Use the theme's tokens, so it reads correctly in dark and light.
 - **A small picture beats a sentence:** a map pin, a progress track, a clock face, a snapshot.
 - **One tiny motion per signature:** the pin drops, the track fills, the clock hand ticks once.
+- **Built:** `web/src/components/Signature.tsx` (approval, reminder, routine, watcher, webhook, agent, task, system). Used in the Inbox and on reminder cards. New kinds get added there first.
 
 ## Craft details
 

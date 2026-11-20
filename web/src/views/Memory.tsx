@@ -37,7 +37,7 @@ function MemoryRow({ m }: { m: Memory }) {
             {m.kind === 'other' ? 'people & things' : m.kind === 'howto' ? 'how-to' : 'about you'}
           </button>
           <Badge tone="outline">{m.source === 'you' ? 'you' : 'learned'}</Badge>
-          <span className="hidden w-16 text-right font-mono text-[11px] text-fg-3 sm:block">{timeAgo(m.updated_at)}</span>
+          <span className="hidden w-16 text-right text-[11.5px] tabular-nums text-fg-3 sm:block">{timeAgo(m.updated_at)}</span>
           <div className="flex transition-opacity md:opacity-0 md:group-hover:opacity-100">
             <IconButton label="Edit" onClick={() => setEditing(true)}>
               <Pencil className="size-3.5" />

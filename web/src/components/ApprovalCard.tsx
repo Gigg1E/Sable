@@ -205,7 +205,7 @@ export function ApprovalCard({ approval, compact, context }: { approval: Approva
         <span className="text-fg-2">{approval.agent}</span>
         <span className="flex-1" />
         {approval.risk === 'high' && <Badge tone="danger">high impact</Badge>}
-        <span className="font-mono text-[11px] text-fg-3">{timeAgo(approval.created_at)}</span>
+        <span className="text-[11.5px] tabular-nums text-fg-3">{timeAgo(approval.created_at)}</span>
       </div>
       <div className="p-3.5">
         <div className="flex items-start gap-3">
