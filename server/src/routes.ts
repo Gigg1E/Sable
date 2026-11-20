@@ -15,7 +15,7 @@ import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unl
 import { cancelJob, continueJob, getJob, listJobs } from './agent/subagents.js';
 import { isFrozen, setFrozen, verifyActivity } from './safety.js';
 import { deletePerson, listPeople, savePerson } from './people.js';
-import { journalAdd, journalClose, journalDelete, journalRecent, mainConversationId, openLoops } from './brain.js';
+import { isMain, journalAdd, journalClose, journalDelete, journalRecent, mainConversationId, openLoops } from './brain.js';
 import { addItem, forgetItem, getItem, libraryStats, libSnippet, listItems, search, setPrivacy } from './library.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
@@ -365,6 +365,7 @@ export function apiRouter() {
     '/conversations/:id',
     h((req) => {
       const cid = param(req, 'id');
+      if (isMain(cid)) throw new HttpError(400, "Main is permanent, so it can't be deleted.");
       const act = activeRunFor(cid);
       if (act) cancelRun(act.runId);
       run('DELETE FROM conversations WHERE id = ?', cid);

@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { AlertTriangle, ArrowDown, ArrowRight, CalendarClock, ChevronRight, LayoutGrid, ListChecks, Plane, PanelRightClose, PanelRightOpen, Search, Square, X } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowRight, CalendarClock, ChevronRight, LayoutGrid, ListChecks, Plane, PanelRightClose, PanelRightOpen, Search, Square, X, Sparkle } from 'lucide-react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { ApprovalCard } from '../components/ApprovalCard';
@@ -18,7 +18,6 @@ import { usePanel } from '../lib/panel';
 import { SidePanel, usePanelAutoOpen } from '../components/SidePanel';
 import type { AnyCard, Goal, Job, Message, Schedule, Watcher } from '../lib/types';
 import { SubagentView } from '../components/SubagentCard';
-import { useMainId } from '../lib/main';
 import { Signature } from '../components/Signature';
 import { Sparkline } from '../components/Sparkline';
 import { ImageViewer } from '../components/ImageViewer';
@@ -35,18 +34,41 @@ export async function startChat(text: string, attachments: string[] = []) {
   }
 }
 
-// ───────────────────────── Home: the main chat ─────────────────────────
-
-/** Home is the main chat. Until it has its first message, it shows the welcome screen. */
-export function MainChat() {
-  const id = useMainId();
-  const messages = useStore((s) => (id ? s.messages[id] : undefined));
-  const loadConversation = useStore((s) => s.loadConversation);
+/** Home's quick way into Main: its latest message and how many open loops it's holding. */
+function MainCard() {
+  const main = useStore((s) => s.conversations.find((c) => c.kind === 'main'));
+  const running = useStore((s) => (main ? !!s.runs[main.id] : false));
+  const [loops, setLoops] = useState<number | null>(null);
   useEffect(() => {
-    if (id) void loadConversation(id).catch(() => {});
-  }, [id, loadConversation]);
-  if (!id || !messages) return null;
-  return messages.length ? <ChatView id={id} /> : <ChatHome into={id} />;
+    const load = () => void api.get<{ open: unknown[] }>('/journal').then((r) => setLoops(r.open.length)).catch(() => {});
+    load();
+    return onServerEvent((ev) => ev.type === 'journal.changed' && load());
+  }, []);
+  if (!main) return null;
+  const preview = (main as { preview?: string | null }).preview?.replace(/^\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim();
+  return (
+    <motion.button
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }}
+      onClick={() => navigate(`/chat/${main.id}`)}
+      className="group mt-8 flex w-full items-center gap-3.5 rounded-xl border border-line bg-panel px-4 py-3.5 text-left shadow-1 transition-colors hover:border-line-strong"
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] bg-accent-soft text-accent">
+        {running ? <StatusDot state="running" /> : <Sparkle className="size-4" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[14px] font-semibold">Main</span>
+        <span className="block truncate text-[12.5px] text-fg-3">{preview || 'Your permanent chat with Sable: the big picture, the journal and open loops.'}</span>
+      </span>
+      {loops ? (
+        <span className="hidden shrink-0 items-center gap-1.5 rounded-md border border-accent/30 bg-accent-soft px-2 py-1 text-[12px] text-accent sm:inline-flex">
+          {loops} open loop{loops === 1 ? '' : 's'}
+        </span>
+      ) : null}
+      <ArrowRight className="size-4 shrink-0 text-fg-3 transition-transform group-hover:translate-x-0.5 group-hover:text-fg" />
+    </motion.button>
+  );
 }
 
 // ───────────────────────── Home ─────────────────────────
@@ -102,6 +124,8 @@ export function ChatHome({ into }: { into?: string } = {}) {
             ))}
           </div>
         </motion.div>
+
+        <MainCard />
 
         <AnimatePresence>
           {approvals.length > 0 && (
@@ -433,7 +457,7 @@ export function ChatView({ id }: { id: string }) {
   return (
     <>
       <TopBar
-        title={conversation?.kind === 'main' ? 'Home' : (conversation?.title ?? 'Chat').replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')}
+        title={conversation?.kind === 'main' ? 'Main' : (conversation?.title ?? 'Chat').replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '')}
         crumbs={conversation?.kind === 'main' ? undefined : ({ schedule: 'Routine', watch: 'Watcher', hook: 'Webhook' }[conversation?.kind ?? ''] ?? 'Chats')}
         actions={
           <>

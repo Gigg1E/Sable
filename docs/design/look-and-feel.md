@@ -49,7 +49,15 @@ Shown when you open the app or site, at most once per session, and **under ~1.2 
 
 It's skippable by tapping, and skipped automatically on fast reloads and with reduce motion. Built with SVG stroke animation and shared-layout transitions (Motion), with no video files.
 
-**Built (Phase 0.3):** `web/src/components/Intro.tsx`.
+**Built (v2, "go all out"):** `web/src/components/Intro.tsx`, about 2 seconds:
+1. A brass ring sweeps around while the mark draws itself, with a soft glow rising behind it.
+2. The mark fills with a small spring.
+3. The name rises in letter by letter, a brass line sweeps under it, and a time-of-day greeting appears.
+4. Desktop: the lockup flies onto the sidebar logo. Phones: the screen lifts like a curtain.
+
+Only opacity, transforms, path drawing and clip-path are animated. Animating to CSS-variable colors is what broke the S on iPhone in v1. A hard 3.5 s limit removes the overlay even if an animation fails.
+
+**v1 notes:**
 - Plays once per browser session.
 - Any click or key skips it, and it never plays with reduce motion.
 - The lockup is drawn at exactly 2× the sidebar header, so it lands at a clean 0.5× scale.

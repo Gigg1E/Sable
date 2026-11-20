@@ -1,7 +1,7 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
 import { AnimatePresence, motion } from 'motion/react';
 import {
-  Activity, Brain, CalendarClock, Library, Users, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
+  Activity, Brain, CalendarClock, Library, Users, Sparkle, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
 } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { Toaster } from 'sonner';
@@ -64,6 +64,7 @@ const AUTOMATION_KINDS: Record<string, { icon: typeof CalendarClock; label: stri
 const cleanTitle = (t: string) => t.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '') || t;
 
 function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate }: { id: string; title: string; kind: string; pinned: boolean; active: boolean; running: boolean; waiting: boolean; onNavigate?: () => void }) {
+  const permanent = kind === 'main';
   const auto = AUTOMATION_KINDS[kind];
   const [renaming, setRenaming] = useState(false);
   const [value, setValue] = useState(title);
@@ -99,7 +100,7 @@ function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate
         }}
         className={cx('flex h-7 w-full items-center gap-2 rounded-md px-2 pr-7 text-left text-[13px] transition-colors', active ? 'bg-panel-2 text-fg' : 'text-fg-2 hover:bg-panel-2/60 hover:text-fg')}
       >
-        {running || waiting ? <StatusDot state={waiting ? 'waiting' : 'running'} /> : auto ? <auto.icon className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : null}
+        {running || waiting ? <StatusDot state={waiting ? 'waiting' : 'running'} /> : permanent ? <Sparkle className="size-3.5 shrink-0 text-accent" strokeWidth={1.8} /> : auto ? <auto.icon className="size-3.5 shrink-0 text-fg-3" strokeWidth={1.8} /> : null}
         <span className="min-w-0 flex-1 truncate">{cleanTitle(title)}</span>
       </button>
       <Menu.Root>
@@ -110,21 +111,25 @@ function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate
         </Menu.Trigger>
         <Menu.Portal>
           <Menu.Content align="start" sideOffset={4} className={menuContent}>
-            <Menu.Item
-              className={menuItem}
-              onSelect={() => {
-                useStore.setState((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, pinned: !pinned } : c)) }));
-                void api.patch(`/conversations/${id}`, { pinned: !pinned });
-              }}
-            >
-              {pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />} {pinned ? 'Unpin' : 'Pin to top'}
-            </Menu.Item>
+            {!permanent && (
+              <Menu.Item
+                className={menuItem}
+                onSelect={() => {
+                  useStore.setState((s) => ({ conversations: s.conversations.map((c) => (c.id === id ? { ...c, pinned: !pinned } : c)) }));
+                  void api.patch(`/conversations/${id}`, { pinned: !pinned });
+                }}
+              >
+                {pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />} {pinned ? 'Unpin' : 'Pin to top'}
+              </Menu.Item>
+            )}
             <Menu.Item className={menuItem} onSelect={() => (setValue(title), setRenaming(true))}>
               <Pencil className="size-3.5" /> Rename
             </Menu.Item>
-            <Menu.Item className={cx(menuItem, 'data-[highlighted]:text-danger')} onSelect={() => void remove()}>
-              <Trash2 className="size-3.5" /> Delete
-            </Menu.Item>
+            {!permanent && (
+              <Menu.Item className={cx(menuItem, 'data-[highlighted]:text-danger')} onSelect={() => void remove()}>
+                <Trash2 className="size-3.5" /> Delete
+              </Menu.Item>
+            )}
           </Menu.Content>
         </Menu.Portal>
       </Menu.Root>
@@ -278,7 +283,8 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
           const row = (c: (typeof conversations)[number]) => (
             <ChatRow key={c.id} id={c.id} title={c.title} kind={c.kind} pinned={!!c.pinned} active={path === `/chat/${c.id}`} running={!!runs[c.id]} waiting={waitingConvs.has(c.id)} onNavigate={onNavigate} />
           );
-          // The main chat is Home, not a list entry.
+          // Main is permanent and always first in Chats.
+          const main = conversations.find((c) => c.kind === 'main');
           const pinnedList = conversations.filter((c) => c.pinned && c.kind !== 'main');
           const chats = conversations.filter((c) => !c.pinned && !AUTOMATION_KINDS[c.kind] && c.kind !== 'main');
           const autos = conversations.filter((c) => !c.pinned && AUTOMATION_KINDS[c.kind]);
@@ -292,8 +298,11 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
                 </>
               )}
               <SectionHead label="Chats" count={chats.length} />
-              <div className="space-y-px">{chats.slice(0, 60).map(row)}</div>
-              {!chats.length && <p className="px-2 py-2 text-xs text-fg-3">No chats yet.</p>}
+              <div className="space-y-px">
+                {main && row(main)}
+                {chats.slice(0, 60).map(row)}
+              </div>
+              {!chats.length && !main && <p className="px-2 py-2 text-xs text-fg-3">No chats yet.</p>}
               {autos.length > 0 && (
                 <div className="mt-3">
                   <button onClick={() => setAutoOpen((o) => !o)} className="flex w-full items-center gap-1 rounded-md px-2 pb-1 pt-1 text-[11px] font-medium text-fg-3 hover:text-fg-2">

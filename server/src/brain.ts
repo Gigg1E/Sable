@@ -15,9 +15,13 @@ import { errorMessage, id, now, truncate } from './util.js';
 
 export function mainConversationId(): string {
   const cid = kvGet<string>('main_conversation');
-  if (cid && get('SELECT id FROM conversations WHERE id = ?', cid)) return cid;
+  if (cid && get('SELECT id FROM conversations WHERE id = ?', cid)) {
+    // Earlier builds titled it after the assistant; it's "Main" now (unless you renamed it).
+    run("UPDATE conversations SET title = 'Main' WHERE id = ? AND title = ?", cid, getSettings().persona.name || 'Sable');
+    return cid;
+  }
   const fresh = id('c_');
-  run("INSERT INTO conversations (id, title, kind, created_at, updated_at, pinned) VALUES (?, ?, 'main', ?, ?, 1)", fresh, getSettings().persona.name || 'Sable', now(), now());
+  run("INSERT INTO conversations (id, title, kind, created_at, updated_at, pinned) VALUES (?, 'Main', 'main', ?, ?, 0)", fresh, now(), now());
   kvSet('main_conversation', fresh);
   emit({ type: 'conversation.changed', id: fresh });
   return fresh;

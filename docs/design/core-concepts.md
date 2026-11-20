@@ -4,7 +4,8 @@
 
 ## 1. The main brain and mini chats
 
-- **Main chat ("Sable")**
+- **Main chat ("Main")**
+  - Updated 2026-11-20 at your request: Home stays the launchpad, and Main is a permanent chat that's always first in the chat list (it can't be deleted), with a quick card on Home.
   - One permanent, pinned conversation where every outside channel lands: the app's home screen, the agent mailbox, calls.
   - Old turns roll into summaries, so it never fills up.
   - It has its own private **journal** (what happened each day, decisions, open loops) on top of the shared [Library](../research/library.md).
