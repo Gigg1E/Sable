@@ -1,6 +1,7 @@
 import { all } from '../db.js';
 import { getSettings, type AgentProfile } from '../settings.js';
 import { describeMailbox, emailAccounts } from '../email.js';
+import { listReminders, whenText } from '../reminders.js';
 import { listMemories, type MemoryRow } from './tools/personal.js';
 
 function clock() {
@@ -19,6 +20,11 @@ function mailboxLine() {
   const boxes = emailAccounts();
   if (!boxes.length) return 'Mailboxes: none connected (the user can Sign in with Google or add one in Settings → Connectors).';
   return `Mailboxes (all fully connected; email watchers on them are live, new mail noticed within seconds): ${boxes.map(describeMailbox).join('; ')}`;
+}
+
+function reminderLine() {
+  const list = listReminders().slice(0, 10);
+  return list.length ? `Upcoming reminders: ${list.map((r) => `${r.text} (${whenText(r.due_at)}, ${r.id})`).join('; ')}` : 'Upcoming reminders: none';
 }
 
 export function mainSystemPrompt(ctx: { memories?: MemoryRow[]; toolNote?: string; learnNote?: string } = {}): string {
@@ -48,7 +54,8 @@ ${s.persona.about ? `\n## About the user (written by them)\n${s.persona.about}\n
 - Learning how the user works: when they correct how you handled something ("no, use a watcher for that", "send those to my Discord instead", "don't search the web for this, check my email") or tell you how they want a kind of request done, do it their way AND save it with memory_save kind "howto" as "When <situation>: <what to do, which tools>". If an existing how-to is wrong or outdated, update or forget it.
 - Memory: when you learn a lasting fact that will matter later, save it with memory_save: kind "me" for the user themself, "other" for people, places and things in their life (e.g. someone's email address). Never save tasks or requests ("watch my email" is a watcher, not a memory). Don't save trivia or secrets. Use memory_forget when asked to forget something.
 - Spaces: when the user wants a tracker, dashboard, planner, checklist or board, build a Space (space_create) as a polished, responsive mini-app, and update it later with space_update.
-- Background work: use schedule_create for anything recurring or later ("every morning", "remind me Friday"). Reminders and briefings use notify "always". Checks ("tell me when X emails me", "let me know if this changes") use notify "when_new" and a sensible interval (15-60 minutes): the user must only hear about something NEW, never that nothing changed.
+- Reminders: a one-off "remind me…" is reminder_set (a time and a short text; it notifies once, then disappears, no approval needed). Don't make a routine for it.
+- Background work: use schedule_create for anything recurring ("every morning", "every Friday") or a one-time job you must do later ("email Sam at 8pm"). Recurring reminders and briefings use notify "always". Checks ("tell me when X emails me", "let me know if this changes") use notify "when_new" and a sensible interval (15-60 minutes): the user must only hear about something NEW, never that nothing changed.
 - Routines vs watchers: a routine is about TIME (remind me, brief me, do X at 8pm). A watcher is about MONITORING (when an email arrives, when a price drops, when an event is added). Never use a routine to poll for something a watcher can watch: email (source email, filter by senders/subject), calendar (source calendar), web pages and prices (source web). Put what to do when it fires in on_trigger, e.g. "add it to my cart" or "summarize it and tell me if it needs a reply".
 - Webhooks: the user's saved outputs (Discord, Slack, ntfy, URLs) are listed by webhook_outputs; push to one by name with webhook_send, or have a watcher push to it (webhook_url = its name). If the user wants something sent to a webhook that isn't saved, ask whether they have a link to paste (then webhook_save it) or want a URL from Sable for another service to call (watch_create source "push").
 - Accounts and APIs you have no tool for (AWS, GitHub, Cloudflare, a router, Home Assistant…): research the official API docs, then propose a connection with connect_define; the user approves it and enters the credential in a secure field (never ask them to paste keys into the chat). Then use connect_read (reads, no approval) and connect_write (changes, approved per call). Some services have no API for personal accounts (e.g. Amazon order history): say so and suggest another route (e.g. their order emails).
@@ -73,6 +80,7 @@ ${memories.filter((m) => m.kind === 'me' || !m.kind).map((m) => `- [${m.id}] ${m
 
 ## Automations already running
 ${routines.length ? `Routines: ${routines.map((r) => r.title).join('; ')}` : 'Routines: none'}
+${reminderLine()}
 ${mailboxLine()}
 ${watchers.length ? `Watchers: ${watchers.map((w) => `${w.title} (${w.source ?? 'web'})`).join('; ')}` : 'Watchers: none'}
 ${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}${ctx.learnNote ? `\n${ctx.learnNote}\n` : ''}

@@ -11,6 +11,7 @@ import type { AnyCard, CommerceCard, FileCardData, ImagesCardData, LinkItem, Lin
 import { CommerceCardView } from './CommerceCards';
 import { Markdown } from './Markdown';
 import { CredentialCard } from './Connections';
+import { ReminderCard } from './Reminders';
 import { CopyButton } from './ui';
 
 export function fmtBytes(n: number) {
@@ -299,6 +300,7 @@ export function CardView({ card }: { card: AnyCard }) {
   if (card.type === 'links') return <LinksCard card={card} />;
   if (card.type === 'images') return <ImagesCard card={card} />;
   if (card.type === 'credential') return <CredentialCard card={card} />;
+  if (card.type === 'reminder') return <ReminderCard card={card} />;
   if (card.type === 'graph')
     return (
       <Suspense fallback={<div className="my-2.5 h-[400px] animate-pulse rounded-xl border border-line bg-panel" />}>

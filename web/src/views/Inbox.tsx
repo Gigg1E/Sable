@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Bell, CalendarClock, CheckCheck, Inbox as InboxIcon, MessageSquare, ShieldAlert, Trash2 } from 'lucide-react';
+import { AlarmClock, Bell, CalendarClock, CheckCheck, Inbox as InboxIcon, MessageSquare, ShieldAlert, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { ApprovalCard } from '../components/ApprovalCard';
 import { Button, Card, Empty, Page, PageIntro, SectionLabel, TopBar, listItem } from '../components/ui';
@@ -9,7 +9,7 @@ import { navigate } from '../lib/router';
 import { onServerEvent, useStore } from '../lib/store';
 import type { Notification } from '../lib/types';
 
-const KIND_ICON = { approval: ShieldAlert, schedule: CalendarClock, run: MessageSquare } as Record<string, typeof Bell>;
+const KIND_ICON = { approval: ShieldAlert, schedule: CalendarClock, run: MessageSquare, reminder: AlarmClock } as Record<string, typeof Bell>;
 
 export function InboxView() {
   const approvals = useStore((s) => s.approvals);

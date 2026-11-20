@@ -12,6 +12,7 @@ import { ensureHelpers, helperStatus } from './agent/helpers.js';
 import { PROVIDERS, testAccount } from './email.js';
 import { listConnections, removeConnection, setSecret } from './connections.js';
 import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unlinkGoogle } from './google.js';
+import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
   recordFailedLogin, recoveryCodesLeft, requireAuth, sessionCount, setPassword, twoFactorEnabled,
@@ -551,7 +552,7 @@ export function apiRouter() {
 
   // ── Schedules ──
   const scheduleJson = (s: any) => ({ ...s, spec: parseJson(s.spec, {}), enabled: !!s.enabled, notify: s.notify ?? (s.kind === 'interval' ? 'when_new' : 'always'), autonomy: s.autonomy ?? 'ask', restrict: parseJson(s.restrict_tools, []) });
-  r.get('/schedules', h(() => all('SELECT * FROM schedules ORDER BY created_at DESC').map(scheduleJson)));
+  r.get('/schedules', h(() => all("SELECT * FROM schedules WHERE NOT (kind = 'once' AND enabled = 0 AND last_run IS NOT NULL) ORDER BY created_at DESC").map(scheduleJson)));
   r.post(
     '/schedules',
     h((req) => {
@@ -589,6 +590,33 @@ export function apiRouter() {
     }),
   );
   r.post('/schedules/:id/run', h((req) => ({ runId: fireSchedule(param(req, 'id')) ?? null })));
+
+  // ── Reminders (one-off) ──
+  r.get('/reminders', h(() => listReminders()));
+  r.post(
+    '/reminders',
+    h((req) => {
+      const due = parseDue(req.body?.at, req.body?.in_minutes);
+      if (typeof due === 'string') throw new HttpError(400, due);
+      if (!String(req.body?.text ?? '').trim()) throw new HttpError(400, 'What should the reminder say?');
+      return createReminder({ text: String(req.body.text), note: req.body?.note ? String(req.body.note) : undefined, due });
+    }),
+  );
+  r.patch(
+    '/reminders/:id',
+    h((req) => {
+      let due: number | undefined;
+      if (req.body?.at || req.body?.in_minutes != null) {
+        const d = parseDue(req.body.at, req.body.in_minutes);
+        if (typeof d === 'string') throw new HttpError(400, d);
+        due = d;
+      }
+      const r = updateReminder(param(req, 'id'), { text: req.body?.text, note: req.body?.note, due });
+      if (!r) throw new HttpError(404, 'That reminder already went off or was cancelled.');
+      return r;
+    }),
+  );
+  r.delete('/reminders/:id', h((req) => void deleteReminder(param(req, 'id'))));
 
   // ── Notifications ──
   r.get('/notifications', h(() => all('SELECT * FROM notifications ORDER BY created_at DESC LIMIT 100')));

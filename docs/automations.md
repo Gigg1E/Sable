@@ -1,13 +1,25 @@
 # How Sable's automations work
 
-Sable has four kinds of automation, each with one job:
+Sable has five kinds of automation, each with one job:
 
 | | What it is | Example |
 |---|---|---|
-| **Routines** | A **time**, a **topic** and a **prompt**. At that time the prompt runs in a background chat, either to tell you something or to do a job itself. | "Remind me to pay rent on the 1st", "Every morning, the weather", "At 8pm email Sam what we found" |
+| **Reminders** | A **time** and **what to remind you of**. It goes off once as a notification, then disappears. | "Remind me about class at 10:30 tonight", "In 20 minutes, check the oven" |
+| **Routines** | A **time**, a **topic** and a **prompt**. At that time the prompt runs in a background chat, either to tell you something or to do a job itself. | "Pay rent reminder on the 1st of every month", "Every morning, the weather", "At 8pm email Sam what we found" |
 | **Watchers** | Something to **monitor**. When something new arrives or changes, a prompt runs with what happened. | "If this drops below $40, add it to my cart", "When a vendor emails me, summarize it" |
 | **Webhooks** | Places Sable **pushes to** (Discord, Slack, any URL), or links Sable makes for other things to push to. | "When a game price drops, post it to my Discord" |
 | **Spaces** | Live mini apps that tie it together. | A shopping list whose prices update from watchers |
+
+## Reminders
+
+- Ask in chat ("remind me about class at 10:30 tonight") or press **New reminder** on the Routines page. Quick buttons fill in "in 10 min", "in 1 hour" and so on.
+- No approval needed, because a reminder only notifies you. The chat shows a small card with the time and a **Cancel** button. After it goes off, the card says "Went off".
+- When it's due you get a notification (push, Inbox, and any channels like Discord) with the text and note. Then it's deleted. Nothing is left in Routines.
+- Upcoming reminders are listed at the top of **Routines** and in the chat side panel's **Reminders** tab, where you can edit or cancel them. Sable can also move or cancel them for you ("push my class reminder to 10:45").
+- If Sable was offline when one was due, it goes off as soon as Sable is back and says when it was due.
+- Reminders are local to the server's time zone, like routines.
+
+Something that should *repeat*, or a job Sable has to *do* at a time ("at 8pm email Sam the results"), is a routine instead. One-time routines are hidden once they've run and deleted a day later. Their history chat stays.
 
 ## Routines
 

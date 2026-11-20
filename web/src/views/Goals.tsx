@@ -1,7 +1,8 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { CalendarClock, Check, ChevronRight, ListChecks, MessageSquare, Play, Plus, RotateCcw, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { Badge, Button, Card, Empty, Field, IconButton, Input, Page, PageIntro, Progress, Segmented, Select, Sheet, Textarea, Tip, Toggle, TopBar, listItem } from '../components/ui';
+import { Badge, Button, Card, Empty, Field, IconButton, Input, Page, PageIntro, Progress, SectionLabel, Segmented, Select, Sheet, Textarea, Tip, Toggle, TopBar, listItem } from '../components/ui';
+import { RemindersSection } from '../components/Reminders';
 import { api } from '../lib/api';
 import { clockTime, cx, timeAgo } from '../lib/format';
 import { navigate } from '../lib/router';
@@ -224,7 +225,7 @@ function NewRoutine({ open, onClose }: { open: boolean; onClose: () => void }) {
             </Field>
           )}
           {form.kind === 'once' && (
-            <Field label="Date and time">
+            <Field label="Date and time" hint="For a simple “remind me”, use New reminder above. A one-time routine is for a job the agent should do then.">
               <Input type="datetime-local" value={form.at} onChange={(e) => set({ at: e.target.value })} />
             </Field>
           )}
@@ -262,7 +263,9 @@ export function RoutinesView() {
         }
       />
       <Page width="lg">
-        <PageIntro title="Routines" description="Instructions that run on a schedule. Each routine keeps its own history chat so you can see every run." />
+        <PageIntro title="Routines" description="Reminders go off once and disappear. Routines run on a schedule, and each keeps a history chat so you can see every run." />
+        <RemindersSection />
+        <SectionLabel>Routines</SectionLabel>
         {schedules && !schedules.length ? (
           <Empty
             icon={<CalendarClock className="size-4" />}

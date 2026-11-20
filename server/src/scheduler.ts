@@ -48,6 +48,8 @@ export function fireSchedule(sid: string): string | undefined {
 
 export function startScheduler() {
   const tick = () => {
+    // One-time routines disappear a day after they ran (their history chat stays).
+    run("DELETE FROM schedules WHERE kind = 'once' AND enabled = 0 AND last_run IS NOT NULL AND last_run < ?", now() - 86_400_000);
     for (const s of all<{ id: string }>('SELECT id FROM schedules WHERE enabled = 1 AND next_run IS NOT NULL AND next_run <= ?', now())) {
       fireSchedule(s.id);
     }

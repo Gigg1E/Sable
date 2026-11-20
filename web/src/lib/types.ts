@@ -269,6 +269,21 @@ export interface Schedule {
   autonomy?: 'auto' | 'ask';
   restrict?: string[];
 }
+export interface Reminder {
+  id: string;
+  text: string;
+  note: string | null;
+  due_at: number;
+  conversation_id: string | null;
+  created_at: number;
+}
+export interface ReminderCardData {
+  type: 'reminder';
+  id: string;
+  text: string;
+  note?: string;
+  due: number;
+}
 export interface Notification {
   id: string;
   title: string;
@@ -368,7 +383,7 @@ export interface ImagesCardData {
   type: 'images';
   items: { url: string; caption?: string; source?: string; site: string }[];
 }
-export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData | CredentialCardData | import('../components/GraphCard').GraphCardData;
+export type AnyCard = CommerceCard | FileCardData | LinksCardData | ImagesCardData | CredentialCardData | ReminderCardData | import('../components/GraphCard').GraphCardData;
 
 /** Shown when the agent proposes a routine or watcher, before it exists. */
 export interface AutomationCard {

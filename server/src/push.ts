@@ -36,7 +36,7 @@ export interface NotifyInput {
   title: string;
   body?: string;
   link?: string;
-  kind?: 'approval' | 'run' | 'agent' | 'schedule' | 'system' | 'watch' | 'hook';
+  kind?: 'approval' | 'run' | 'agent' | 'schedule' | 'system' | 'watch' | 'hook' | 'reminder';
   /** Adds Approve / Deny buttons to the push notification (where the browser supports them). */
   approvalId?: string;
 }
@@ -47,7 +47,7 @@ export async function notify(input: NotifyInput) {
   run('INSERT INTO notifications (id, title, body, link, kind, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)', note.id, note.title, note.body, note.link, note.kind, note.created_at);
   emit({ type: 'notification', notification: note });
 
-  const important = note.kind === 'approval' || note.kind === 'watch' || note.kind === 'hook' || note.kind === 'agent' || note.kind === 'schedule';
+  const important = note.kind === 'approval' || note.kind === 'watch' || note.kind === 'hook' || note.kind === 'agent' || note.kind === 'schedule' || note.kind === 'reminder';
   for (const ch of getSettings().channels.filter((c) => c.enabled && c.events !== 'none' && (c.events === 'all' || important))) {
     void sendToChannel(ch, note.title, note.body, absoluteLink(note.link)).catch((err) => console.error(`[channel ${ch.name}]`, (err as Error).message));
   }

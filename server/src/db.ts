@@ -55,6 +55,9 @@ CREATE TABLE IF NOT EXISTS schedules (
   next_run INTEGER, last_run INTEGER, enabled INTEGER NOT NULL DEFAULT 1, conversation_id TEXT,
   created_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS reminders (
+  id TEXT PRIMARY KEY, text TEXT NOT NULL, note TEXT, due_at INTEGER NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS watchers (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, url TEXT NOT NULL, extract TEXT NOT NULL, condition TEXT NOT NULL,
   actions TEXT NOT NULL, interval_min INTEGER NOT NULL, enabled INTEGER NOT NULL DEFAULT 1,

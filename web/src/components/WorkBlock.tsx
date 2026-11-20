@@ -50,6 +50,8 @@ export function describeCall(call: ToolCall, label?: string): string {
   if (n === 'watch_test') return `Checking ${host(a.url)}`;
   if (n === 'watch_create') return `Setting up a watcher`;
   if (n.startsWith('webhook_')) return 'Setting up a webhook';
+  if (n === 'reminder_set') return `Setting a reminder`;
+  if (n.startsWith('reminder_')) return n === 'reminder_cancel' ? 'Cancelling a reminder' : n === 'reminder_list' ? 'Checking reminders' : 'Moving a reminder';
   if (n.startsWith('schedule_')) return 'Scheduling';
   if (n === 'notify') return 'Sending a notification';
   if (n === 'shop_search') return `Searching stores for “${String(a.query ?? '').slice(0, 50)}”`;
@@ -86,7 +88,8 @@ function describeDone(calls: ToolCall[]) {
   const spaces = n((c) => c.name.startsWith('space_'));
   const conns = calls.filter((c) => c.name.startsWith('connect_')).map((c) => String((c.args as { name?: string }).name ?? '')).filter(Boolean);
   const connLists = n((c) => c.name === 'connect_list');
-  const reminders = n((c) => c.name === 'schedule_create');
+  const reminders = n((c) => c.name === 'reminder_set');
+  const routines = n((c) => c.name === 'schedule_create');
   const watchers = n((c) => c.name === 'watch_create');
   const agents = calls.filter((c) => c.name === 'delegate').map((c) => String((c.args as { agent?: string }).agent ?? 'a sub-agent'));
   if (searches) parts.push(searches === 1 ? 'searched the web' : `searched the web ${searches} times`);
@@ -102,9 +105,10 @@ function describeDone(calls: ToolCall[]) {
   else if (connLists) parts.push('checked connections');
   if (spaces) parts.push(calls.some((c) => c.name === 'space_create') ? 'built a space' : 'updated a space');
   if (reminders) parts.push(reminders === 1 ? 'set a reminder' : `set ${reminders} reminders`);
+  if (routines) parts.push(routines === 1 ? 'set up a routine' : `set up ${routines} routines`);
   if (watchers) parts.push(watchers === 1 ? 'set up a watcher' : `set up ${watchers} watchers`);
   if (agents.length) parts.push(`asked ${[...new Set(agents)].join(' and ')}`);
-  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows + spaces + reminders + watchers + conns.length + connLists;
+  const known = searches + pages + shop + calendar + scripts + writes.length + reads + memory + agents.length + shows + spaces + reminders + routines + watchers + conns.length + connLists;
   if (calls.length - known > 0) parts.push(known ? `${plural(calls.length - known, 'other step')}` : `took ${plural(calls.length, 'step')}`);
   if (!parts.length && shows) parts.push('prepared what to show');
   const text = parts.length > 2 ? `${parts.slice(0, -1).join(', ')} and ${parts[parts.length - 1]}` : parts.join(' and ');
