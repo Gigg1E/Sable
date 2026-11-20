@@ -12,7 +12,7 @@ import { ensureHelpers, helperStatus } from './agent/helpers.js';
 import { PROVIDERS, testAccount } from './email.js';
 import { listConnections, removeConnection, setSecret } from './connections.js';
 import { beginGoogleLink, completeGoogleLink, googleAccounts, isGoogleState, unlinkGoogle } from './google.js';
-import { cancelJob, getJob, listJobs } from './agent/subagents.js';
+import { cancelJob, continueJob, getJob, listJobs } from './agent/subagents.js';
 import { createReminder, deleteReminder, listReminders, parseDue, updateReminder } from './reminders.js';
 import {
   beginTwoFactor, checkPassword, checkSecondFactor, confirmTwoFactor, createSession, destroyAllSessions, destroySession, disableTwoFactor, isAuthed, isSetUp, loginAllowed,
@@ -603,6 +603,16 @@ export function apiRouter() {
     }),
   );
   r.post('/jobs/:id/cancel', h((req) => ({ cancelled: cancelJob(param(req, 'id')) })));
+  r.post(
+    '/jobs/:id/continue',
+    h((req) => {
+      try {
+        return continueJob(param(req, 'id'), req.body?.note ? String(req.body.note) : undefined);
+      } catch (err) {
+        throw new HttpError(400, errorMessage(err));
+      }
+    }),
+  );
 
   // ── Reminders (one-off) ──
   r.get('/reminders', h(() => listReminders()));

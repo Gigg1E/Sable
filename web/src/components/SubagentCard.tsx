@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
-import { Bot, Check, ChevronDown, CircleSlash, Hand, Loader2, Square, X } from 'lucide-react';
+import { Bot, Check, ChevronDown, CircleSlash, Hand, Loader2, Play, Square, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
@@ -74,8 +74,10 @@ export function SubagentView({ jobId, fallback, initial }: { jobId: string; fall
                 <Loader2 className="size-3 animate-spin" /> Working · {job ? elapsed(job, nowMs) : '…'}
                 {tools ? ` · ${tools} step${tools > 1 ? 's' : ''}` : ''}
               </span>
+            ) : job?.status === 'done' && job.outcome?.stopped === 'limit' ? (
+              <span className="text-accent">Stopped at its step limit · report written{job.outcome.digest ? ' · raw results attached' : ''}</span>
             ) : job?.status === 'done' ? (
-              `Done in ${elapsed(job, nowMs)} · ${tools} step${tools === 1 ? '' : 's'}${job.model ? ` · ${job.model}` : ''}`
+              `Done in ${elapsed(job, nowMs)} · ${tools} step${tools === 1 ? '' : 's'}${job.outcome?.forcedReport ? ' · asked for a full report' : ''}${job.model ? ` · ${job.model}` : ''}`
             ) : job?.status === 'cancelled' ? (
               'Cancelled'
             ) : (
@@ -83,6 +85,15 @@ export function SubagentView({ jobId, fallback, initial }: { jobId: string; fall
             )}
           </div>
         </div>
+        {!running && job && (job.outcome?.stopped === 'limit' || job.status === 'error') && (
+          <button
+            onClick={() => void api.post(`/jobs/${job.id}/continue`).catch(() => {})}
+            title="Let it keep going from where it stopped"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-line px-2 text-[12px] text-fg-2 hover:bg-panel-2 hover:text-fg"
+          >
+            <Play className="size-3" /> Continue
+          </button>
+        )}
         {running && job && (
           <button onClick={() => void api.post(`/jobs/${job.id}/cancel`)} title="Stop this sub-agent" className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[12px] text-fg-3 hover:bg-panel-2 hover:text-danger">
             <Square className="size-3" /> Stop

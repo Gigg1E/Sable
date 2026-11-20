@@ -183,6 +183,100 @@ export interface LoopOptions {
   progress?: ToolContext['progress'];
   /** Steps the user already approved (an approved routine, or a background job it started). */
   preapproved?: Preapproval | null;
+  /** Sub-agents: always end with a real report of what was found, and say how the run ended. */
+  outcome?: LoopOutcome;
+}
+
+export interface LoopOutcome {
+  /** 'limit': ran out of steps; 'plan': ended on a plan instead of results. */
+  stopped?: 'limit' | 'plan';
+  /** A final report was requested with tools set aside. */
+  forcedReport?: boolean;
+  /** Tool results were attached because the report came back thin. */
+  digest?: boolean;
+  toolCalls?: number;
+}
+
+/** "I'll search for…", "Let me check…": a reply that only announces work instead of reporting it. */
+function looksLikePlan(text: string) {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length > 700) return false;
+  return /\b(let me|i'll|i will|i'm going to|i am going to|next,? i|now i'll|first,? i'll|i need to)\b/i.test(t) && !/\b(found|results?|summary|in short|here'?s what)\b/i.test(t);
+}
+
+/** Compact list of what the tools returned, so findings survive even a weak final report. */
+function toolDigest(messages: ChatMessage[], budget = 6000) {
+  const lines: string[] = [];
+  const seen = new Set<string>();
+  let used = 0;
+  for (const m of messages) {
+    if (m.role !== 'tool' || m.isError) continue;
+    const body = String(m.content ?? '').replace(/\s+/g, ' ').trim();
+    // Skip empties and repeats ("No results" thirty times tells nobody anything).
+    if (body.length < 25 || seen.has(body)) continue;
+    seen.add(body);
+    const line = `- ${m.name}: ${body.slice(0, 450)}${body.length > 450 ? '…' : ''}`;
+    if (used + line.length > budget) break;
+    lines.push(line);
+    used += line.length;
+  }
+  return lines.join('\n');
+}
+
+/** One more model call with tools set aside: write up everything found so far. */
+async function finalReport(o: LoopOptions, why: 'limit' | 'plan'): Promise<string> {
+  const { llm } = resolveProvider(o.providerId);
+  const ask =
+    why === 'limit'
+      ? 'You have used all your steps. Do not call any more tools. Write your final report now for the agent that asked you: everything you found (facts, numbers, names, quotes) with the source URL or file for each, what you did, and what is still missing or uncertain. Report results, not plans.'
+      : 'Do not describe what you are going to do. Do not call any more tools. Write your final report now: everything your tool results showed (facts, numbers, names) with the source URL or file for each, and what is still missing. If you found nothing useful, say so plainly.';
+  o.messages.push({ role: 'user', content: ask });
+  let text = '';
+  try {
+    for await (const part of llm.chat({
+      model: o.model,
+      system: o.system,
+      messages: o.messages,
+      // Some providers reject a history with tool calls but no tool definitions, so keep them listed; the instruction says not to use them.
+      tools: o.tools.map(toSpec),
+      signal: o.signal,
+      effort: o.effort || undefined,
+      temperature: o.temperature,
+      contextLength: o.contextLength,
+    })) {
+      if (part.type === 'text') {
+        text += part.text;
+        o.progress?.(part.text, 'text');
+      } else if (part.type === 'done') {
+        text = part.message.content || text;
+      }
+    }
+  } catch (err) {
+    if (o.signal.aborted) throw err;
+  }
+  return text.trim();
+}
+
+/** Sub-agent ending: make sure the findings come back, never just a plan. */
+async function wrapUp(o: LoopOptions, lastText: string, why: 'limit' | 'plan'): Promise<string> {
+  const out = o.outcome!;
+  out.stopped = why;
+  out.forcedReport = true;
+  out.toolCalls = o.messages.filter((m) => m.role === 'tool').length;
+  const report = await finalReport(o, why);
+  let text = report && !looksLikePlan(report) ? report : '';
+  if (!text) text = report || lastText;
+  const thin = text.length < 400 || looksLikePlan(text);
+  if (thin && out.toolCalls) {
+    const digest = toolDigest(o.messages);
+    if (digest) {
+      out.digest = true;
+      text = `${text ? `${text}\n\n` : ''}What my tools returned (raw, for you to use):\n${digest}`;
+    }
+  }
+  const note = why === 'limit' ? `(Stopped at the ${o.maxSteps}-step limit. The job can be continued.)` : '';
+  return [text || '(No findings.)', note].filter(Boolean).join('\n\n');
 }
 
 export async function agentLoop(o: LoopOptions): Promise<string> {
@@ -269,6 +363,8 @@ export async function agentLoop(o: LoopOptions): Promise<string> {
     if (!final.toolCalls?.length) {
       // Something was slipped in while this answer was being written: answer it in the same run.
       if (o.persist && active.get(o.runId)?.inbox.length) continue;
+      // A sub-agent that used tools but ended by announcing more work: get the real report.
+      if (o.outcome && o.messages.some((m) => m.role === 'tool') && looksLikePlan(final.content)) return wrapUp(o, final.content, 'plan');
       return final.content;
     }
 
@@ -299,6 +395,7 @@ export async function agentLoop(o: LoopOptions): Promise<string> {
     }
   }
 
+  if (o.outcome) return wrapUp(o, lastText, 'limit');
   const note = `I stopped after ${o.maxSteps} steps so I don't run away with this. Say "continue" and I'll pick up where I left off.`;
   if (o.persist) {
     insertMessage({

@@ -293,6 +293,7 @@ If the model isn't installed yet, a **Download** button on the card pulls it thr
 - **You see everything:** each sub-agent has a card in the chat with its task, every tool step as it happens (including ones waiting for your OK), how long it's taken, and its full result. Cards are saved, so they're still there later. **Stop** cancels one sub-agent without stopping the rest.
 - **Helper** is always available: a general sub-agent on your main model with the same tools as Sable (except delegating), so this works before you've set up any specialists.
 - Running sub-agents are listed in the chat side panel's Reminders tab. A background job can't survive a server restart. It's marked stopped, and Sable tells you.
+- **Findings always come back.** If a sub-agent runs out of steps, or ends by announcing more work ("Let me search…") instead of reporting, it's asked for a final report with its tools set aside. If that report is thin, the raw results of its tools are attached. Research agents (with web tools) get at least 30 steps. A stopped job shows **Continue** on its card, which picks up where it left off, and Sable can do the same itself. Sable is told never to fill gaps in research from its own memory.
 - Approvals still apply. A sub-agent's risky steps ask you like Sable's do, unless they're part of a routine you approved.
 
 > Ollama loads models on demand. With several specialists on one GPU, set `OLLAMA_MAX_LOADED_MODELS` / `OLLAMA_KEEP_ALIVE` on the Ollama side to control swapping.

@@ -298,6 +298,7 @@ export interface Job {
   model: string | null;
   created_at: number;
   finished_at: number | null;
+  outcome?: { stopped?: 'limit' | 'plan'; forcedReport?: boolean; digest?: boolean; toolCalls?: number } | null;
 }
 export interface SubagentCardData {
   type: 'subagent';

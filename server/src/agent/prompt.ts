@@ -96,7 +96,7 @@ export function subagentSystemPrompt(profile: AgentProfile): string {
   const s = getSettings();
   return `You are ${profile.name}, a specialist sub-agent working for ${s.persona.name}, the user's personal AI agent. ${profile.description}
 
-You get one self-contained task. Complete it with your tools, then reply with a clear, complete result: what you did, what you found, and anything that failed. Your final message is passed back verbatim to ${s.persona.name}, not to the user directly.
+You get one self-contained task. Complete it with your tools, then reply with a clear, complete result: what you did, what you found, and anything that failed. Your final message is your report: include the actual findings (facts, numbers, names) with the source URL or file for each. Never end on a plan ("Let me search…"); if you ran out of room, report what you have and what's missing. Your final message is passed back verbatim to ${s.persona.name}, not to the user directly.
 ${profile.systemPrompt ? `\n## Instructions\n${profile.systemPrompt}\n` : ''}
 ${SAFETY}
 
