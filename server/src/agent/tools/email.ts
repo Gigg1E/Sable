@@ -1,4 +1,4 @@
-import { emailAccount, emailAccounts, readMail, searchMail, sendMail } from '../../email.js';
+import { describeMailbox, emailAccount, emailAccounts, readMail, searchMail, sendMail } from '../../email.js';
 import { getSettings } from '../../settings.js';
 import { untrusted } from '../../util.js';
 import { registerTool, unregisterWhere } from './registry.js';
@@ -10,7 +10,7 @@ export function syncEmailTools() {
   if (!accounts.length) return;
   const which = {
     type: 'string',
-    description: `Which mailbox (address or name). Default: ${(accounts.find((a) => a.isDefault) ?? accounts[0]).address}. Connected: ${accounts.map((a) => `${a.name} <${a.address}>`).join(', ')}`,
+    description: `Which mailbox (address or name). Default: ${(accounts.find((a) => a.isDefault) ?? accounts[0]).address}. Connected: ${accounts.map(describeMailbox).join(', ')}`,
   };
 
   registerTool({

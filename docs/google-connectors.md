@@ -20,7 +20,7 @@ Google requires every app that signs people in to have its own **OAuth client**.
 4. **Turn on the [Google Calendar API](https://console.cloud.google.com/flows/enableapi?apiid=calendar-json.googleapis.com)** for the project. Gmail needs nothing extra.
 5. Paste the **Client ID** and **Client secret** into Sable, then press **Sign in with Google**. Do it from the same address you registered in step 2.
 
-You can link several Google accounts. Each shows up as a mailbox (watchers and email tools can pick it) and its calendars are included.
+You can link several Google accounts. Each shows up as a mailbox and its calendars are included. Email watchers cover every mailbox unless they name one, and new mail is noticed within seconds. If the same Gmail address is also in Settings → Email with an app password, Sable uses the Google sign-in and ignores the app password, so you can delete that entry.
 
 ## Staying signed in
 

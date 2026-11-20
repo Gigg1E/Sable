@@ -1,5 +1,6 @@
 import { all } from '../db.js';
 import { getSettings, type AgentProfile } from '../settings.js';
+import { describeMailbox, emailAccounts } from '../email.js';
 import { listMemories, type MemoryRow } from './tools/personal.js';
 
 function clock() {
@@ -12,6 +13,13 @@ const SAFETY = `## Trust and safety
 - Some actions need the user's approval. The system asks for you, so just call the tool. If an action is denied or blocked, do not retry it or look for a workaround: adapt, or ask the user.
 - On the web and on calls you are an automated agent acting for the user. Never claim to be human.
 - Never reveal API keys or credentials, and never send the user's personal data anywhere they didn't ask for.`;
+
+/** Ground truth about mailboxes, so the agent never asks the user to link one that's already linked. */
+function mailboxLine() {
+  const boxes = emailAccounts();
+  if (!boxes.length) return 'Mailboxes: none connected (the user can Sign in with Google or add one in Settings → Connectors).';
+  return `Mailboxes (all fully connected; email watchers on them are live, new mail noticed within seconds): ${boxes.map(describeMailbox).join('; ')}`;
+}
 
 export function mainSystemPrompt(ctx: { memories?: MemoryRow[]; toolNote?: string; learnNote?: string } = {}): string {
   const s = getSettings();
@@ -65,6 +73,7 @@ ${memories.filter((m) => m.kind === 'me' || !m.kind).map((m) => `- [${m.id}] ${m
 
 ## Automations already running
 ${routines.length ? `Routines: ${routines.map((r) => r.title).join('; ')}` : 'Routines: none'}
+${mailboxLine()}
 ${watchers.length ? `Watchers: ${watchers.map((w) => `${w.title} (${w.source ?? 'web'})`).join('; ')}` : 'Watchers: none'}
 ${ctx.toolNote ? `\n${ctx.toolNote}\n` : ''}${ctx.learnNote ? `\n${ctx.learnNote}\n` : ''}
 

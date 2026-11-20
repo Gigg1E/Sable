@@ -25,7 +25,7 @@ A watcher monitors something and runs a prompt when something new happens. Like 
 
 | Source | Fires when | How fast |
 |---|---|---|
-| **Email** | New mail arrives, optionally only from certain senders (name, address or domain) or with a subject | Within seconds (live IMAP connection), with a fallback check every 15 min |
+| **Email** | New mail arrives in **any of your mailboxes** (or just one, if you pick it), optionally only from certain senders (name, address or domain) or with a subject | Within seconds (live IMAP connection), with a fallback check every 15 min |
 | **Calendar** | An event is added to your calendar feeds, or is about to start (X minutes before) | Every check |
 | **Web** | A page or API changes: price below/above, % drop, text appears, any change | Every N minutes (5+, polite 60 for shops) |
 | **Push** | Another service calls a private URL Sable gives you (listed under Webhooks → Push URLs) | Instantly |
@@ -64,7 +64,7 @@ If you ask for something to go "to my webhook" and none is saved, the agent asks
 - **"Couldn't connect"**: the server is unreachable. If you use the VPN option (`SABLE_AGENT_PROXY`), many VPN proxies only allow web ports, not mail ports 993/465/587. Email then fails through the proxy even with the right password.
 - **"Reading works, but sending failed"**: watchers and reading still work. Only sending email is affected.
 
-Connect several and mark one **Default**. The agent can then search, read and send email (sending asks you unless a routine or watcher you approved does it), and watchers can watch any of them.
+Connect several and mark one **Default**. The agent can then search, read and send email (sending asks you unless a routine or watcher you approved does it). An email watcher watches **all** your mailboxes unless it names one. Google accounts linked with **Sign in with Google** count as mailboxes too, and if you also added the same Gmail address with an app password, Sign in with Google is used. The agent is told which mailboxes are connected and how, so it won't ask you to link one that already is.
 
 ## Approving from the notification
 

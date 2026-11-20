@@ -39,13 +39,27 @@ function server(acc: EmailAccount) {
   };
 }
 
-/** Mailboxes: app-password accounts from Settings, plus every Google account linked with Sign in with Google. */
+/**
+ * Mailboxes: every Google account linked with Sign in with Google, plus app-password accounts from
+ * Settings. If an address has both, Sign in with Google wins (it can't go stale like a password).
+ */
 export function emailAccounts(): EmailAccount[] {
-  const manual = (getSettings().email?.accounts ?? []).filter((a) => a.enabled !== false && a.address && a.password);
   const linked = googleAccounts()
-    .filter((g) => g.gmail && !manual.some((m) => m.address.toLowerCase() === g.email))
+    .filter((g) => g.gmail)
     .map((g): EmailAccount => ({ id: `google:${g.email}`, name: g.name ? `${g.name} (Gmail)` : 'Gmail', address: g.email, provider: 'google', password: '', enabled: true }));
-  return [...manual, ...linked];
+  const manual = (getSettings().email?.accounts ?? []).filter(
+    (a) => a.enabled !== false && a.address && a.password && !linked.some((g) => g.address.toLowerCase() === a.address.toLowerCase()),
+  );
+  const list = [...manual, ...linked];
+  // Keep the user's chosen default even when its address moved over to Sign in with Google.
+  const def = (getSettings().email?.accounts ?? []).find((a) => a.isDefault)?.address.toLowerCase();
+  return def ? list.map((a) => ({ ...a, isDefault: a.address.toLowerCase() === def })) : list;
+}
+
+/** "Gmail <me@gmail.com> (signed in with Google)": what the agent is told about a mailbox. */
+export function describeMailbox(a: EmailAccount) {
+  const how = a.provider === 'google' ? 'signed in with Google' : 'app password';
+  return `${a.name} <${a.address}> (${how}${a.isDefault ? ', default' : ''})`;
 }
 
 /** Pick an account by id, address or name (case-insensitive); default account otherwise. */

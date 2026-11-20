@@ -8,7 +8,8 @@ import { activeRunFor, createConversation, quickAnswer, startRun } from './runne
 import { htmlToText } from './tools/web.js';
 import { registerTool } from './tools/registry.js';
 import { fmtMoney, shopVariantSnapshot } from '../shop/tools.js';
-import { emailAccount, latestUid, mailAfter, syncMailListeners } from '../email.js';
+import { describeMailbox, emailAccount, emailAccounts, latestUid, mailAfter, syncMailListeners } from '../email.js';
+import type { EmailAccount } from '../settings.js';
 import { eventsBetween } from './tools/calendar.js';
 import { createHook, hookUrl } from './hooks.js';
 
@@ -80,6 +81,7 @@ export interface WatcherRow {
 }
 
 export interface EmailSourceConfig {
+  /** One mailbox (id, address or name). Unset: every connected mailbox. */
   account?: string;
   /** Match if the sender's name or address contains any of these. */
   from?: string[];
@@ -95,7 +97,7 @@ export interface CalendarSourceConfig {
 export function sourceLabel(w: Pick<WatcherRow, 'source' | 'source_config' | 'url'>) {
   if (w.source === 'email') {
     const c = parseJson<EmailSourceConfig>(w.source_config, {});
-    return `Email${c.account ? ` (${c.account})` : ''}: ${c.from?.length ? `from ${c.from.join(', ')}` : 'any sender'}${c.subject_contains ? `, subject has “${c.subject_contains}”` : ''}`;
+    return `Email (${c.account ? c.account.replace(/^google:/, '') : 'all mailboxes'}, live): ${c.from?.length ? `from ${c.from.join(', ')}` : 'any sender'}${c.subject_contains ? `, subject has “${c.subject_contains}”` : ''}`;
   }
   if (w.source === 'calendar') {
     const c = parseJson<CalendarSourceConfig>(w.source_config, { when: 'added' });
@@ -435,32 +437,57 @@ async function fireEvent(w: WatcherRow, actions: WatchActions, ev: { title: stri
 
 // ───────────────────────── Email and calendar sources ─────────────────────────
 
+/** The mailboxes an email watcher covers: the one it names, or all of them. */
+function watchedMailboxes(cfg: EmailSourceConfig): EmailAccount[] {
+  return cfg.account ? [emailAccount(cfg.account)] : emailAccounts();
+}
+
 async function checkEmail(w: WatcherRow, actions: WatchActions): Promise<{ fired: boolean; value?: string }> {
   const cfg = parseJson<EmailSourceConfig>(w.source_config, {});
-  const acc = emailAccount(cfg.account);
-  const state = parseJson<{ lastUid?: number; account?: string }>(w.state, {});
-  if (state.lastUid == null || state.account !== acc.id) {
-    // First check: start from now, don't replay the whole inbox.
-    const uid = await latestUid(acc);
-    run('UPDATE watchers SET state = ? WHERE id = ?', JSON.stringify({ lastUid: uid, account: acc.id }), w.id);
-    return { fired: false, value: 'Watching for new email' };
-  }
-  const fresh = await mailAfter(acc, state.lastUid);
-  if (!fresh.length) return { fired: false };
-  const maxUid = Math.max(state.lastUid, ...fresh.map((m) => m.uid));
-  run('UPDATE watchers SET state = ? WHERE id = ?', JSON.stringify({ lastUid: maxUid, account: acc.id }), w.id);
+  const boxes = watchedMailboxes(cfg);
+  if (!boxes.length) throw new Error('No mailbox is connected. Sign in with Google or add a mailbox in Settings → Connectors.');
+  // Per-mailbox position. Older watchers stored a single { lastUid, account }.
+  const raw = parseJson<{ uids?: Record<string, number>; lastUid?: number; account?: string }>(w.state, {});
+  const uids: Record<string, number> = { ...(raw.uids ?? {}), ...(raw.account && raw.lastUid != null && !raw.uids ? { [raw.account]: raw.lastUid } : {}) };
   const froms = (cfg.from ?? []).map((f) => f.toLowerCase().trim()).filter(Boolean);
   const subj = cfg.subject_contains?.toLowerCase().trim();
-  const hits = fresh.filter((m) => (!froms.length || froms.some((f) => m.from.toLowerCase().includes(f))) && (!subj || m.subject.toLowerCase().includes(subj)));
-  for (const m of hits.slice(0, 5)) {
-    await fireEvent(w, actions, {
-      title: `${w.title}: ${m.from.replace(/<.*>/, '').trim() || m.fromAddress}`,
-      body: m.subject,
-      details: `New email in ${acc.address} (id #${m.uid}; email_read can open it):\nFrom: ${m.from}\nDate: ${m.date}\nSubject: ${m.subject}\n<untrusted source="email from ${m.fromAddress}">\n${m.snippet ?? ''}\n</untrusted>`,
-      payload: { email: { account: acc.address, from: m.from, subject: m.subject, date: m.date } },
-    });
+  const errors: string[] = [];
+  let fired = false;
+  let value: string | undefined;
+  let started = false;
+  for (const acc of boxes) {
+    try {
+      if (uids[acc.id] == null) {
+        // First check of this mailbox: start from now, don't replay the whole inbox.
+        uids[acc.id] = await latestUid(acc);
+        started = true;
+        continue;
+      }
+      const fresh = await mailAfter(acc, uids[acc.id]);
+      if (!fresh.length) continue;
+      uids[acc.id] = Math.max(uids[acc.id], ...fresh.map((m) => m.uid));
+      const hits = fresh.filter((m) => (!froms.length || froms.some((f) => m.from.toLowerCase().includes(f))) && (!subj || m.subject.toLowerCase().includes(subj)));
+      for (const m of hits.slice(0, 5)) {
+        await fireEvent(w, actions, {
+          title: `${w.title}: ${m.from.replace(/<.*>/, '').trim() || m.fromAddress}`,
+          body: m.subject,
+          details: `New email in ${acc.address} (id #${m.uid}; email_read with account "${acc.address}" can open it):\nFrom: ${m.from}\nDate: ${m.date}\nSubject: ${m.subject}\n<untrusted source="email from ${m.fromAddress}">\n${m.snippet ?? ''}\n</untrusted>`,
+          payload: { email: { account: acc.address, from: m.from, subject: m.subject, date: m.date } },
+        });
+      }
+      if (hits.length) {
+        fired = true;
+        value = `${hits[0].from}: ${hits[0].subject}`;
+      }
+    } catch (err) {
+      errors.push(`${acc.address}: ${errorMessage(err)}`);
+    }
   }
-  return { fired: hits.length > 0, value: hits.length ? `${hits[0].from}: ${hits[0].subject}` : undefined };
+  run('UPDATE watchers SET state = ? WHERE id = ?', JSON.stringify({ uids }), w.id);
+  // One broken mailbox shouldn't stop the others; report it only when nothing worked.
+  if (errors.length === boxes.length) throw new Error(errors.join('; '));
+  if (errors.length) console.error(`[watcher ${w.id}] ${errors.join('; ')}`);
+  return { fired, value: value ?? (started ? `Watching ${boxes.map((b) => b.address).join(', ')} for new email` : undefined) };
 }
 
 async function checkCalendar(w: WatcherRow, actions: WatchActions): Promise<{ fired: boolean; value?: string }> {
@@ -498,7 +525,7 @@ export function startWatchers() {
     const accounts = new Set<string>();
     for (const w of all<WatcherRow>("SELECT * FROM watchers WHERE enabled = 1 AND source = 'email'")) {
       try {
-        accounts.add(emailAccount(parseJson<EmailSourceConfig>(w.source_config, {}).account).id);
+        for (const acc of watchedMailboxes(parseJson<EmailSourceConfig>(w.source_config, {}))) accounts.add(acc.id);
       } catch {
         /* no account yet */
       }
@@ -506,7 +533,7 @@ export function startWatchers() {
     syncMailListeners(accounts, (accountId) => {
       for (const w of all<WatcherRow>("SELECT * FROM watchers WHERE enabled = 1 AND source = 'email'")) {
         try {
-          if (emailAccount(parseJson<EmailSourceConfig>(w.source_config, {}).account).id === accountId) setTimeout(() => void checkWatcher(w.id), 1500);
+          if (watchedMailboxes(parseJson<EmailSourceConfig>(w.source_config, {})).some((a) => a.id === accountId)) setTimeout(() => void checkWatcher(w.id), 1500);
         } catch {
           /* ignore */
         }
@@ -595,7 +622,7 @@ registerTool({
         required: ['kind'],
       },
       every_minutes: { type: 'integer', description: 'web: check interval, minimum 5 (60+ for shops). email: fallback check if the live connection drops (default 15).' },
-      email_account: { type: 'string', description: 'email: which mailbox (address or name); default mailbox if omitted' },
+      email_account: { type: 'string', description: 'email: one mailbox (address or name). Omit to watch every connected mailbox (usually what the user wants).' },
       email_from: { type: 'array', items: { type: 'string' }, description: 'email: only mail whose sender name or address contains one of these (e.g. vendor domains)' },
       email_subject: { type: 'string', description: 'email: only mail whose subject contains this' },
       calendar_when: { type: 'string', enum: ['added', 'starting'], description: 'calendar: fire when an event is added, or shortly before it starts' },
@@ -663,7 +690,11 @@ registerTool({
       autonomy: ctx.choice === 'ask' ? 'ask' : 'auto',
       restrict: Array.isArray(a.restrict) ? a.restrict.map(String) : [],
     });
-    return `Watcher ${wid} created (${src}). ${a.on_trigger ? 'When it fires, you will get its details and the instruction in a background chat.' : 'When it fires, the user gets a notification.'} The user can see it under Watchers.`;
+    const scope =
+      src === 'email'
+        ? ` It watches ${(sourceConfig?.account ? [emailAccount(sourceConfig.account)] : emailAccounts()).map(describeMailbox).join(' and ')} over a live connection, so new mail is noticed within seconds (not polled).`
+        : '';
+    return `Watcher ${wid} created (${src}).${scope} ${a.on_trigger ? 'When it fires, you will get its details and the instruction in a background chat.' : 'When it fires, the user gets a notification.'} The user can see it under Watchers.`;
   },
 });
 
@@ -679,7 +710,7 @@ registerTool({
     const rows = all<WatcherRow>('SELECT * FROM watchers ORDER BY created_at DESC').map(watcherJson);
     if (!rows.length) return 'No watchers.';
     return rows
-      .map((w) => `${w.id} — ${w.title} [${w.enabled ? 'on' : 'paused'}] ${w.sourceLabel}\n  current: ${truncate(w.last_value ?? '—', 120)} · when ${describeCondition(w.condition)} · every ${w.interval_min}m${w.last_error ? ` · ERROR: ${w.last_error}` : ''}`)
+      .map((w) => `${w.id} — ${w.title} [${w.enabled ? 'on' : 'paused'}] ${w.sourceLabel}\n  current: ${truncate(w.last_value ?? '—', 120)} · ${w.source === 'email' ? 'new mail noticed within seconds (live connection)' : `when ${describeCondition(w.condition)} · every ${w.interval_min}m`}${w.last_error ? ` · ERROR: ${w.last_error}` : ''}`)
       .join('\n');
   },
 });
