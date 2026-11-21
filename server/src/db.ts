@@ -139,6 +139,14 @@ function addColumn(table: string, column: string, type: string) {
   if (!cols.some((c) => c.name === column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
 }
 addColumn('messages', 'attachments', 'TEXT');
+// Attention (docs/design/autonomy.md): how each notification was judged, and your feedback.
+addColumn('notifications', 'verdict', "TEXT NOT NULL DEFAULT 'tell'");
+addColumn('notifications', 'source', 'TEXT');
+addColumn('notifications', 'key', 'TEXT');
+addColumn('notifications', 'pushed', 'INTEGER NOT NULL DEFAULT 1');
+addColumn('notifications', 'why', 'TEXT');
+addColumn('notifications', 'feedback', 'TEXT');
+db.exec('CREATE TABLE IF NOT EXISTS attention_prefs (source TEXT PRIMARY KEY, level INTEGER NOT NULL, label TEXT, updated_at INTEGER NOT NULL)');
 addColumn('approvals', 'call_id', 'TEXT');
 addColumn('messages', 'cards', 'TEXT');
 addColumn('approvals', 'preview', 'TEXT');

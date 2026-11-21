@@ -201,7 +201,7 @@ export async function unlinkShop() {
 export function invalidateShopToken(reason: string) {
   save({ accessToken: undefined, refreshToken: undefined, expiresAt: undefined, error: reason });
   emit({ type: 'shop.changed' });
-  void notify({ title: 'Shop sign-in expired', body: 'Link your Shop account again in Settings → Shopping to use saved addresses and Shop Pay.', link: '/settings/shopping', kind: 'system' });
+  void notify({ title: 'Shop sign-in expired', body: 'Link your Shop account again in Settings → Shopping to use saved addresses and Shop Pay.', link: '/settings/shopping', kind: 'system', key: 'shop-auth' });
 }
 
 /** A usable access token, refreshing when possible; undefined when not linked or expired. */

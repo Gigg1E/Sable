@@ -29,7 +29,7 @@ import { syncEmailTools } from './agent/tools/email.js';
 import { startHelpers } from './agent/helpers.js';
 import { backfillMemoryEmbeddings } from './agent/tools/personal.js';
 import { DATA_DIR, HOST, PORT, WEB_DIST } from './config.js';
-import { initPush } from './push.js';
+import { initPush, startDigest } from './push.js';
 import { apiRouter } from './routes.js';
 import { hooksRouter } from './agent/hooks.js';
 import { startWatchers } from './agent/watchers.js';
@@ -40,6 +40,7 @@ import { getSettings, updateSettings } from './settings.js';
 recoverRuns();
 expireStaleApprovals();
 initPush();
+startDigest();
 getSettings();
 
 const app = express();

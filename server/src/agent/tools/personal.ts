@@ -3,7 +3,8 @@ import { all, get, run } from '../../db.js';
 import { emit } from '../../events.js';
 import { notify } from '../../push.js';
 import { id, now, parseJson } from '../../util.js';
-import { blockNotify, defaultNotify, markNotified } from '../automation.js';
+import { blockNotify, defaultNotify, markNotified, setFinish, sourceFor } from '../automation.js';
+import { isVerdict } from '../../attention.js';
 import { registerTool } from './registry.js';
 import { cosine, embed, overlap, words } from '../helpers.js';
 
@@ -437,17 +438,45 @@ registerTool({
   name: 'notify',
   label: 'Notify',
   group: 'Notify',
-  description: "Send the user a push notification (phone/desktop). Use for results of background or scheduled work, or when something needs the user's attention.",
-  parameters: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' } }, required: ['title'] },
+  description: "Send the user a notification. importance: tell (now; the default), digest (in their next digest, for things worth knowing but not urgent), urgent (time-critical, even at night). In background runs prefer finish, which also covers 'nothing to report'.",
+  parameters: { type: 'object', properties: { title: { type: 'string' }, body: { type: 'string' }, importance: { type: 'string', enum: ['digest', 'tell', 'urgent'] } }, required: ['title'] },
   risk: 'low',
   defaultPolicy: 'auto',
   summarize: (a) => `Notify: ${a.title}`,
   async run(a, ctx) {
     const blocked = blockNotify(ctx.conversationId, String(a.title), String(a.body ?? ''));
     if (blocked) return blocked;
-    await notify({ title: String(a.title), body: String(a.body ?? ''), link: `/chat/${ctx.conversationId}`, kind: 'agent' });
+    const verdict = isVerdict(a.importance) && a.importance !== 'silent' && a.importance !== 'log' ? a.importance : 'tell';
+    const note = await notify({ title: String(a.title), body: String(a.body ?? ''), link: `/chat/${ctx.conversationId}`, kind: 'agent', verdict, source: sourceFor(ctx.conversationId) });
     markNotified(ctx.runId);
-    return 'Notification sent.';
+    if (!note) return 'Not sent.';
+    return note.verdict === 'tell' || note.verdict === 'urgent' ? 'Notification sent.' : `Saved for the user's ${note.verdict === 'digest' ? 'next digest' : 'Inbox'}${note.why ? ` (${note.why})` : ''}. That's expected; don't send it again.`;
+  },
+});
+
+registerTool({
+  name: 'finish',
+  label: 'Finish',
+  group: 'Notify',
+  description:
+    "End a background run (routine, watcher, webhook, follow-up, wake-up) by saying whether the user should hear about it. verdict: silent (nothing changed / nothing worth anything; the default for checks), log (a quiet record in the Inbox), digest (worth knowing, not urgent: their next digest), tell (they should know now), urgent (time-critical, even at night). changed: what actually changed, in a few words (the same change is never told twice). headline/body: the message, if any. Not for normal chats with the user.",
+  parameters: {
+    type: 'object',
+    properties: {
+      verdict: { type: 'string', enum: ['silent', 'log', 'digest', 'tell', 'urgent'] },
+      changed: { type: 'string' },
+      headline: { type: 'string' },
+      body: { type: 'string' },
+    },
+    required: ['verdict'],
+  },
+  risk: 'low',
+  defaultPolicy: 'auto',
+  summarize: (a) => (a.verdict === 'silent' ? 'Nothing to report' : `Report: ${a.headline ?? a.verdict}`),
+  async run(a, ctx) {
+    if (!isVerdict(a.verdict)) return 'verdict must be silent, log, digest, tell or urgent.';
+    setFinish(ctx.runId, { verdict: a.verdict, changed: a.changed ? String(a.changed).slice(0, 300) : undefined, headline: a.headline ? String(a.headline).slice(0, 140) : undefined, body: a.body ? String(a.body).slice(0, 600) : undefined });
+    return a.verdict === 'silent' ? 'Noted: nothing goes to the user. Finish with one short line.' : 'Noted. Finish with one short line; Sable delivers it at the right time.';
   },
 });
 

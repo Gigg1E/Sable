@@ -77,7 +77,7 @@ function fire(r: Reminder) {
   // A follow-up wakes its chat: Sable decides what to say with everything that chat knows.
   if (r.wake && r.conversation_id && wakeChat(r.conversation_id, `[Follow-up you scheduled: ${r.text} · ${r.id}]\n${r.note ?? ''}\n\n(Earlier in this chat you said you'd follow up on this. Check whatever you need, then tell the user. If it no longer matters, say so in one line.)`)) return;
   const late = now() - r.due_at > 5 * 60_000 ? ` (was due ${whenText(r.due_at)}; Sable was offline)` : '';
-  void notify({ title: `⏰ ${r.text}`, body: `${r.note ?? ''}${late}`.trim(), link: r.conversation_id ? `/chat/${r.conversation_id}` : '/routines', kind: 'reminder' }).catch((err) =>
+  void notify({ title: `⏰ ${r.text}`, body: `${r.note ?? ''}${late}`.trim(), link: r.conversation_id ? `/chat/${r.conversation_id}` : '/routines', kind: 'reminder', source: 'reminders' }).catch((err) =>
     console.error(`[reminder ${r.id}]`, errorMessage(err)),
   );
 }

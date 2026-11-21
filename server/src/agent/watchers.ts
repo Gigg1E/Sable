@@ -388,7 +388,7 @@ export async function checkWatcher(wid: string): Promise<{ ok: boolean; value?: 
     // Back off on repeated failures (max 6h) so a broken page isn't hammered.
     const backoff = Math.min(w.interval_min * 2 ** Math.min(fails - 1, 4), 360) * 60_000;
     run('UPDATE watchers SET last_error = ?, fail_count = ?, last_checked = ?, next_check = ? WHERE id = ?', msg, fails, now(), now() + backoff, wid);
-    if (fails === 3) void notify({ title: `Watcher failing: ${w.title}`, body: msg, link: '/watchers', kind: 'watch' });
+    if (fails === 3) void notify({ title: `Watcher failing: ${w.title}`, body: msg, link: '/watchers', kind: 'watch', verdict: 'digest', source: `watch:${w.id}`, key: `watch-fail:${w.id}` });
     emit({ type: 'watcher.changed', id: wid });
     return { ok: false, error: msg };
   } finally {
@@ -400,7 +400,7 @@ async function trigger(w: WatcherRow, actions: WatchActions, prev: string | null
   const short = (v: string | null) => (v == null ? '—' : truncate(v.replace(/\s+/g, ' '), 140));
   const title = `${w.title}: ${prev != null && w.extract.includes('"text"') === false ? `${short(prev)} → ` : ''}${short(cur.value)}`;
   const body = `${reason ? `Condition met (${reason}). ` : ''}${new URL(w.url).host}`;
-  if (actions.notify) await notify({ title, body, link: '/watchers', kind: 'watch' });
+  if (actions.notify) await notify({ title, body, link: '/watchers', kind: 'watch', source: `watch:${w.id}`, key: `watch:${w.id}|${cur.value.slice(0, 200)}` });
   if (actions.webhook) {
     void pushTo(actions.webhook, title, body, { watcher: { id: w.id, title: w.title, url: w.url }, previous: prev, current: cur.value, numeric: cur.numeric, reason }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));
   }
@@ -433,7 +433,7 @@ function wake(w: WatcherRow, body: string) {
 
 /** An event from email or calendar: notify, wake the agent, push to a webhook. */
 async function fireEvent(w: WatcherRow, actions: WatchActions, ev: { title: string; body: string; details: string; payload: Record<string, unknown> }) {
-  if (actions.notify && !actions.prompt) await notify({ title: ev.title, body: ev.body, link: '/watchers', kind: 'watch' });
+  if (actions.notify && !actions.prompt) await notify({ title: ev.title, body: ev.body, link: '/watchers', kind: 'watch', source: `watch:${w.id}` });
   if (actions.webhook) {
     void pushTo(actions.webhook, ev.title, ev.body, { watcher: { id: w.id, title: w.title }, ...ev.payload }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));
   }

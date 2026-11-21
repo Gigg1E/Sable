@@ -13,7 +13,7 @@ precacheAndRoute(self.__WB_MANIFEST);
 registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html'), { denylist: [/^\/api\//] }));
 
 self.addEventListener('push', (event) => {
-  let data: { title?: string; body?: string; link?: string; tag?: string; approvalId?: string } = {};
+  let data: { title?: string; body?: string; link?: string; tag?: string; approvalId?: string; noteId?: string } = {};
   try {
     data = event.data?.json() ?? {};
   } catch {
@@ -25,7 +25,7 @@ self.addEventListener('push', (event) => {
       icon: '/icon-192.png',
       badge: '/badge-96.png',
       tag: data.tag === 'approval' ? undefined : data.tag,
-      data: { link: data.link ?? '/', approvalId: data.approvalId },
+      data: { link: data.link ?? '/', approvalId: data.approvalId, noteId: data.noteId },
       // Approve right from the notification (Android, Windows, macOS Chrome; iOS opens the app instead).
       ...(data.approvalId
         ? {
@@ -35,7 +35,15 @@ self.addEventListener('push', (event) => {
             ],
             requireInteraction: true,
           }
-        : {}),
+        : data.noteId && data.tag !== 'digest' && data.tag !== 'system'
+          ? {
+              // Tune it right from the notification: future ones from the same source get quieter.
+              actions: [
+                { action: 'less', title: 'Less like this' },
+                { action: 'never', title: 'Never' },
+              ],
+            }
+          : {}),
     }),
   );
 });
@@ -60,6 +68,18 @@ self.addEventListener('notificationclick', (event) => {
         await self.registration.showNotification(event.action === 'approve' ? 'Approved' : 'Denied', { body: event.notification.title.replace(/^Approve:\s*/, ''), icon: '/icon-192.png', badge: '/badge-96.png', tag: 'decision' });
         setTimeout(() => void self.registration.getNotifications({ tag: 'decision' }).then((ns) => ns.forEach((n) => n.close())), 4000);
       })(),
+    );
+    return;
+  }
+  const noteId = event.notification.data?.noteId as string | undefined;
+  if (noteId && (event.action === 'less' || event.action === 'never')) {
+    event.waitUntil(
+      fetch(`/api/notifications/${noteId}/feedback`, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: event.action }),
+      }).catch(() => null),
     );
     return;
   }

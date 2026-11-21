@@ -1,3 +1,4 @@
+import type { AttentionSettings } from './attention.js';
 import { kvGet, kvSet } from './db.js';
 
 export type ProviderType = 'ollama' | 'llamacpp' | 'openai' | 'openai-compatible' | 'anthropic';
@@ -144,6 +145,8 @@ export interface Settings {
   publicUrl: string;
   /** The user's time zone (IANA). Empty: follow the device the app runs on. */
   timezone: string;
+  /** Quiet hours, digest times and the hourly limit (attention.ts). */
+  attention?: Partial<AttentionSettings>;
   shopping: {
     /** Shop catalog tools available to the agent. */
     enabled: boolean;

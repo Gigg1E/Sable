@@ -170,9 +170,9 @@ export async function ingest(raw: Buffer | string, envelope: { from?: string; to
     const { mine, quoted } = newestPart(text);
     commandHandler(row, mine, quoted);
   } else if (verdict === 'unverified') {
-    void notify({ title: 'Held an email that claims to be from you', body: `${fromAddr}: "${row.subject}". It failed sender verification, so Sable didn't act on it. Open Mail → Held to review.`, link: '/mail', kind: 'system' });
+    void notify({ title: 'Held an email that claims to be from you', body: `${fromAddr}: "${row.subject}". It failed sender verification, so Sable didn't act on it. Open Mail → Held to review.`, link: '/mail', kind: 'system', verdict: 'urgent', source: 'mail:spoof' });
   } else if (box.purpose === 'personal') {
-    void notify({ title: `${from?.name || fromAddr}`, body: row.subject ?? '', link: '/mail', kind: 'agent' });
+    void notify({ title: `${from?.name || fromAddr}`, body: row.subject ?? '', link: '/mail', kind: 'agent', source: `mail:${fromAddr.toLowerCase()}`, key: `mail:${row.uid ?? row.subject}` });
   }
   return { uid, folder, verdict };
 }

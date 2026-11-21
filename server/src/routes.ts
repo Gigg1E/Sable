@@ -1,3 +1,4 @@
+import { defaultAttention, isQuiet, listSourcePrefs, pendingDigest, setSourceLevel } from './attention.js';
 import { noteDeviceTz } from './clock.js';
 import { retimeSchedules } from './scheduler.js';
 import express, { type NextFunction, type Request, type Response } from 'express';
@@ -35,7 +36,7 @@ import { checkExitIp, proxyLabel } from './net.js';
 import { checkWatcher, createWatcher, describeCondition, extractFrom, parseNumber, watcherJson, type Condition, type ExtractSpec, type WatcherRow } from './agent/watchers.js';
 import { createHook, hookJson, type HookAction, type HookRow, type Verify } from './agent/hooks.js';
 import crypto from 'node:crypto';
-import { kvSet } from './db.js';
+import { kvGet, kvSet } from './db.js';
 import { notify, removeSubscription, saveSubscription, sendToChannel, vapidPublicKey } from './push.js';
 import { fireSchedule } from './scheduler.js';
 import { getSettings, publicSettings, updateSettings, type CalendarFeed, type EmailAccount, type ProviderConfig, type Settings } from './settings.js';
@@ -98,6 +99,19 @@ function appOrigin(req: Request) {
 /** Unread inbox and held counts for the Mail page tabs. */
 function mailCounts() {
   return get<{ inbox: number; held: number }>("SELECT sum(folder = 'inbox' AND read = 0) inbox, sum(folder = 'held') held FROM mail_messages") ?? { inbox: 0, held: 0 };
+}
+
+/** A readable name for a notification source, for Settings and the Inbox. */
+function sourceLabel(source: string, fallback: string): string {
+  const [kind, ref] = [source.slice(0, source.indexOf(':')), source.slice(source.indexOf(':') + 1)];
+  const t = (sql: string) => get<{ t: string }>(sql, ref)?.t;
+  if (kind === 'schedule') return `Routine: ${t('SELECT title AS t FROM schedules WHERE id = ?') ?? fallback}`;
+  if (kind === 'watch') return `Watcher: ${t('SELECT title AS t FROM watchers WHERE id = ?') ?? fallback}`;
+  if (kind === 'hook') return `Webhook: ${t('SELECT name AS t FROM hooks WHERE id = ?') ?? fallback}`;
+  if (kind === 'chat') return `Chat: ${t('SELECT title AS t FROM conversations WHERE id = ?') ?? fallback}`;
+  if (kind === 'mail') return `Mail from ${ref}`;
+  if (source === 'reminders') return 'Reminders';
+  return fallback || source;
 }
 
 export function apiRouter() {
@@ -802,6 +816,34 @@ export function apiRouter() {
     }),
   );
   r.delete('/notifications', h(() => run('DELETE FROM notifications') && undefined));
+
+  // ── Attention: your feedback on what reaches you, quiet hours, the digest ──
+  r.post(
+    '/notifications/:id/feedback',
+    h((req) => {
+      const n = get<{ id: string; title: string; source: string | null }>('SELECT id, title, source FROM notifications WHERE id = ?', String(req.params.id));
+      if (!n) throw new HttpError(404, 'That notification is gone.');
+      if (!n.source) throw new HttpError(400, "This one can't be tuned.");
+      const value = String((req.body as { value?: string }).value);
+      const level = { never: -2, less: -1, reset: 0, more: 1 }[value];
+      if (level === undefined) throw new HttpError(400, 'value must be less, more, never or reset.');
+      setSourceLevel(n.source, level, sourceLabel(n.source, n.title));
+      run('UPDATE notifications SET feedback = ? WHERE source = ? AND created_at > ?', value === 'reset' ? null : value, n.source, Date.now() - 7 * 86_400_000);
+      // Kept for the learning loop (docs/design/autonomy.md §5).
+      const lessons = kvGet<{ source: string; value: string; title: string; at: number }[]>('attention_lessons') ?? [];
+      kvSet('attention_lessons', [...lessons, { source: n.source, value, title: n.title, at: Date.now() }].slice(-200));
+      emit({ type: 'notifications.read' });
+      return { source: n.source, level, label: sourceLabel(n.source, n.title) };
+    }),
+  );
+  r.get('/attention', h(() => ({ settings: { ...defaultAttention(), ...(getSettings().attention ?? {}) }, prefs: listSourcePrefs(), quiet: isQuiet(), pending: pendingDigest().length })));
+  r.delete(
+    '/attention/prefs/:source',
+    h((req) => {
+      const src = String(req.params.source);
+      setSourceLevel(src, 0, sourceLabel(src, ''));
+    }),
+  );
 
   // ── Settings, models, tools, connectors ──
   r.get('/settings', h(() => publicSettings()));

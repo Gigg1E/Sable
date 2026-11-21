@@ -153,7 +153,7 @@ async function handle(req: Request, res: Response) {
   try {
     if (action.notify) {
       const title = action.title ? render(action.title, ctx) : `${h.name}`;
-      await notify({ title: truncate(title, 140), body: summarizePayload(body, text), link: '/webhooks', kind: 'hook' });
+      await notify({ title: truncate(title, 140), body: summarizePayload(body, text), link: '/webhooks', kind: 'hook', source: `hook:${h.id}` });
       detail += 'notified';
     }
     const wakeText = `[Webhook received: ${h.name}]\n${action.prompt}\n\n<untrusted source="webhook ${h.name}">\n${truncate(typeof body === 'string' ? body : JSON.stringify(body, null, 2), 20_000)}\n</untrusted>`;

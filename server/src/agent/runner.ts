@@ -8,7 +8,8 @@ import { errorMessage, id, now, parseJson, truncate } from '../util.js';
 import { mainSystemPrompt } from './prompt.js';
 import { isMain, maybeSummarize, setQuickAnswer } from '../brain.js';
 import { appendActivity, clearTaint, isFrozen, setFrozen, verifyActivity, isReadOnlyTool, markTainted, redact, taintEscalates, taintOf, untrustedSource } from '../safety.js';
-import { isRestricted, preapprovalFor, shouldNotifyAfterRun, type Preapproval } from './automation.js';
+import { endOfRun, isRestricted, preapprovalFor, type Preapproval } from './automation.js';
+import type { Verdict } from '../attention.js';
 import { searchTools, selectTools } from './routing.js';
 import { relevantMemories, toolsMentioned } from './tools/personal.js';
 import { attachmentForModel, attachmentInfo, claimUploads, readImage } from '../uploads.js';
@@ -679,6 +680,17 @@ export function startRun(conversationId: string, text: string, source: 'user' | 
   return runId;
 }
 
+/** Every run nobody is typing into: routines, watchers, webhooks, follow-ups, wake-ups. */
+const BACKGROUND_NOTE = `This is a background run: the user didn't just ask for this and isn't watching. Do the work, then end by calling finish with a verdict for the user's attention:
+- silent: nothing changed, or nothing worth anything. The default for checks.
+- log: keep a record in the Inbox, no ping (you did something routine).
+- digest: worth knowing, not urgent; it goes into their next digest.
+- tell: they should know now. Only for something new that matters to them or needs them.
+- urgent: time-critical, even at night.
+Put what actually changed in "changed" (the same change is never told twice). Never ping to say nothing happened.
+
+`;
+
 async function execute(runId: string, conversationId: string, controller: AbortController, source: 'user' | 'schedule' | 'wake') {
   const s = getSettings();
   try {
@@ -706,7 +718,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
       effort: s.main.effort,
       temperature: s.main.temperature,
       contextLength: s.main.contextLength,
-      system: mainSystemPrompt({ main: isMain(conversationId), memories, learnNote: correction ? 'The user\'s last message sounds like a correction or a standing instruction about how to handle this kind of request. Follow it, and if it should apply next time too, save it with memory_save kind "howto".' : '', toolNote: picked.method === 'all' ? '' : 'Only the tools relevant to this request are loaded. If you need a tool you don\'t see (email, calendar, watchers, routines, webhooks, shopping, files, spaces…), call tools_search first.' }),
+      system: mainSystemPrompt({ main: isMain(conversationId), memories, learnNote: correction ? 'The user\'s last message sounds like a correction or a standing instruction about how to handle this kind of request. Follow it, and if it should apply next time too, save it with memory_save kind "howto".' : '', toolNote: (source === 'user' ? '' : BACKGROUND_NOTE) + (picked.method === 'all' ? '' : 'Only the tools relevant to this request are loaded. If you need a tool you don\'t see (email, calendar, watchers, routines, webhooks, shopping, files, spaces…), call tools_search first.') }),
       messages: history.messages,
       historyTrimmed: history.trimmed,
       tools: picked.tools,
@@ -722,10 +734,20 @@ async function execute(runId: string, conversationId: string, controller: AbortC
         console.error('[run hook]', errorMessage(err));
       }
     }
-    // Background runs notify only when there's something to say (see automation.ts).
-    if (source === 'schedule' ? shouldNotifyAfterRun(conversationId, runId, answer) : connectedClients() === 0) {
-      const title = get<{ title: string }>('SELECT title FROM conversations WHERE id = ?', conversationId)?.title ?? 'Task';
-      void notify({ title: `${s.persona.name} · ${title}`, body: truncate(answer.replace(/[#*_>`]/g, ''), 180), link: `/chat/${conversationId}`, kind: source === 'schedule' ? 'schedule' : 'run' });
+    // Background runs say themselves whether you should hear about it (finish), and the attention gate decides when.
+    const title = get<{ title: string }>('SELECT title FROM conversations WHERE id = ?', conversationId)?.title ?? 'Task';
+    const out: { verdict: Verdict; source: string; headline?: string; body?: string; changed?: string } | null =
+      source === 'user' ? (connectedClients() === 0 ? { verdict: 'tell', source: `chat:${conversationId}` } : null) : endOfRun(conversationId, runId, answer);
+    if (out) {
+      void notify({
+        title: out.headline || `${s.persona.name} · ${title}`,
+        body: truncate((out.body || answer).replace(/[#*_>`]/g, ''), 180),
+        link: `/chat/${conversationId}`,
+        kind: source === 'schedule' ? 'schedule' : 'run',
+        verdict: out.verdict,
+        source: out.source,
+        key: out.changed ? `${out.source}|${out.changed.toLowerCase().slice(0, 120)}` : undefined,
+      });
     }
   } catch (err) {
     if (controller.signal.aborted) {
@@ -737,7 +759,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
         thinking: null, tool_calls: null, tool_call_id: null, tool_name: null, is_error: 1, raw: null, raw_model: null,
       });
       setRunStatus(runId, conversationId, 'error', msg);
-      if (source === 'schedule') void notify({ title: `${s.persona.name} hit a problem`, body: truncate(msg, 160), link: `/chat/${conversationId}`, kind: 'run' });
+      if (source !== 'user') void notify({ title: `${s.persona.name} hit a problem`, body: truncate(msg, 160), link: `/chat/${conversationId}`, kind: 'run', verdict: 'digest', source: 'system:errors' });
     }
   } finally {
     active.delete(runId);

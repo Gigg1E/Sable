@@ -155,7 +155,7 @@ export async function googleToken(email: string): Promise<string> {
       if (cur && !cur.broken) {
         cur.broken = why;
         saveAll(list);
-        void notify({ title: `Google account needs signing in again: ${acc.email}`, body: why, link: '/settings/connectors', kind: 'system' });
+        void notify({ title: `Google account needs signing in again: ${acc.email}`, body: why, link: '/settings/connectors', kind: 'system', key: `google-auth:${acc.email}` });
       }
       throw new Error(`${acc.email}: ${why}. Sign in with Google again in Settings → Connectors → Google.`);
     }

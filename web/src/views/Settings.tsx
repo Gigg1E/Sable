@@ -247,6 +247,50 @@ type Edit = (fn: (d: Settings) => void) => void;
 
 // ───────────────────────── Sections ─────────────────────────
 
+/** Quiet hours, the digest, and what you've tuned with Less / More / Never. */
+function AttentionSection({ draft, edit }: { draft: Settings; edit: Edit }) {
+  const [info, setInfo] = useState<{ settings: { quietStart: string; quietEnd: string; maxPerHour: number; digestTimes: string[] }; prefs: { source: string; level: number; label: string }[]; quiet: boolean; pending: number } | null>(null);
+  const load = () => void api.get<typeof info>('/attention').then(setInfo).catch(() => {});
+  useEffect(load, []);
+  const a = { ...(info?.settings ?? { quietStart: '23:00', quietEnd: '07:00', maxPerHour: 6, digestTimes: ['12:30', '18:30'] }), ...(draft.attention ?? {}) };
+  const set = (patch: Partial<typeof a>) => edit((d) => void (d.attention = { ...a, ...patch }));
+  return (
+    <Section
+      title="When Sable reaches you"
+      description="Background work only pings you when something is new and matters. Outside quiet hours it can tell you right away; during quiet hours it waits for the digest, unless it's urgent. Approvals and reminders you set always come through."
+    >
+      <Field label="Quiet hours" hint={info ? (info.quiet ? `Quiet right now. ${info.pending ? `${info.pending} waiting for the digest.` : ''}` : info.pending ? `${info.pending} waiting for the next digest.` : 'Nothing waiting for the digest.') : undefined}>
+        <div className="flex items-center gap-2">
+          <div className="w-36"><Input type="time" value={a.quietStart} onChange={(e) => set({ quietStart: e.target.value })} /></div>
+          <span className="text-fg-3">to</span>
+          <div className="w-36"><Input type="time" value={a.quietEnd} onChange={(e) => set({ quietEnd: e.target.value })} /></div>
+        </div>
+      </Field>
+      <Field label="Digests" hint="Also sent when quiet hours end. Comma-separated times.">
+        <Input value={a.digestTimes.join(', ')} onChange={(e) => set({ digestTimes: e.target.value.split(/[,\s]+/).filter((t) => /^\d{1,2}:\d{2}$/.test(t)) })} className="max-w-48" />
+      </Field>
+      <Field label="At most" hint="Notifications an hour. Past that, the rest are bundled into the next digest.">
+        <Input type="number" min={1} max={60} value={a.maxPerHour} onChange={(e) => set({ maxPerHour: Math.max(1, Number(e.target.value) || 6) })} className="max-w-24" />
+      </Field>
+      {!!info?.prefs.length && (
+        <Field label="You've tuned">
+          <div className="divide-y divide-line rounded-lg border border-line">
+            {info.prefs.map((p) => (
+              <div key={p.source} className="flex items-center gap-3 px-3 py-2 text-[13px]">
+                <span className="min-w-0 flex-1 truncate">{p.label}</span>
+                <span className="text-fg-3">{p.level === -2 ? 'Never' : p.level === -1 ? 'Less' : 'More'}</span>
+                <button onClick={() => void api.del(`/attention/prefs/${encodeURIComponent(p.source)}`).then(load)} className="text-[12.5px] text-fg-2 hover:text-fg">
+                  Reset
+                </button>
+              </div>
+            ))}
+          </div>
+        </Field>
+      )}
+    </Section>
+  );
+}
+
 function zones(): string[] {
   try {
     return (Intl as unknown as { supportedValuesOf(k: string): string[] }).supportedValuesOf('timeZone');
@@ -1007,6 +1051,7 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'network' && <NetworkSection draft={draft} edit={edit} />}
                 {active === 'notifications' && (
                   <>
+                    <AttentionSection draft={draft} edit={edit} />
                     <NotificationsSection draft={draft} edit={edit} />
                     <SoundsSection />
                   </>

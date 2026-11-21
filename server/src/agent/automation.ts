@@ -1,3 +1,4 @@
+import type { Verdict } from '../attention.js';
 import { get, run } from '../db.js';
 
 /**
@@ -89,4 +90,43 @@ export function preapprovalFor(conversationId: string): Preapproval | null {
 }
 export function isRestricted(p: Preapproval, toolName: string) {
   return p.restrict.some((r) => r && toolName.toLowerCase().includes(r.toLowerCase()));
+}
+
+// ── Finish: how a background run says whether you should hear about it (attention.ts) ──
+
+export interface Finish {
+  verdict: Verdict;
+  headline?: string;
+  body?: string;
+  changed?: string;
+}
+const finishes = new Map<string, Finish>();
+export const setFinish = (runId: string, f: Finish) => void finishes.set(runId, f);
+export const takeFinish = (runId: string) => {
+  const f = finishes.get(runId);
+  finishes.delete(runId);
+  return f;
+};
+
+/** Who a run belongs to, for feedback: the routine, the watcher, or the chat. */
+export function sourceFor(conversationId: string): string {
+  const s = get<{ id: string }>('SELECT id FROM schedules WHERE conversation_id = ?', conversationId);
+  if (s) return `schedule:${s.id}`;
+  const w = get<{ id: string }>('SELECT id FROM watchers WHERE run_conversation_id = ? OR conversation_id = ?', conversationId, conversationId);
+  if (w) return `watch:${w.id}`;
+  return `chat:${conversationId}`;
+}
+
+/**
+ * What the end of a background run sends to the attention gate. The run's own finish verdict wins;
+ * without one, a routine set to "always" tells, anything else only tells if it plainly has news.
+ */
+export function endOfRun(conversationId: string, runId: string, answer: string): (Finish & { source: string }) | null {
+  const fin = takeFinish(runId);
+  const alreadyNotified = notifiedRuns.has(runId);
+  const fallback = shouldNotifyAfterRun(conversationId, runId, answer); // also records the result for next time
+  const source = sourceFor(conversationId);
+  if (fin) return fin.verdict === 'silent' ? null : { ...fin, source };
+  if (alreadyNotified) return null; // it already used notify itself
+  return { verdict: fallback ? 'tell' : 'log', source };
 }

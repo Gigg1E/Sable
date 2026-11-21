@@ -105,6 +105,16 @@ It has a daily budget for model calls, so it can't run up costs.
 | Inbox | Approvals and suggestions, with feedback |
 | Notifications | Fewer, bundled, each with Less/More/Never |
 
+## Built so far
+
+**Phase 1, the attention gate (2026-11-21):**
+- `server/src/attention.ts` judges everything that goes through `notify()`. Verdicts are silent, log, digest, tell or urgent, adjusted by your feedback, dedupe (same key or same words within 24 h), quiet hours (in your time zone) and the hourly limit.
+- Background runs end with the `finish` tool and give a verdict. Without one, a routine set to "always" tells; anything else is kept quiet unless it plainly has news.
+- The digest goes out when quiet hours end and at 12:30 and 18:30, as one notification.
+- Inbox rows show how each item was handled, with Less / More / Never. Pushes have **Less like this** and **Never** buttons.
+- Settings → Notifications → *When Sable reaches you* has quiet hours, digest times, the hourly limit, and what you've tuned.
+- Approvals and reminders you set always come through.
+
 ## Phases
 
 1. **Attention + finish.** One gate, structured verdicts, quiet hours, dedupe, digest, and feedback buttons. *Fixes the noise first.*

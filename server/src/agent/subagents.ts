@@ -236,7 +236,7 @@ export function continueJob(jid: string, note?: string): Job {
 /** A background job finished: tell the user, and hand the result to the main agent in the same chat. */
 function reportBack(job: Job) {
   const verb = job.status === 'done' ? 'finished' : job.status === 'cancelled' ? 'was cancelled' : 'failed';
-  void notify({ title: `${job.agent_name} ${verb}`, body: truncate((job.result ?? '').replace(/\s+/g, ' '), 160), link: `/chat/${job.conversation_id}`, kind: 'agent' }).catch(() => {});
+  void notify({ title: `${job.agent_name} ${verb}`, body: truncate((job.result ?? '').replace(/\s+/g, ' '), 160), link: `/chat/${job.conversation_id}`, kind: 'agent', source: `chat:${job.conversation_id}` }).catch(() => {});
   if (job.status === 'cancelled') return;
   // A report written from untrusted content (web pages, email) stays untrusted when it comes back.
   const taint = taintOf(job.id);

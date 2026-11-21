@@ -154,6 +154,7 @@ export interface Settings {
   publicUrl: string;
   /** IANA zone; empty = follow this device. */
   timezone?: string;
+  attention?: { quietStart: string; quietEnd: string; maxPerHour: number; digestTimes: string[] };
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }
 
@@ -335,6 +336,12 @@ export interface Notification {
   kind: string;
   read: number;
   created_at: number;
+  /** How the attention gate judged it (server attention.ts). */
+  verdict?: 'log' | 'digest' | 'tell' | 'urgent';
+  pushed?: number;
+  why?: string | null;
+  source?: string | null;
+  feedback?: 'less' | 'more' | 'never' | null;
 }
 export interface ToolInfo {
   name: string;

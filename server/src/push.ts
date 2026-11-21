@@ -1,3 +1,4 @@
+import { decide, defaultVerdict, takeDueDigest, type Verdict } from './attention.js';
 import { redact } from './safety.js';
 import { plainText } from './util.js';
 import * as webpush from 'web-push';
@@ -41,15 +42,38 @@ export interface NotifyInput {
   kind?: 'approval' | 'run' | 'agent' | 'schedule' | 'system' | 'watch' | 'hook' | 'reminder';
   /** Adds Approve / Deny buttons to the push notification (where the browser supports them). */
   approvalId?: string;
+  /** How much this deserves your attention (attention.ts). Defaults by kind. */
+  verdict?: Verdict;
+  /** Who it's from, for your Less / More / Never feedback: "schedule:sch_…", "watch:w_…", "chat:c_…". */
+  source?: string;
+  /** Same key within a day = the same news; only the first one is told. */
+  key?: string;
 }
 
-/** Store an in-app notification, broadcast it live, and send a web push to every subscribed device. */
+/**
+ * Everything that wants to reach the user comes through here. The attention gate decides
+ * (attention.ts): nothing, a quiet Inbox entry, the next digest, or a notification now. Only the
+ * last one pushes to devices and channels.
+ */
 export async function notify(input: NotifyInput) {
   input = { ...input, title: plainText(redact(input.title)), body: input.body ? plainText(redact(input.body)) : input.body };
-  const note = { id: id('n_'), title: input.title, body: input.body ?? '', link: input.link ?? '/', kind: input.kind ?? 'agent', read: 0, created_at: now() };
-  run('INSERT INTO notifications (id, title, body, link, kind, read, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)', note.id, note.title, note.body, note.link, note.kind, note.created_at);
+  const kind = input.kind ?? 'agent';
+  const d = decide({ verdict: input.verdict ?? defaultVerdict(kind), kind, source: input.source, key: input.key, title: input.title, body: input.body });
+  if (d.verdict === 'silent') return null;
+  const live = d.verdict === 'tell' || d.verdict === 'urgent';
+  const note = { id: id('n_'), title: input.title, body: input.body ?? '', link: input.link ?? '/', kind, read: d.verdict === 'log' ? 1 : 0, created_at: now(), verdict: d.verdict, why: d.why || null, source: input.source ?? null };
+  run(
+    'INSERT INTO notifications (id, title, body, link, kind, read, created_at, verdict, source, key, pushed, why) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    note.id, note.title, note.body, note.link, note.kind, note.read, note.created_at, d.verdict, input.source ?? null, input.key ?? null, live ? 1 : 0, d.why || null,
+  );
   emit({ type: 'notification', notification: note });
+  if (!live) return note;
+  await pushOut(note, input.approvalId);
+  return note;
+}
 
+/** Send to channels and every subscribed device. */
+async function pushOut(note: { id: string; title: string; body: string; link: string; kind: string }, approvalId?: string) {
   const important = note.kind === 'approval' || note.kind === 'watch' || note.kind === 'hook' || note.kind === 'agent' || note.kind === 'schedule' || note.kind === 'reminder';
   for (const ch of getSettings().channels.filter((c) => c.enabled && c.events !== 'none' && (c.events === 'all' || important))) {
     void sendToChannel(ch, note.title, note.body, absoluteLink(note.link)).catch((err) => console.error(`[channel ${ch.name}]`, (err as Error).message));
@@ -59,14 +83,30 @@ export async function notify(input: NotifyInput) {
   await Promise.all(
     subs.map(async (s) => {
       try {
-        await webpush.sendNotification(JSON.parse(s.sub), JSON.stringify({ title: note.title, body: note.body, link: note.link, tag: note.kind, approvalId: input.approvalId }), { TTL: 3600 });
+        await webpush.sendNotification(JSON.parse(s.sub), JSON.stringify({ title: note.title, body: note.body, link: note.link, tag: note.kind, approvalId, noteId: note.id }), { TTL: 3600 });
       } catch (err) {
         const code = (err as { statusCode?: number }).statusCode;
         if (code === 404 || code === 410) removeSubscription(s.endpoint);
       }
     }),
   );
-  return note;
+}
+
+/** Every minute: if a digest slot has passed (end of quiet hours, 12:30, 18:30), send what's waiting as one notification. */
+export function startDigest() {
+  const tick = () => {
+    try {
+      const items = takeDueDigest();
+      if (!items.length) return;
+      const title = items.length === 1 ? items[0].title : `${items.length} things while you were away`;
+      const body = items.length === 1 ? (items[0].body ?? '') : items.slice(0, 6).map((i) => `• ${i.title}`).join('\n') + (items.length > 6 ? `\n+${items.length - 6} more` : '');
+      void pushOut({ id: id('n_'), title, body, link: items.length === 1 ? (items[0].link ?? '/inbox') : '/inbox', kind: 'digest' });
+    } catch (err) {
+      console.error('[digest]', (err as Error).message);
+    }
+  };
+  setInterval(tick, 60_000).unref?.();
+  tick();
 }
 
 /** Base URL people reach Sable at (configured, or remembered from the last browser visit). */
