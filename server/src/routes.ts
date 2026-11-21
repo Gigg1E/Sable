@@ -1,3 +1,4 @@
+import { deleteDuty, dutyTriggers, getDuty, listDuties, recentSignals, runDuty, updateDuty } from './duties.js';
 import { defaultAttention, isQuiet, listSourcePrefs, pendingDigest, setSourceLevel } from './attention.js';
 import { noteDeviceTz } from './clock.js';
 import { retimeSchedules } from './scheduler.js';
@@ -105,6 +106,7 @@ function mailCounts() {
 function sourceLabel(source: string, fallback: string): string {
   const [kind, ref] = [source.slice(0, source.indexOf(':')), source.slice(source.indexOf(':') + 1)];
   const t = (sql: string) => get<{ t: string }>(sql, ref)?.t;
+  if (kind === 'duty') return `Duty: ${t('SELECT title AS t FROM duties WHERE id = ?') ?? fallback}`;
   if (kind === 'schedule') return `Routine: ${t('SELECT title AS t FROM schedules WHERE id = ?') ?? fallback}`;
   if (kind === 'watch') return `Watcher: ${t('SELECT title AS t FROM watchers WHERE id = ?') ?? fallback}`;
   if (kind === 'hook') return `Webhook: ${t('SELECT name AS t FROM hooks WHERE id = ?') ?? fallback}`;
@@ -816,6 +818,42 @@ export function apiRouter() {
     }),
   );
   r.delete('/notifications', h(() => run('DELETE FROM notifications') && undefined));
+
+  // ── Duties and signals (docs/design/autonomy.md §1–2) ──
+  r.get(
+    '/duties',
+    h(() => ({
+      duties: listDuties().map((d) => ({ ...d, triggers: dutyTriggers(d), signals: recentSignals(5, d.id) })),
+      signals: recentSignals(40),
+    })),
+  );
+  r.patch(
+    '/duties/:id',
+    h((req) => {
+      const b = req.body as Record<string, unknown>;
+      const d = updateDuty(String(req.params.id), {
+        title: typeof b.title === 'string' ? b.title : undefined,
+        purpose: typeof b.purpose === 'string' ? b.purpose : undefined,
+        instructions: typeof b.instructions === 'string' ? b.instructions : undefined,
+        autonomy: b.autonomy === 'act' || b.autonomy === 'suggest' || b.autonomy === 'watch' ? b.autonomy : undefined,
+        notify: b.notify === 'always' || b.notify === 'when_new' ? b.notify : undefined,
+        status: b.status === 'active' || b.status === 'paused' || b.status === 'done' ? b.status : undefined,
+        memory: typeof b.memory === 'string' ? b.memory : undefined,
+      });
+      if (!d) throw new HttpError(404, 'No such duty.');
+      return d;
+    }),
+  );
+  r.post(
+    '/duties/:id/run',
+    h((req) => {
+      const d = getDuty(String(req.params.id));
+      if (!d) throw new HttpError(404, 'No such duty.');
+      if (d.status !== 'active') throw new HttpError(400, 'Resume the duty first.');
+      return { runId: runDuty(d.id, { source: 'manual', kind: 'manual', title: 'You asked to run it now' }) ?? null, conversationId: getDuty(d.id)?.conversation_id };
+    }),
+  );
+  r.delete('/duties/:id', h((req) => ({ ok: deleteDuty(String(req.params.id)) })));
 
   // ── Attention: your feedback on what reaches you, quiet hours, the digest ──
   r.post(

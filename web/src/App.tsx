@@ -1,3 +1,4 @@
+import { DutiesView } from './views/Duties';
 import { MeetSable } from './views/MeetSable';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { MotionConfig } from 'motion/react';
@@ -26,6 +27,7 @@ function Routes() {
   let m: Record<string, string> | null;
   if ((m = match('/chat/:id', path))) return { key: `chat-${m.id}`, el: <ChatView id={m.id} /> };
   if (path === '/goals') return { key: 'goals', el: <GoalsView /> };
+  if (path === '/duties') return { key: 'duties', el: <DutiesView /> };
   if (path === '/watchers') return { key: 'watchers', el: <WatchersView /> };
   if (path === '/webhooks') return { key: 'webhooks', el: <WebhooksView /> };
   if (path === '/routines') return { key: 'routines', el: <RoutinesView /> };

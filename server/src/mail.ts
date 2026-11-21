@@ -1,3 +1,4 @@
+import { mailSignal } from './duties.js';
 import crypto from 'node:crypto';
 import dns from 'node:dns/promises';
 import express from 'express';
@@ -172,6 +173,8 @@ export async function ingest(raw: Buffer | string, envelope: { from?: string; to
   } else if (verdict === 'unverified') {
     void notify({ title: 'Held an email that claims to be from you', body: `${fromAddr}: "${row.subject}". It failed sender verification, so Sable didn't act on it. Open Mail → Held to review.`, link: '/mail', kind: 'system', verdict: 'urgent', source: 'mail:spoof' });
   } else if (box.purpose === 'personal') {
+    // Mail is a signal: duties watching for this sender or subject wake up.
+    mailSignal(fromAddr, row.subject ?? '', `<untrusted source="email from ${fromAddr}">\n${truncate(newestPart(text).mine, 3000)}\n</untrusted>`);
     void notify({ title: `${from?.name || fromAddr}`, body: row.subject ?? '', link: '/mail', kind: 'agent', source: `mail:${fromAddr.toLowerCase()}`, key: `mail:${row.uid ?? row.subject}` });
   }
   return { uid, folder, verdict };

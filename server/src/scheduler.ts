@@ -1,3 +1,4 @@
+import { adoptAll, getDuty, runDuty } from './duties.js';
 import { fmt } from './clock.js';
 import { activeRunFor, createConversation, startRun } from './agent/runner.js';
 import { computeNextRun, type ScheduleKind, type ScheduleSpec } from './agent/tools/personal.js';
@@ -17,6 +18,7 @@ interface ScheduleRow {
   notify: string | null;
   last_result: string | null;
   last_run: number | null;
+  duty_id: string | null;
 }
 
 /** Fire one schedule now: runs in its own conversation so results stay together. */
@@ -33,6 +35,11 @@ export function fireSchedule(sid: string): string | undefined {
   const next = computeNextRun(s.kind, parseJson<ScheduleSpec>(s.spec, {}));
   run('UPDATE schedules SET last_run = ?, next_run = ?, enabled = ? WHERE id = ?', now(), next, next == null ? 0 : 1, s.id);
   emit({ type: 'schedule.changed' });
+  // A routine that belongs to a duty is just its timer: the duty runs, with its memory and rules.
+  if (s.duty_id && getDuty(s.duty_id)) {
+    const last = s.last_result ? `Your last result (${fmt(previousRun ?? now())}): ${s.last_result.slice(0, 600)}` : undefined;
+    return runDuty(s.duty_id, { source: `schedule:${s.id}`, kind: 'time', title: `Scheduled time for "${s.title}"`, body: last });
+  }
   try {
     const mode = s.notify ?? defaultNotify(s.kind);
     const how =
@@ -49,6 +56,7 @@ export function fireSchedule(sid: string): string | undefined {
 
 export function startScheduler() {
   const tick = () => {
+    adoptAll(); // new routines, watchers and webhooks with instructions become duties
     // One-time routines disappear a day after they ran (their history chat stays).
     run("DELETE FROM schedules WHERE kind = 'once' AND enabled = 0 AND last_run IS NOT NULL AND last_run < ?", now() - 86_400_000);
     for (const s of all<{ id: string }>('SELECT id FROM schedules WHERE enabled = 1 AND next_run IS NOT NULL AND next_run <= ?', now())) {

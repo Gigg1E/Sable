@@ -1,3 +1,4 @@
+import { getDuty, mailSignal, recordSignal, runDuty } from '../duties.js';
 import { fmt, fmtDay } from '../clock.js';
 import * as cheerio from 'cheerio';
 import { all, get, run } from '../db.js';
@@ -409,8 +410,17 @@ async function trigger(w: WatcherRow, actions: WatchActions, prev: string | null
 
 /** Run the watcher's instructions in its own background chat (pre-approved if the user approved it that way). */
 function wake(w: WatcherRow, body: string) {
-  const deliver = parseJson<WatchActions>(w.actions as unknown as string, { notify: true }).deliver;
+  const acts = parseJson<WatchActions>(w.actions as unknown as string, { notify: true });
+  const deliver = acts.deliver;
   if (deliver === 'here' && w.conversation_id && wakeChat(w.conversation_id, `[Watcher triggered: ${w.title} · ${w.id}]\n${body}`)) return;
+  // A watcher that belongs to a duty is a signal source: the duty does the thinking.
+  const dutyId = (w as unknown as { duty_id?: string | null }).duty_id;
+  if (dutyId && getDuty(dutyId)) {
+    const details = acts.prompt && body.startsWith(acts.prompt) ? body.slice(acts.prompt.length).trim() : body;
+    runDuty(dutyId, { source: `watch:${w.id}`, kind: 'watch', title: `${w.title} triggered`, body: details });
+    return;
+  }
+  recordSignal({ source: `watch:${w.id}`, kind: 'watch', title: `${w.title} triggered` });
   let cid = w.run_conversation_id;
   if (!cid || !get('SELECT id FROM conversations WHERE id = ?', cid)) {
     cid = createConversation(`👁 ${w.title}`, 'watch');
@@ -433,6 +443,9 @@ function wake(w: WatcherRow, body: string) {
 
 /** An event from email or calendar: notify, wake the agent, push to a webhook. */
 async function fireEvent(w: WatcherRow, actions: WatchActions, ev: { title: string; body: string; details: string; payload: Record<string, unknown> }) {
+  const em = ev.payload.email as { from?: string; subject?: string } | undefined;
+  if (em?.from) mailSignal(String(em.from), String(em.subject ?? ''), ev.details);
+  else if (ev.payload.event) recordSignal({ source: `watch:${w.id}`, kind: 'calendar', title: ev.title });
   if (actions.notify && !actions.prompt) await notify({ title: ev.title, body: ev.body, link: '/watchers', kind: 'watch', source: `watch:${w.id}` });
   if (actions.webhook) {
     void pushTo(actions.webhook, ev.title, ev.body, { watcher: { id: w.id, title: w.title }, ...ev.payload }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));

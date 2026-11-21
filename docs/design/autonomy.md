@@ -115,6 +115,26 @@ It has a daily budget for model calls, so it can't run up costs.
 - Settings → Notifications → *When Sable reaches you* has quiet hours, digest times, the hourly limit, and what you've tuned.
 - Approvals and reminders you set always come through.
 
+**Phase 2, duties and signals (2026-11-21):**
+- `server/src/duties.ts`:
+  - A duty is a title, a purpose, instructions, its autonomy (act, suggest or watch), notify (when_new or always), memory and a status (active, paused or done).
+  - `runDuty` wakes a duty with a signal in its own chat. The run sees its purpose, its memory and your Less/More/Never feedback, and ends with `finish` (verdict plus `remember`, which updates the memory).
+- **What wakes a duty:**
+  - routines (its timers)
+  - watchers
+  - webhooks
+  - mail from a sender or about a subject, on Sable mail or a watched mailbox
+- **Signals:** every timer, watcher trigger, webhook receipt and new mail is recorded, and the last 2,000 are kept.
+- **Adoption:** existing routines, watchers with instructions and webhooks with instructions became duties automatically, keeping their chats (the Morning rundown still lands in Main). Plain alerts and "wake this chat" watchers stay as they were.
+- **Autonomy:**
+  - *act* pre-approves a duty's steps except send, buy, delete and checkout.
+  - *suggest* asks for everything.
+  - *watch* only reports.
+  - Only you can raise a duty to *act* (approving `duty_create`, or the Duties page).
+- **Tools:** `duty_create` (needs your OK), `duty_list`, `duty_update`, `duty_run`, `duty_delete`. Active duties are listed in every prompt.
+- **The Duties page:** each duty with what wakes it, Acts/Suggests/Watches, its memory (editable), run now, pause, and a "Lately" list of signals.
+- **Follow-ups** stay as they are (they continue one chat). They're the conversational cousin of a duty.
+
 ## Phases
 
 1. **Attention + finish.** One gate, structured verdicts, quiet hours, dedupe, digest, and feedback buttons. *Fixes the noise first.*

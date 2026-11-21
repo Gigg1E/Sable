@@ -1,3 +1,4 @@
+import { getDuty, recordSignal, runDuty } from '../duties.js';
 import crypto from 'node:crypto';
 import express, { type Request, type Response } from 'express';
 import { all, get, run } from '../db.js';
@@ -159,6 +160,10 @@ async function handle(req: Request, res: Response) {
     const wakeText = `[Webhook received: ${h.name}]\n${action.prompt}\n\n<untrusted source="webhook ${h.name}">\n${truncate(typeof body === 'string' ? body : JSON.stringify(body, null, 2), 20_000)}\n</untrusted>`;
     if (action.prompt && action.here && wakeChat(action.here, wakeText)) {
       detail += (detail ? ', ' : '') + 'woke its chat';
+    } else if (action.prompt && (h as unknown as { duty_id?: string | null }).duty_id && getDuty((h as unknown as { duty_id: string }).duty_id)) {
+      // The webhook belongs to a duty: it's a signal, and the duty does the thinking.
+      runDuty((h as unknown as { duty_id: string }).duty_id, { source: `hook:${h.id}`, kind: 'hook', title: `Webhook "${h.name}" received`, body: `<untrusted source="webhook ${h.name}">\n${truncate(typeof body === 'string' ? body : JSON.stringify(body, null, 2), 12_000)}\n</untrusted>` });
+      detail += (detail ? ', ' : '') + 'woke its duty';
     } else if (action.prompt) {
       let cid = h.conversation_id;
       if (!cid || !get('SELECT id FROM conversations WHERE id = ?', cid) || activeRunFor(cid)) {
@@ -172,6 +177,7 @@ async function handle(req: Request, res: Response) {
       );
       detail += (detail ? ', ' : '') + 'agent started';
     }
+    if (!detail.includes('duty')) recordSignal({ source: `hook:${h.id}`, kind: 'hook', title: `Webhook "${h.name}" received` });
     record('accepted', detail || 'logged', deliveryId);
   } catch (err) {
     record('error', errorMessage(err), deliveryId);

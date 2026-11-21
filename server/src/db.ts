@@ -146,6 +146,19 @@ addColumn('notifications', 'key', 'TEXT');
 addColumn('notifications', 'pushed', 'INTEGER NOT NULL DEFAULT 1');
 addColumn('notifications', 'why', 'TEXT');
 addColumn('notifications', 'feedback', 'TEXT');
+// Duties and signals (docs/design/autonomy.md §1–2).
+db.exec(`CREATE TABLE IF NOT EXISTS duties (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, purpose TEXT NOT NULL, instructions TEXT NOT NULL, autonomy TEXT NOT NULL DEFAULT 'act',
+  restrict_tools TEXT, notify TEXT NOT NULL DEFAULT 'when_new', memory TEXT, conversation_id TEXT, status TEXT NOT NULL DEFAULT 'active',
+  origin TEXT NOT NULL DEFAULT 'user', mail TEXT, created_at INTEGER NOT NULL, last_run INTEGER, runs INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS signals (
+  id TEXT PRIMARY KEY, source TEXT NOT NULL, kind TEXT NOT NULL, title TEXT NOT NULL, body TEXT, duty_id TEXT, created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS signals_time ON signals (created_at);`);
+addColumn('schedules', 'duty_id', 'TEXT');
+addColumn('watchers', 'duty_id', 'TEXT');
+addColumn('hooks', 'duty_id', 'TEXT');
 db.exec('CREATE TABLE IF NOT EXISTS attention_prefs (source TEXT PRIMARY KEY, level INTEGER NOT NULL, label TEXT, updated_at INTEGER NOT NULL)');
 addColumn('approvals', 'call_id', 'TEXT');
 addColumn('messages', 'cards', 'TEXT');

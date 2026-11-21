@@ -1,3 +1,4 @@
+import { adoptAll } from './duties.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import express from 'express';
@@ -11,6 +12,7 @@ import './agent/tools/reminders.js';
 import './agent/tools/library.js';
 import './agent/tools/people.js';
 import './agent/tools/journal.js';
+import './agent/tools/duties.js';
 import { askQuick, startBrain } from './brain.js';
 import { mailInboundRouter, setMailHelpers, summarizeProfiles } from './mail.js';
 import { startMailAgent } from './mailAgent.js';
@@ -138,6 +140,7 @@ app.listen(PORT, HOST, () => {
   }
   setInterval(() => void backfillMemoryEmbeddings(), 10 * 60_000).unref();
   setTimeout(() => void backfillMemoryEmbeddings(), 60_000).unref();
+  adoptAll(); // routines, watchers and webhooks with instructions become duties (once)
   startScheduler();
   startReminders();
   queueIndex(); // embed anything added while the helper model was offline

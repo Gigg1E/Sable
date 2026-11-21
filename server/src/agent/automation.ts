@@ -1,3 +1,4 @@
+import { dutyForConversation, dutyPreapproval } from '../duties.js';
 import type { Verdict } from '../attention.js';
 import { get, run } from '../db.js';
 
@@ -76,6 +77,8 @@ export interface Preapproval {
   restrict: string[];
 }
 export function preapprovalFor(conversationId: string): Preapproval | null {
+  const duty = dutyForConversation(conversationId);
+  if (duty) return dutyPreapproval(conversationId);
   const row =
     get<{ autonomy: string | null; restrict_tools: string | null }>('SELECT autonomy, restrict_tools FROM schedules WHERE conversation_id = ?', conversationId) ??
     get<{ autonomy: string | null; restrict_tools: string | null }>('SELECT autonomy, restrict_tools FROM watchers WHERE run_conversation_id = ?', conversationId);
@@ -110,6 +113,8 @@ export const takeFinish = (runId: string) => {
 
 /** Who a run belongs to, for feedback: the routine, the watcher, or the chat. */
 export function sourceFor(conversationId: string): string {
+  const d = dutyForConversation(conversationId);
+  if (d) return `duty:${d.id}`;
   const s = get<{ id: string }>('SELECT id FROM schedules WHERE conversation_id = ?', conversationId);
   if (s) return `schedule:${s.id}`;
   const w = get<{ id: string }>('SELECT id FROM watchers WHERE run_conversation_id = ? OR conversation_id = ?', conversationId, conversationId);

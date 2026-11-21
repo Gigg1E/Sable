@@ -1,3 +1,4 @@
+import { dutiesLine } from '../duties.js';
 import { nowLine } from '../clock.js';
 import { all } from '../db.js';
 import { getSettings, type AgentProfile } from '../settings.js';
@@ -85,6 +86,7 @@ ${memories.filter((m) => m.kind === 'me' || !m.kind).map((m) => `- [${m.id}] ${m
 ## Automations already running
 ${routines.length ? `Routines: ${routines.map((r) => r.title).join('; ')}` : 'Routines: none'}
 ${reminderLine()}
+${dutiesLine()}
 ${mailboxLine()}
 ${peopleLine() ? `People you know (private): ${peopleLine()}` : 'People you know: none yet'}
 ${watchers.length ? `Watchers: ${watchers.map((w) => `${w.title} (${w.source ?? 'web'})`).join('; ')}` : 'Watchers: none'}

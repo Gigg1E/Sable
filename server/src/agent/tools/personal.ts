@@ -1,3 +1,4 @@
+import { dutyForConversation, updateDuty } from '../../duties.js';
 import { parseLocal, parts, wallToUtc, fmt as fmtLocal } from '../../clock.js';
 import { all, get, run } from '../../db.js';
 import { emit } from '../../events.js';
@@ -459,7 +460,7 @@ registerTool({
   label: 'Finish',
   group: 'Notify',
   description:
-    "End a background run (routine, watcher, webhook, follow-up, wake-up) by saying whether the user should hear about it. verdict: silent (nothing changed / nothing worth anything; the default for checks), log (a quiet record in the Inbox), digest (worth knowing, not urgent: their next digest), tell (they should know now), urgent (time-critical, even at night). changed: what actually changed, in a few words (the same change is never told twice). headline/body: the message, if any. Not for normal chats with the user.",
+    "End a background run (duty, routine, watcher, webhook, follow-up, wake-up) by saying whether the user should hear about it. verdict: silent (nothing changed / nothing worth anything; the default for checks), log (a quiet record in the Inbox), digest (worth knowing, not urgent: their next digest), tell (they should know now), urgent (time-critical, even at night). changed: what actually changed, in a few words (the same change is never told twice). headline/body: the message, if any. Not for normal chats with the user.",
   parameters: {
     type: 'object',
     properties: {
@@ -467,6 +468,7 @@ registerTool({
       changed: { type: 'string' },
       headline: { type: 'string' },
       body: { type: 'string' },
+      remember: { type: 'string', description: "For a duty: what to remember for next time (replaces the duty's memory): values seen, what you told the user, open questions." },
     },
     required: ['verdict'],
   },
@@ -475,6 +477,8 @@ registerTool({
   summarize: (a) => (a.verdict === 'silent' ? 'Nothing to report' : `Report: ${a.headline ?? a.verdict}`),
   async run(a, ctx) {
     if (!isVerdict(a.verdict)) return 'verdict must be silent, log, digest, tell or urgent.';
+    const duty = dutyForConversation(ctx.conversationId);
+    if (duty && typeof a.remember === 'string' && a.remember.trim()) updateDuty(duty.id, { memory: a.remember.trim() });
     setFinish(ctx.runId, { verdict: a.verdict, changed: a.changed ? String(a.changed).slice(0, 300) : undefined, headline: a.headline ? String(a.headline).slice(0, 140) : undefined, body: a.body ? String(a.body).slice(0, 600) : undefined });
     return a.verdict === 'silent' ? 'Noted: nothing goes to the user. Finish with one short line.' : 'Noted. Finish with one short line; Sable delivers it at the right time.';
   },
@@ -514,7 +518,7 @@ registerTool({
   label: 'Schedule task',
   group: 'Schedules',
   description:
-    'Set a routine: a time, a topic (title) and a prompt. NOT for plain one-off reminders ("remind me at 10 about class"): use reminder_set for those. At each run you receive the prompt in a fresh background chat and do it: tell the user something (a reminder or briefing) or do a job yourself (e.g. "email Sam the results at 8pm", "add the dentist appointment to my calendar"). Write the prompt with every detail the run will need. If something essential is missing (the time, who to email, the subject), ask the user BEFORE creating the routine. The user reviews and approves it; once approved, its runs act without asking again except for purchases and any tools listed in restrict (e.g. ["send"] to keep asking before sending email). kind: once (at = ISO date-time), interval (every_minutes ≥ 10; use 15-60 for checks), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are the user\'s local time (at without an offset). notify: "always" for reminders and briefings the user wants every time (default for once/daily/weekly); "when_new" for checks ("tell me when X emails me"), which only notify when something new happened and never report that nothing changed (default for interval). To change an existing schedule use schedule_update, never create a second one.',
+    'Set a routine: a time, a topic (title) and a prompt. For an ongoing responsibility (keep an eye on X, make sure Y, track Z until done) use duty_create instead. NOT for plain one-off reminders ("remind me at 10 about class"): use reminder_set for those. At each run you receive the prompt in a fresh background chat and do it: tell the user something (a reminder or briefing) or do a job yourself (e.g. "email Sam the results at 8pm", "add the dentist appointment to my calendar"). Write the prompt with every detail the run will need. If something essential is missing (the time, who to email, the subject), ask the user BEFORE creating the routine. The user reviews and approves it; once approved, its runs act without asking again except for purchases and any tools listed in restrict (e.g. ["send"] to keep asking before sending email). kind: once (at = ISO date-time), interval (every_minutes ≥ 10; use 15-60 for checks), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are the user\'s local time (at without an offset). notify: "always" for reminders and briefings the user wants every time (default for once/daily/weekly); "when_new" for checks ("tell me when X emails me"), which only notify when something new happened and never report that nothing changed (default for interval). To change an existing schedule use schedule_update, never create a second one.',
   parameters: {
     type: 'object',
     properties: {

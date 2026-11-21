@@ -1,4 +1,5 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
+import { Target } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity, Brain, CalendarClock, Library, Users, Sparkle, AtSign, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
@@ -230,6 +231,7 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
   const mood = useSableMood();
 
   const agentNav = [
+    { to: '/duties', label: 'Duties', icon: Target },
     { to: '/goals', label: 'Goals', icon: ListChecks },
     { to: '/routines', label: 'Routines', icon: CalendarClock },
     { to: '/watchers', label: 'Watchers', icon: Radar },
@@ -434,7 +436,7 @@ function MobileTabs({ onMore, onChats, hidden }: { onMore: () => void; onChats: 
     { to: '/spaces', label: 'Spaces', icon: LayoutGrid, active: path.startsWith('/spaces') },
     { to: '/inbox', label: 'Inbox', icon: Inbox, active: path === '/inbox', count: approvals + unread },
   ];
-  const moreActive = ['/goals', '/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
+  const moreActive = ['/duties', '/goals', '/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
   return (
     <AnimatePresence initial={false}>
       {!hidden && (
@@ -558,6 +560,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
         <Sheet open={more} onClose={() => setMore(false)} title="More">
           <div className="-m-2 space-y-px">
             {[
+              { to: '/duties', label: 'Duties', icon: Target },
               { to: '/goals', label: 'Goals', icon: ListChecks },
               { to: '/routines', label: 'Routines', icon: CalendarClock },
               { to: '/watchers', label: 'Watchers', icon: Radar },
