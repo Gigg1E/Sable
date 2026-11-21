@@ -1,3 +1,6 @@
+import { addPlanItem, buildAgenda, deletePlanItem, getPlanItem, updatePlanItem } from './plan.js';
+import { addLesson, deleteLesson, learningStatus, listLessons, observe, runReview, updateLesson } from './learning.js';
+import { fmt } from './clock.js';
 import { checkIn, decideSuggestion, initiativeStatus, pendingSuggestions } from './initiative.js';
 import { deleteDuty, dutyTriggers, getDuty, listDuties, recentSignals, runDuty, updateDuty } from './duties.js';
 import { defaultAttention, isQuiet, listSourcePrefs, pendingDigest, setSourceLevel } from './attention.js';
@@ -856,6 +859,105 @@ export function apiRouter() {
   );
   r.delete('/duties/:id', h((req) => ({ ok: deleteDuty(String(req.params.id)) })));
 
+  // ── The plan and the agenda hub (docs/design/plan.md) ──
+  r.get(
+    '/agenda',
+    h(async (req) => {
+      const from = Number(req.query.from) || Date.now() - 2 * 3600_000;
+      const to = Math.min(Number(req.query.to) || from + 7 * 86_400_000, from + 35 * 86_400_000);
+      return buildAgenda(from, to, req.query.calendar !== '0');
+    }),
+  );
+  r.post(
+    '/plan',
+    h((req) => {
+      const b = req.body as { who?: string; title?: string; start?: number; end?: number | null; notes?: string };
+      if (!b.title?.trim() || !Number.isFinite(b.start)) throw new HttpError(400, 'A title and a start time are needed.');
+      return addPlanItem({ who: b.who === 'sable' ? 'sable' : 'you', title: b.title, start: Number(b.start), end: b.end ?? null, notes: b.notes, origin: 'user' });
+    }),
+  );
+  r.patch(
+    '/plan/:id',
+    h((req) => {
+      const b = req.body as { title?: string; start?: number; end?: number | null; notes?: string; status?: string; who?: string };
+      const before = getPlanItem(String(req.params.id));
+      const p = updatePlanItem(String(req.params.id), {
+        title: b.title,
+        notes: b.notes,
+        start_at: Number.isFinite(b.start) ? Number(b.start) : undefined,
+        end_at: b.end === null || Number.isFinite(b.end) ? (b.end as number | null) : undefined,
+        status: b.status === 'planned' || b.status === 'done' || b.status === 'skipped' ? b.status : undefined,
+        who: b.who === 'sable' || b.who === 'you' ? b.who : undefined,
+      });
+      if (!p || !before) throw new HttpError(404, 'That plan item is gone.');
+      if (before.origin !== 'user' && (b.start !== undefined || b.status === 'skipped')) {
+        observe('plan_edit', `${b.status === 'skipped' ? 'Skipped' : 'Moved'} "${p.title}"${b.start !== undefined ? ` from ${fmt(before.start_at)} to ${fmt(p.start_at)}` : ''}`, `plan:${p.who}`);
+      }
+      return p;
+    }),
+  );
+  r.delete(
+    '/plan/:id',
+    h((req) => {
+      const p = getPlanItem(String(req.params.id));
+      if (p && p.origin !== 'user') observe('plan_edit', `Removed "${p.title}" (${p.who === 'you' ? 'time Sable blocked for them' : 'something Sable planned to do'}) from the plan`, `plan:${p.who}`);
+      return { ok: deletePlanItem(String(req.params.id)) };
+    }),
+  );
+  r.post(
+    '/schedules/:id/skip',
+    h((req) => {
+      const s = get<{ id: string; kind: ScheduleKind; spec: string; next_run: number | null }>('SELECT id, kind, spec, next_run FROM schedules WHERE id = ?', String(req.params.id));
+      if (!s?.next_run) throw new HttpError(404, 'Nothing to skip.');
+      const next = computeNextRun(s.kind, parseJson(s.spec, {}), s.next_run);
+      run('UPDATE schedules SET next_run = ?, enabled = ? WHERE id = ?', next, next == null ? 0 : 1, s.id);
+      emit({ type: 'schedule.changed' });
+      emit({ type: 'plan.changed' });
+      return { next };
+    }),
+  );
+  // "This looks wrong": your words about the plan go to Main, where Sable fixes it.
+  r.post(
+    '/plan/feedback',
+    h((req) => {
+      const text = String((req.body as { text?: string }).text ?? '').trim();
+      if (!text) throw new HttpError(400, 'Say what should change.');
+      observe('plan_feedback', text, 'plan');
+      const cid = mainConversationId();
+      startRun(cid, `[About your plan] ${text}\n\n(Look at the plan with plan_list and the agenda, change what's wrong with plan_update / duty_update / reminders, and reply with what you changed.)`, 'user');
+      return { conversationId: cid };
+    }),
+  );
+
+  // ── Learning: lessons and the self-review ──
+  r.get('/lessons', h(() => ({ lessons: listLessons('all'), status: learningStatus() })));
+  r.post(
+    '/lessons',
+    h((req) => {
+      const b = req.body as { text?: string; scope?: string };
+      if (!b.text?.trim()) throw new HttpError(400, 'Write the lesson.');
+      return addLesson(b.scope || 'all', b.text, 'you');
+    }),
+  );
+  r.patch(
+    '/lessons/:id',
+    h((req) => {
+      const b = req.body as { text?: string; status?: string };
+      const l = updateLesson(String(req.params.id), { text: b.text, status: b.status === 'active' || b.status === 'retired' ? b.status : undefined });
+      if (!l) throw new HttpError(404, 'No such lesson.');
+      return l;
+    }),
+  );
+  r.delete('/lessons/:id', h((req) => ({ ok: deleteLesson(String(req.params.id)) })));
+  r.post(
+    '/learning/review',
+    h(() => {
+      const r2 = runReview(true);
+      if (r2.skipped) throw new HttpError(409, r2.skipped);
+      return { ...r2, conversationId: learningStatus().chat };
+    }),
+  );
+
   // ── Initiative: suggestions and check-ins ──
   r.get('/suggestions', h(() => pendingSuggestions()));
   r.post(
@@ -889,6 +991,7 @@ export function apiRouter() {
       const level = { never: -2, less: -1, reset: 0, more: 1 }[value];
       if (level === undefined) throw new HttpError(400, 'value must be less, more, never or reset.');
       setSourceLevel(n.source, level, sourceLabel(n.source, n.title));
+      if (value !== 'reset') observe('feedback', `Said "${value === 'never' ? 'never' : value + ' like this'}" about the notification "${n.title}" (${sourceLabel(n.source, n.title)})`, n.source.startsWith('duty:') ? n.source : 'all');
       run('UPDATE notifications SET feedback = ? WHERE source = ? AND created_at > ?', value === 'reset' ? null : value, n.source, Date.now() - 7 * 86_400_000);
       // Kept for the learning loop (docs/design/autonomy.md §5).
       const lessons = kvGet<{ source: string; value: string; title: string; at: number }[]>('attention_lessons') ?? [];

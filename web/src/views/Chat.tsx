@@ -106,7 +106,7 @@ export function ChatHome({ into }: { into?: string } = {}) {
   const upcoming = schedules.filter((s) => s.enabled && s.next_run).sort((a, b) => a.next_run! - b.next_run!).slice(0, 4);
   const running = conversations.filter((c) => runs[c.id]);
   // Recent conversations you had (automation runs live in their own sidebar section).
-  const recent = conversations.filter((c) => !runs[c.id] && !['schedule', 'watch', 'hook', 'main'].includes(c.kind)).slice(0, 6);
+  const recent = conversations.filter((c) => !runs[c.id] && !['schedule', 'watch', 'hook', 'main', 'duty', 'initiative', 'plan', 'review'].includes(c.kind)).slice(0, 6);
 
   return (
     <>

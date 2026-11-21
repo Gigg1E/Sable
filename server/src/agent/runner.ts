@@ -1,3 +1,4 @@
+import { observe } from '../learning.js';
 import { all, get, run } from '../db.js';
 import { connectedClients, emit } from '../events.js';
 import { resolveModel, resolveProvider } from '../llm/index.js';
@@ -709,6 +710,7 @@ async function execute(runId: string, conversationId: string, controller: AbortC
     const picked = await selectTools(allTools, query, new Set([...recentGroups(conversationId), ...wanted]));
     // A correction or standing instruction is a chance to learn a how-to.
     const correction = /\b(no,? use|use (?:a |the )?\w+ instead|instead of|next time|from now on|always (?:use|do|send|check)|never (?:use|do|send)|don'?t use|stop using|i (?:want|prefer) you to (?:use|do)|that should(?: have)? been)\b/i.test(query);
+    if (correction && source === 'user') observe('correction', query.slice(0, 400), `chat:${conversationId}`);
     const answer = await agentLoop({
       runId,
       conversationId,

@@ -150,6 +150,20 @@ It has a daily budget for model calls, so it can't run up costs.
 - **Inbox:** *Ideas from Sable*, *Done for you*, then notifications.
 - **Settings → Notifications → Check-ins:** on/off, "Handle them" or "Only suggest", how often, the daily budget, and a "Check in now" button.
 
+**Phase 4, learning (2026-11-21):**
+- **Observations** (`server/src/learning.ts`) record:
+  - your Less / More / Never;
+  - ideas you accepted, turned down or said never to;
+  - proposals you accepted or rejected;
+  - corrections in chat;
+  - plan items you moved, skipped or removed, and what you typed about the plan.
+- **Lessons** are short rules with a scope: everywhere, check-ins, planning, or one duty. They go into every prompt where they apply. You can add your own, forget one, or restore it (Memory → *What Sable learned*).
+- **The self-review** runs weekly (when something happened), or with **Review now**.
+  - It reads the observations, each duty's record (runs, verdicts, feedback), how ideas were received, and failing tools.
+  - It proposes at most 5 changes: new lessons (`lesson_propose`, which can also retire a lesson) and better duty instructions, purposes or notify settings (`duty_propose_edit`).
+- **Proposals wait in the Inbox** under *Sable wants to improve*, with a before/after view for duty edits. Accepting applies the change; nothing changes without you.
+- **Sable's own plan and the Plan hub:** see [plan.md](plan.md).
+
 ## Phases
 
 1. **Attention + finish.** One gate, structured verdicts, quiet hours, dedupe, digest, and feedback buttons. *Fixes the noise first.*

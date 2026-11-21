@@ -3,6 +3,7 @@ import { Brain, Check, Pencil, Plus, Search, Trash2, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { Badge, Button, Card, Empty, IconButton, Input, Page, PageIntro, Segmented, TopBar, listItem } from '../components/ui';
 import { api } from '../lib/api';
+import { Lessons } from '../components/Lessons';
 import { cx, timeAgo } from '../lib/format';
 import { onServerEvent } from '../lib/store';
 import type { Memory } from '../lib/types';
@@ -78,6 +79,7 @@ export function MemoryView() {
           title="Memory"
           description="Lasting facts the agent keeps. 'About you' is always in mind; 'People & things' (contacts, places, accounts) only comes up when a conversation is about them. 'How-to' is how you like things done, learned from your corrections (e.g. use an email watcher for packages), and it applies whenever a similar request comes up."
         />
+        <Lessons />
         <div className="mb-3">
           <Segmented
             id="memory-tab"

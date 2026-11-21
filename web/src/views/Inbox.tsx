@@ -85,11 +85,59 @@ interface Suggestion {
   title: string;
   why: string;
   action: string;
-  kind: 'task' | 'duty';
+  kind: 'task' | 'duty' | 'lesson' | 'duty_edit';
+  payload: string | null;
   created_at: number;
 }
 
 /** An idea Sable had on its own: Do it / Not now / Never. */
+/** A change the self-review proposes: a lesson, or a better version of a duty. */
+function ProposalCard({ s, onDone }: { s: Suggestion; onDone: () => void }) {
+  const toast = useStore((st) => st.toast);
+  const p = (() => {
+    try {
+      return JSON.parse(s.payload ?? '{}') as { before?: string; after?: string; text?: string; field?: string };
+    } catch {
+      return {};
+    }
+  })();
+  async function decide(decision: 'accept' | 'decline') {
+    try {
+      await api.post(`/suggestions/${s.id}`, { decision });
+      toast({ title: decision === 'accept' ? 'Done. Sable will work this way now' : 'Kept as it was' });
+      onDone();
+    } catch (err) {
+      toast({ title: "Couldn't do that", body: (err as Error).message, tone: 'error' });
+    }
+  }
+  return (
+    <motion.div layout {...listItem} className="rounded-xl border border-line px-4 py-3.5">
+      <div className="text-[14px] font-medium">{s.title}</div>
+      <p className="mt-0.5 text-[13px] leading-relaxed text-fg-2">{s.why}</p>
+      {s.kind === 'duty_edit' && p.before != null && (
+        <div className="mt-2 grid gap-2 text-[12.5px] sm:grid-cols-2">
+          <div className="rounded-lg border border-line px-3 py-2">
+            <div className="mb-1 text-[11px] font-medium text-fg-3">Now</div>
+            <p className="whitespace-pre-wrap text-fg-3 line-through decoration-fg-3/40">{p.before || '(empty)'}</p>
+          </div>
+          <div className="rounded-lg border border-accent/40 px-3 py-2">
+            <div className="mb-1 text-[11px] font-medium text-accent">Proposed</div>
+            <p className="whitespace-pre-wrap">{p.after}</p>
+          </div>
+        </div>
+      )}
+      <div className="mt-3 flex gap-2">
+        <Button size="sm" onClick={() => void decide('accept')}>
+          Accept
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => void decide('decline')}>
+          Reject
+        </Button>
+      </div>
+    </motion.div>
+  );
+}
+
 function SuggestionCard({ s, onDone }: { s: Suggestion; onDone: () => void }) {
   const toast = useStore((st) => st.toast);
   const [busy, setBusy] = useState(false);
@@ -194,12 +242,26 @@ export function InboxView() {
         </AnimatePresence>
 
         <AnimatePresence>
-          {ideas.length > 0 && (
+          {ideas.some((s) => s.kind === 'lesson' || s.kind === 'duty_edit') && (
+            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mb-10">
+              <SectionLabel>Sable wants to improve</SectionLabel>
+              <div className="space-y-3">
+                <AnimatePresence>
+                  {ideas
+                    .filter((s) => s.kind === 'lesson' || s.kind === 'duty_edit')
+                    .map((s) => (
+                      <ProposalCard key={s.id} s={s} onDone={load} />
+                    ))}
+                </AnimatePresence>
+              </div>
+            </motion.section>
+          )}
+          {ideas.some((s) => s.kind === 'task' || s.kind === 'duty') && (
             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mb-10">
               <SectionLabel>Ideas from Sable</SectionLabel>
               <div className="space-y-3">
                 <AnimatePresence>
-                  {ideas.map((s) => (
+                  {ideas.filter((s) => s.kind === 'task' || s.kind === 'duty').map((s) => (
                     <SuggestionCard key={s.id} s={s} onDone={load} />
                   ))}
                 </AnimatePresence>

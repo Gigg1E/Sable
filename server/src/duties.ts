@@ -1,3 +1,4 @@
+import { lessonsBlock } from './learning.js';
 import { nudgeInitiative } from './initiative.js';
 import { all, get, run } from './db.js';
 import { emit } from './events.js';
@@ -107,7 +108,8 @@ export function createDuty(input: { title: string; purpose?: string; instruction
 export function updateDuty(did: string, patch: Partial<Pick<DutyRow, 'title' | 'purpose' | 'instructions' | 'autonomy' | 'notify' | 'memory' | 'status'>> & { mail?: MailTrigger | null }) {
   const d = getDuty(did);
   if (!d) return;
-  const next = { ...d, ...patch, mail: patch.mail === undefined ? d.mail : patch.mail && (patch.mail.from || patch.mail.subject) ? JSON.stringify(patch.mail) : null };
+  const given = Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)) as typeof patch;
+  const next = { ...d, ...given, mail: patch.mail === undefined ? d.mail : patch.mail && (patch.mail.from || patch.mail.subject) ? JSON.stringify(patch.mail) : null };
   run(
     'UPDATE duties SET title = ?, purpose = ?, instructions = ?, autonomy = ?, notify = ?, memory = ?, status = ?, mail = ? WHERE id = ?',
     next.title, next.purpose, next.instructions, next.autonomy, next.notify, next.memory ? truncate(next.memory, 4000) : null, next.status, next.mail, did,
@@ -194,7 +196,7 @@ ${d.instructions}
 What woke you (${sig.kind}, ${fmt(now())}): ${sig.title}${sig.body ? `\n${sig.body}` : ''}
 
 What you remembered last time: ${d.memory ? `\n${d.memory}` : 'nothing yet (first run).'}
-${lessons ? `\n${lessons}\n` : ''}
+${lessons ? `\n${lessons}\n` : ''}${lessonsBlock(`duty:${d.id}`) ? `\n${lessonsBlock(`duty:${d.id}`)}\n` : ''}
 (${AUTONOMY_NOTE[d.autonomy]} ${how} Put in "remember" what you need next time to know what's new: values seen, what you already told the user, open questions. If something essential is missing, ask the user one short question with notify; their answer arrives in this chat.)`;
   const target = cid;
   const attempt = (n: number): string | undefined => {

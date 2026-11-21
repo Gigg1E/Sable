@@ -21,7 +21,7 @@ function greeting() {
 function useIdeas() {
   const [ideas, setIdeas] = useState<{ id: string; title: string }[]>([]);
   useEffect(() => {
-    const load = () => void api.get<{ id: string; title: string }[]>('/suggestions').then(setIdeas).catch(() => {});
+    const load = () => void api.get<{ id: string; title: string; kind?: string }[]>('/suggestions').then((l) => setIdeas(l.filter((x) => !x.kind || x.kind === 'task' || x.kind === 'duty'))).catch(() => {});
     load();
     return onServerEvent((ev) => ev.type === 'suggestion.changed' && load());
   }, []);

@@ -1,3 +1,5 @@
+import { isPlanChat } from '../plan.js';
+import { ALWAYS_ASK } from '../duties.js';
 import { initiativePreapproval } from '../initiative.js';
 import { dutyForConversation, dutyPreapproval } from '../duties.js';
 import type { Verdict } from '../attention.js';
@@ -82,6 +84,7 @@ export function preapprovalFor(conversationId: string): Preapproval | null {
   if (duty) return dutyPreapproval(conversationId);
   const own = initiativePreapproval(conversationId);
   if (own) return own;
+  if (isPlanChat(conversationId)) return { restrict: ALWAYS_ASK };
   const row =
     get<{ autonomy: string | null; restrict_tools: string | null }>('SELECT autonomy, restrict_tools FROM schedules WHERE conversation_id = ?', conversationId) ??
     get<{ autonomy: string | null; restrict_tools: string | null }>('SELECT autonomy, restrict_tools FROM watchers WHERE run_conversation_id = ?', conversationId);

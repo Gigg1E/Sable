@@ -157,11 +157,25 @@ CREATE TABLE IF NOT EXISTS signals (
 );
 CREATE INDEX IF NOT EXISTS signals_time ON signals (created_at);`);
 addColumn('schedules', 'duty_id', 'TEXT');
+// Sable's plan (docs/design/plan.md): time-blocked items for Sable or for the user.
+db.exec(`CREATE TABLE IF NOT EXISTS plan_items (
+  id TEXT PRIMARY KEY, who TEXT NOT NULL, title TEXT NOT NULL, notes TEXT, start_at INTEGER NOT NULL, end_at INTEGER,
+  status TEXT NOT NULL DEFAULT 'planned', duty_id TEXT, conversation_id TEXT, origin TEXT NOT NULL DEFAULT 'chat',
+  fired_at INTEGER, created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS plan_time ON plan_items (start_at);`);
+// Learning (docs/design/autonomy.md §5): what happened, and what Sable took from it.
+db.exec(`CREATE TABLE IF NOT EXISTS observations (id TEXT PRIMARY KEY, kind TEXT NOT NULL, text TEXT NOT NULL, scope TEXT NOT NULL DEFAULT 'all', created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS lessons (
+  id TEXT PRIMARY KEY, scope TEXT NOT NULL DEFAULT 'all', text TEXT NOT NULL, origin TEXT NOT NULL DEFAULT 'review',
+  status TEXT NOT NULL DEFAULT 'active', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+);`);
 // Initiative (docs/design/autonomy.md §4): what Sable proposes on its own, and what you decided.
 db.exec(`CREATE TABLE IF NOT EXISTS suggestions (
   id TEXT PRIMARY KEY, title TEXT NOT NULL, why TEXT NOT NULL, action TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'task',
   status TEXT NOT NULL DEFAULT 'pending', key TEXT NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL, decided_at INTEGER
 )`);
+addColumn('suggestions', 'payload', 'TEXT');
 addColumn('watchers', 'duty_id', 'TEXT');
 addColumn('hooks', 'duty_id', 'TEXT');
 db.exec('CREATE TABLE IF NOT EXISTS attention_prefs (source TEXT PRIMARY KEY, level INTEGER NOT NULL, label TEXT, updated_at INTEGER NOT NULL)');

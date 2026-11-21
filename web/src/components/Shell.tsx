@@ -1,5 +1,5 @@
 import * as Menu from '@radix-ui/react-dropdown-menu';
-import { Target } from 'lucide-react';
+import { CalendarDays, GraduationCap, Sparkles, Target } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import {
   Activity, Brain, CalendarClock, Library, Users, Sparkle, AtSign, Check, Home, Inbox, LayoutGrid, ListChecks, MessagesSquare, LogOut, Monitor, Moon, ChevronRight, MoreHorizontal, PanelLeftClose, Pencil, Pin, PinOff, Plus, Radar, Search, Settings, Shield, Sun, Trash2, Volume2, VolumeX, Webhook,
@@ -61,9 +61,13 @@ const AUTOMATION_KINDS: Record<string, { icon: typeof CalendarClock; label: stri
   schedule: { icon: CalendarClock, label: 'Routine' },
   watch: { icon: Radar, label: 'Watcher' },
   hook: { icon: Webhook, label: 'Webhook' },
+  duty: { icon: Target, label: 'Duty' },
+  initiative: { icon: Sparkles, label: 'Check-ins' },
+  plan: { icon: CalendarDays, label: 'Plan' },
+  review: { icon: GraduationCap, label: 'Self-review' },
 };
 /** Automation chats were titled "⏰ Morning weather"; the icon now says what they are. */
-const cleanTitle = (t: string) => t.replace(/^[\p{Extended_Pictographic}\uFE0F\s]+/u, '') || t;
+const cleanTitle = (t: string) => t.replace(/^[\p{Extended_Pictographic}\uFE0F\s✦◆]+/u, '') || t;
 
 function ChatRow({ id, title, kind, pinned, active, running, waiting, onNavigate }: { id: string; title: string; kind: string; pinned: boolean; active: boolean; running: boolean; waiting: boolean; onNavigate?: () => void }) {
   const permanent = kind === 'main';
@@ -283,6 +287,7 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
       </div>
       <nav className="mt-3 space-y-px px-2">
         <NavItem to="/" label="Home" icon={Home} active={path === '/'} onNavigate={onNavigate} />
+        <NavItem to="/plan" label="Plan" icon={CalendarDays} active={path === '/plan'} onNavigate={onNavigate} />
         <NavItem to="/inbox" label="Inbox" icon={Inbox} count={approvals.length + unread} active={path === '/inbox'} onNavigate={onNavigate} />
       </nav>
       <div className="mt-5 px-4 pb-1 text-[11px] font-medium text-fg-3">Agent</div>
@@ -433,10 +438,10 @@ function MobileTabs({ onMore, onChats, hidden }: { onMore: () => void; onChats: 
   const tabs = [
     { to: '/', label: 'Home', icon: Home, active: path === '/' },
     { to: '#chats', label: 'Chats', icon: MessagesSquare, active: path.startsWith('/chat') },
-    { to: '/spaces', label: 'Spaces', icon: LayoutGrid, active: path.startsWith('/spaces') },
+    { to: '/plan', label: 'Plan', icon: CalendarDays, active: path === '/plan' },
     { to: '/inbox', label: 'Inbox', icon: Inbox, active: path === '/inbox', count: approvals + unread },
   ];
-  const moreActive = ['/duties', '/goals', '/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
+  const moreActive = ['/spaces', '/duties', '/goals', '/routines', '/watchers', '/webhooks', '/memory', '/activity', '/settings'].some((p) => path.startsWith(p));
   return (
     <AnimatePresence initial={false}>
       {!hidden && (
@@ -560,6 +565,7 @@ export function Shell({ children, routeKey }: { children: ReactNode; routeKey: s
         <Sheet open={more} onClose={() => setMore(false)} title="More">
           <div className="-m-2 space-y-px">
             {[
+              { to: '/spaces', label: 'Spaces', icon: LayoutGrid },
               { to: '/duties', label: 'Duties', icon: Target },
               { to: '/goals', label: 'Goals', icon: ListChecks },
               { to: '/routines', label: 'Routines', icon: CalendarClock },

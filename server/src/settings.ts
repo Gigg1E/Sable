@@ -1,3 +1,4 @@
+import type { LearningSettings } from './learning.js';
 import type { InitiativeSettings } from './initiative.js';
 import type { AttentionSettings } from './attention.js';
 import { kvGet, kvSet } from './db.js';
@@ -150,6 +151,8 @@ export interface Settings {
   attention?: Partial<AttentionSettings>;
   /** Check-ins Sable starts on its own (initiative.ts). */
   initiative?: Partial<InitiativeSettings>;
+  /** The weekly self-review (learning.ts). */
+  learning?: Partial<LearningSettings>;
   shopping: {
     /** Shop catalog tools available to the agent. */
     enabled: boolean;

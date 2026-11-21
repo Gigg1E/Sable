@@ -63,6 +63,8 @@ export function startScheduler() {
       fireSchedule(s.id);
     }
   };
+  // Times saved before the user's zone was known move to the same wall-clock time in it.
+  retimeSchedules();
   setInterval(tick, 20_000).unref();
   setTimeout(tick, 3_000).unref();
 }
