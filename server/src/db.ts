@@ -157,6 +157,11 @@ CREATE TABLE IF NOT EXISTS signals (
 );
 CREATE INDEX IF NOT EXISTS signals_time ON signals (created_at);`);
 addColumn('schedules', 'duty_id', 'TEXT');
+// Initiative (docs/design/autonomy.md §4): what Sable proposes on its own, and what you decided.
+db.exec(`CREATE TABLE IF NOT EXISTS suggestions (
+  id TEXT PRIMARY KEY, title TEXT NOT NULL, why TEXT NOT NULL, action TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'task',
+  status TEXT NOT NULL DEFAULT 'pending', key TEXT NOT NULL, conversation_id TEXT, created_at INTEGER NOT NULL, decided_at INTEGER
+)`);
 addColumn('watchers', 'duty_id', 'TEXT');
 addColumn('hooks', 'duty_id', 'TEXT');
 db.exec('CREATE TABLE IF NOT EXISTS attention_prefs (source TEXT PRIMARY KEY, level INTEGER NOT NULL, label TEXT, updated_at INTEGER NOT NULL)');

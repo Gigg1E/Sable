@@ -2,7 +2,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { useSableMood } from '../lib/mood';
 import { navigate } from '../lib/router';
-import { useStore } from '../lib/store';
+import { onServerEvent, useStore } from '../lib/store';
+import { api } from '../lib/api';
 import { Presence } from './Presence';
 import type { Mood } from './SableCharacter';
 
@@ -16,11 +17,23 @@ function greeting() {
 }
 
 /** What Sable says on Home: always about the real state, most important thing first. */
+/** Ideas Sable had on its own and is waiting on you for (initiative). */
+function useIdeas() {
+  const [ideas, setIdeas] = useState<{ id: string; title: string }[]>([]);
+  useEffect(() => {
+    const load = () => void api.get<{ id: string; title: string }[]>('/suggestions').then(setIdeas).catch(() => {});
+    load();
+    return onServerEvent((ev) => ev.type === 'suggestion.changed' && load());
+  }, []);
+  return ideas;
+}
+
 function useLine(mood: Mood): { text: string; go?: () => void; action?: string } {
   const approvals = useStore((s) => s.approvals);
   const runs = useStore((s) => s.runs);
   const conversations = useStore((s) => s.conversations);
   const running = conversations.filter((c) => runs[c.id]);
+  const ideas = useIdeas();
 
   if (mood === 'frozen') return { text: `I'm frozen. I'll look things up, but I won't change, send or buy anything until you say so.` };
   if (approvals.length) {
@@ -32,6 +45,10 @@ function useLine(mood: Mood): { text: string; go?: () => void; action?: string }
     const c = running[0];
     const more = running.length > 1 ? `, plus ${running.length - 1} other thing${running.length > 2 ? 's' : ''}` : '';
     return { text: `Working on “${c.title}”${more}.`, go: () => navigate(`/chat/${c.id}`), action: 'Watch' };
+  }
+  if (ideas.length) {
+    const first = ideas[0].title.replace(/^[A-Z]/, (c) => c.toLowerCase()).replace(/\.$/, '');
+    return { text: ideas.length === 1 ? `I had an idea: ${first}. Want me to?` : `I had ${ideas.length} ideas while you were away. First one: ${first}.`, go: () => navigate('/inbox'), action: 'See ideas' };
   }
   if (mood === 'happy') return { text: `Done. Take a look when you get a chance.` };
   if (mood === 'sleeping') return { text: `It's late, so I'm resting an eye. I'm still watching everything; just ask.` };

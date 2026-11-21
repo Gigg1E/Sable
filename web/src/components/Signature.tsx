@@ -1,5 +1,5 @@
 import { motion, type TargetAndTransition } from 'motion/react';
-import { AlarmClock, AtSign, Bell, Bot, CalendarClock, Eye, MessageSquare, ShieldAlert, Webhook, type LucideIcon } from 'lucide-react';
+import { AlarmClock, AtSign, Bell, Bot, CalendarClock, CheckCheck, Eye, Lightbulb, MessageSquare, ShieldAlert, Webhook, type LucideIcon } from 'lucide-react';
 import { cx } from '../lib/format';
 
 /**
@@ -23,6 +23,8 @@ const SIGS: Record<string, Sig> = {
   hook: { icon: Webhook, color: 'var(--info)', label: 'Webhook', enter: { x: [-5, 0], opacity: [0, 1], transition: { duration: 0.3 } } },
   agent: { icon: Bot, color: 'var(--fg-2)', label: 'Sable', enter: { y: [3, 0], opacity: [0, 1], transition: { duration: 0.3 } } },
   run: { icon: MessageSquare, color: 'var(--fg-2)', label: 'Task finished', enter: { y: [3, 0], opacity: [0, 1], transition: { duration: 0.3 } } },
+  suggestion: { icon: Lightbulb, color: 'var(--accent)', label: 'Idea', enter: { scale: [0.8, 1.1, 1], opacity: [0, 1], transition: { duration: 0.4 } } },
+  done: { icon: CheckCheck, color: 'var(--ok)', label: 'Done for you', enter: { x: [-4, 0], opacity: [0, 1], transition: { duration: 0.3 } } },
   system: { icon: Bell, color: 'var(--fg-3)', label: 'Sable', enter: { opacity: [0, 1], transition: { duration: 0.3 } } },
 };
 

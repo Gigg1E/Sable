@@ -1,3 +1,4 @@
+import { initiativePreapproval } from '../initiative.js';
 import { dutyForConversation, dutyPreapproval } from '../duties.js';
 import type { Verdict } from '../attention.js';
 import { get, run } from '../db.js';
@@ -79,6 +80,8 @@ export interface Preapproval {
 export function preapprovalFor(conversationId: string): Preapproval | null {
   const duty = dutyForConversation(conversationId);
   if (duty) return dutyPreapproval(conversationId);
+  const own = initiativePreapproval(conversationId);
+  if (own) return own;
   const row =
     get<{ autonomy: string | null; restrict_tools: string | null }>('SELECT autonomy, restrict_tools FROM schedules WHERE conversation_id = ?', conversationId) ??
     get<{ autonomy: string | null; restrict_tools: string | null }>('SELECT autonomy, restrict_tools FROM watchers WHERE run_conversation_id = ?', conversationId);

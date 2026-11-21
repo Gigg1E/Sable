@@ -1,3 +1,4 @@
+import type { InitiativeSettings } from './initiative.js';
 import type { AttentionSettings } from './attention.js';
 import { kvGet, kvSet } from './db.js';
 
@@ -147,6 +148,8 @@ export interface Settings {
   timezone: string;
   /** Quiet hours, digest times and the hourly limit (attention.ts). */
   attention?: Partial<AttentionSettings>;
+  /** Check-ins Sable starts on its own (initiative.ts). */
+  initiative?: Partial<InitiativeSettings>;
   shopping: {
     /** Shop catalog tools available to the agent. */
     enabled: boolean;

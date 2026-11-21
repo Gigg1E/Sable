@@ -1,3 +1,4 @@
+import { startInitiative } from './initiative.js';
 import { adoptAll } from './duties.js';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,6 +14,7 @@ import './agent/tools/library.js';
 import './agent/tools/people.js';
 import './agent/tools/journal.js';
 import './agent/tools/duties.js';
+import './agent/tools/initiative.js';
 import { askQuick, startBrain } from './brain.js';
 import { mailInboundRouter, setMailHelpers, summarizeProfiles } from './mail.js';
 import { startMailAgent } from './mailAgent.js';
@@ -142,6 +144,7 @@ app.listen(PORT, HOST, () => {
   setTimeout(() => void backfillMemoryEmbeddings(), 60_000).unref();
   adoptAll(); // routines, watchers and webhooks with instructions become duties (once)
   startScheduler();
+  startInitiative();
   startReminders();
   queueIndex(); // embed anything added while the helper model was offline
   startBrain();

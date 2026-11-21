@@ -1,3 +1,4 @@
+import { nudgeInitiative } from './initiative.js';
 import { all, get, run } from './db.js';
 import { emit } from './events.js';
 import { activeRunFor, createConversation, startRun } from './agent/runner.js';
@@ -59,6 +60,8 @@ export function recordSignal(sig: Signal, dutyId?: string | null) {
     'INSERT INTO signals (id, source, kind, title, body, duty_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     id('sig_'), sig.source, sig.kind, truncate(sig.title, 300), sig.body ? truncate(sig.body, 4000) : null, dutyId ?? null, now(),
   );
+  // Something notable came in: Sable checks in soon, on its own.
+  if (sig.kind === 'mail' || sig.kind === 'calendar' || sig.kind === 'hook') nudgeInitiative();
   // Keep the last couple of thousand; older ones aren't useful.
   run('DELETE FROM signals WHERE id IN (SELECT id FROM signals ORDER BY created_at DESC LIMIT -1 OFFSET 2000)');
 }

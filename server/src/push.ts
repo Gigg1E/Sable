@@ -39,7 +39,7 @@ export interface NotifyInput {
   title: string;
   body?: string;
   link?: string;
-  kind?: 'approval' | 'run' | 'agent' | 'schedule' | 'system' | 'watch' | 'hook' | 'reminder';
+  kind?: 'approval' | 'run' | 'agent' | 'schedule' | 'system' | 'watch' | 'hook' | 'reminder' | 'suggestion' | 'done';
   /** Adds Approve / Deny buttons to the push notification (where the browser supports them). */
   approvalId?: string;
   /** How much this deserves your attention (attention.ts). Defaults by kind. */

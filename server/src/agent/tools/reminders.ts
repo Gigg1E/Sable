@@ -10,7 +10,7 @@ registerTool({
   label: 'Set reminder',
   group: 'Schedules',
   description:
-    'Remind the user of something once: "remind me about class at 10 tonight", "in 20 minutes remind me to check the oven". At that time they get a notification with the text, then the reminder disappears. No approval needed. Use this for every one-off reminder; use schedule_create only for things that repeat, or for a one-time job YOU must do at a time (e.g. "email Sam at 8pm"). Give at (ISO date-time, server local time) or in_minutes. For "remind me before X", pick the time before X (e.g. 15 minutes before) and say so.',
+    'Remind the user of something once: "remind me about class at 10 tonight", "in 20 minutes remind me to check the oven". At that time they get a notification with the text, then the reminder disappears. No approval needed. Use this for every one-off reminder; use schedule_create only for things that repeat, or for a one-time job YOU must do at a time (e.g. "email Sam at 8pm"). Give at (the user's local date-time, no offset, e.g. 2026-11-20T22:00) or in_minutes. For "remind me before X", pick the time before X (e.g. 15 minutes before) and say so.',
   parameters: {
     type: 'object',
     properties: {

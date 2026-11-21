@@ -80,15 +80,76 @@ function NoteRow({ n, onChange }: { n: Notification; onChange: () => void }) {
   );
 }
 
+interface Suggestion {
+  id: string;
+  title: string;
+  why: string;
+  action: string;
+  kind: 'task' | 'duty';
+  created_at: number;
+}
+
+/** An idea Sable had on its own: Do it / Not now / Never. */
+function SuggestionCard({ s, onDone }: { s: Suggestion; onDone: () => void }) {
+  const toast = useStore((st) => st.toast);
+  const [busy, setBusy] = useState(false);
+  async function decide(decision: 'accept' | 'decline' | 'never') {
+    setBusy(true);
+    try {
+      const r = await api.post<{ conversation_id: string | null }>(`/suggestions/${s.id}`, { decision });
+      if (decision === 'accept') toast({ title: 'On it', body: s.title, tone: 'success' });
+      else if (decision === 'never') toast({ title: 'Won’t suggest that again' });
+      onDone();
+      void r;
+    } catch (err) {
+      toast({ title: "Couldn't do that", body: (err as Error).message, tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <motion.div layout {...listItem} className="rounded-xl border border-line px-4 py-3.5">
+      <div className="flex items-start gap-3">
+        <Signature kind="suggestion" size={30} />
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-medium">{s.title}</div>
+          <p className="mt-0.5 text-[13px] leading-relaxed text-fg-2">{s.why}</p>
+          <details className="mt-1 text-[12px] text-fg-3">
+            <summary className="cursor-pointer hover:text-fg">{s.kind === 'duty' ? 'What Sable would take on' : 'What Sable would do'}</summary>
+            <p className="mt-1 whitespace-pre-wrap text-fg-2">{s.action}</p>
+          </details>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button size="sm" disabled={busy} onClick={() => void decide('accept')}>
+              Do it
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void decide('decline')}>
+              Not now
+            </Button>
+            <button disabled={busy} onClick={() => void decide('never')} className="ml-auto text-[12.5px] text-fg-3 hover:text-fg">
+              Never
+            </button>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
 export function InboxView() {
   const approvals = useStore((s) => s.approvals);
   const conversations = useStore((s) => s.conversations);
   const [notes, setNotes] = useState<Notification[] | null>(null);
-  const load = useCallback(() => void api.get<Notification[]>('/notifications').then(setNotes), []);
+  const [ideas, setIdeas] = useState<Suggestion[]>([]);
+  const load = useCallback(() => {
+    void api.get<Notification[]>('/notifications').then(setNotes);
+    void api.get<Suggestion[]>('/suggestions').then(setIdeas);
+  }, []);
+  const done = (notes ?? []).filter((n) => n.kind === 'done');
+  const rest = (notes ?? []).filter((n) => n.kind !== 'done' && n.kind !== 'suggestion');
 
   useEffect(() => {
     load();
-    const off = onServerEvent((ev) => ev.type === 'notification' && load());
+    const off = onServerEvent((ev) => (ev.type === 'notification' || ev.type === 'suggestion.changed') && load());
     const t = setTimeout(() => void api.post('/notifications/read'), 1500);
     return () => {
       off();
@@ -114,7 +175,7 @@ export function InboxView() {
         }
       />
       <Page width="md">
-        <PageIntro title="Inbox" description="Approvals waiting on you, and everything the agent reported while you were away." />
+        <PageIntro title="Inbox" description="What needs your OK, ideas Sable had on its own, what it handled for you, and everything it reported while you were away." />
         <AnimatePresence>
           {approvals.length > 0 && (
             <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mb-10">
@@ -132,13 +193,46 @@ export function InboxView() {
           )}
         </AnimatePresence>
 
+        <AnimatePresence>
+          {ideas.length > 0 && (
+            <motion.section initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mb-10">
+              <SectionLabel>Ideas from Sable</SectionLabel>
+              <div className="space-y-3">
+                <AnimatePresence>
+                  {ideas.map((s) => (
+                    <SuggestionCard key={s.id} s={s} onDone={load} />
+                  ))}
+                </AnimatePresence>
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
+
+        {done.length > 0 && (
+          <section className="mb-10">
+            <SectionLabel>Done for you</SectionLabel>
+            <Card className="divide-y divide-line">
+              {done.slice(0, 8).map((n) => (
+                <button key={n.id} onClick={() => navigate(n.link || '/')} className="flex w-full items-start gap-3 px-4 py-2.5 text-left hover:bg-panel-2/50">
+                  <Signature kind="done" size={26} play={false} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[13.5px]">{n.title}</div>
+                    {n.body && <div className="mt-0.5 line-clamp-2 text-[12.5px] text-fg-3">{n.body}</div>}
+                  </div>
+                  <span className="shrink-0 text-[11.5px] tabular-nums text-fg-3">{timeAgo(n.created_at)}</span>
+                </button>
+              ))}
+            </Card>
+          </section>
+        )}
+
         <SectionLabel>Notifications</SectionLabel>
-        {notes && !notes.length && !approvals.length ? (
+        {notes && !rest.length && !approvals.length && !ideas.length ? (
           <Empty icon={<InboxIcon className="size-4" />} title="All caught up" body="Background results and approval requests show up here and as push notifications on your devices." />
-        ) : notes && notes.length ? (
+        ) : rest.length ? (
           <Card className="overflow-hidden">
             <AnimatePresence initial={false}>
-              {notes.map((n) => (
+              {rest.map((n) => (
                 <NoteRow key={n.id} n={n} onChange={load} />
               ))}
             </AnimatePresence>

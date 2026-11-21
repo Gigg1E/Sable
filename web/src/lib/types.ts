@@ -155,6 +155,7 @@ export interface Settings {
   /** IANA zone; empty = follow this device. */
   timezone?: string;
   attention?: { quietStart: string; quietEnd: string; maxPerHour: number; digestTimes: string[] };
+  initiative?: { enabled: boolean; everyHours: number; dailyBudget: number; autonomy: 'act' | 'suggest' };
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }
 

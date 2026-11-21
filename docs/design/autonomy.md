@@ -135,6 +135,21 @@ It has a daily budget for model calls, so it can't run up costs.
 - **The Duties page:** each duty with what wakes it, Acts/Suggests/Watches, its memory (editable), run now, pause, and a "Lately" list of signals.
 - **Follow-ups** stay as they are (they continue one chat). They're the conversational cousin of a duty.
 
+**Phase 3, initiative (2026-11-21):**
+- **`server/src/initiative.ts`, the heartbeat.**
+  - It runs every 3 waking hours, or 10 minutes after new mail, a calendar change or a webhook (at most every 45 minutes).
+  - It never runs in quiet hours, and is capped by a daily budget (8 by default).
+  - Each check-in runs in its own "✦ Check-ins" chat and sees: the journal and open loops, duties, the signals since the last check-in, pending ideas, what you declined or said never to, and what it recently did for you.
+- **What it does with that:**
+  - Handles small, low-risk things itself (in "act" mode) and records each with `done_for_you`. Send, buy, delete and checkout still ask.
+  - Proposes the rest with `suggest` (task or duty), at most 3 per check-in.
+- **Ideas wait for you in the Inbox:**
+  - **Do it** starts the work in its own chat, pre-approved within the same safe limits.
+  - **Not now** holds it back for a week. **Never** means never again.
+  - Ideas also go into your next digest, and Home mentions them.
+- **Inbox:** *Ideas from Sable*, *Done for you*, then notifications.
+- **Settings → Notifications → Check-ins:** on/off, "Handle them" or "Only suggest", how often, the daily budget, and a "Check in now" button.
+
 ## Phases
 
 1. **Attention + finish.** One gate, structured verdicts, quiet hours, dedupe, digest, and feedback buttons. *Fixes the noise first.*

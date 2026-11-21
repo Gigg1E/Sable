@@ -1,3 +1,4 @@
+import { checkIn, decideSuggestion, initiativeStatus, pendingSuggestions } from './initiative.js';
 import { deleteDuty, dutyTriggers, getDuty, listDuties, recentSignals, runDuty, updateDuty } from './duties.js';
 import { defaultAttention, isQuiet, listSourcePrefs, pendingDigest, setSourceLevel } from './attention.js';
 import { noteDeviceTz } from './clock.js';
@@ -854,6 +855,28 @@ export function apiRouter() {
     }),
   );
   r.delete('/duties/:id', h((req) => ({ ok: deleteDuty(String(req.params.id)) })));
+
+  // ── Initiative: suggestions and check-ins ──
+  r.get('/suggestions', h(() => pendingSuggestions()));
+  r.post(
+    '/suggestions/:id',
+    h((req) => {
+      const decision = String((req.body as { decision?: string }).decision);
+      if (decision !== 'accept' && decision !== 'decline' && decision !== 'never') throw new HttpError(400, 'decision must be accept, decline or never.');
+      const s = decideSuggestion(String(req.params.id), decision);
+      if (!s) throw new HttpError(404, 'That suggestion is gone.');
+      return s;
+    }),
+  );
+  r.get('/initiative', h(() => initiativeStatus()));
+  r.post(
+    '/initiative/run',
+    h(() => {
+      const r2 = checkIn('you asked for a check-in', true);
+      if (r2.skipped) throw new HttpError(409, r2.skipped);
+      return { ...r2, conversationId: initiativeStatus().chat };
+    }),
+  );
 
   // ── Attention: your feedback on what reaches you, quiet hours, the digest ──
   r.post(

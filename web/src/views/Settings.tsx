@@ -12,7 +12,7 @@ import { ConnectionsSection } from '../components/Connections';
 import { ShoppingSection } from './Shopping';
 import { SecuritySection } from './Security';
 import { api, deviceTz } from '../lib/api';
-import { cx } from '../lib/format';
+import { cx, timeAgo } from '../lib/format';
 import { disablePush, enablePush, pushState } from '../lib/push';
 import { play, setSoundPrefs, soundPrefs } from '../lib/sounds';
 import { navigate } from '../lib/router';
@@ -246,6 +246,62 @@ function NetworkSection({ draft, edit }: { draft: Settings; edit: Edit }) {
 type Edit = (fn: (d: Settings) => void) => void;
 
 // ───────────────────────── Sections ─────────────────────────
+
+/** Check-ins Sable starts on its own (docs/design/autonomy.md §4). */
+function InitiativeSection({ draft, edit }: { draft: Settings; edit: Edit }) {
+  const toast = useStore((st) => st.toast);
+  const [st, setSt] = useState<{ enabled: boolean; everyHours: number; dailyBudget: number; autonomy: 'act' | 'suggest'; last: number | null; usedToday: number; chat: string | null } | null>(null);
+  const load = () => void api.get<typeof st>('/initiative').then(setSt).catch(() => {});
+  useEffect(load, []);
+  const c = { enabled: true, everyHours: 3, dailyBudget: 8, autonomy: 'act' as 'act' | 'suggest', ...(st ?? {}), ...(draft.initiative ?? {}) };
+  const set = (patch: Partial<typeof c>) => edit((d) => void (d.initiative = { enabled: c.enabled, everyHours: c.everyHours, dailyBudget: c.dailyBudget, autonomy: c.autonomy, ...patch }));
+  async function runNow() {
+    try {
+      const r = await api.post<{ conversationId: string | null }>('/initiative/run');
+      toast({ title: 'Checking in now', body: 'Ideas land in your Inbox; things it handles show under Done for you.' });
+      load();
+      void r;
+    } catch (err) {
+      toast({ title: "Couldn't start a check-in", body: (err as Error).message, tone: 'error' });
+    }
+  }
+  return (
+    <Section
+      title="Check-ins"
+      description="Every few waking hours, and soon after new mail or calendar changes, Sable looks around on its own: calendar, mail, open loops, duties. It handles small things itself (they show under Done for you) and brings you ideas for the rest. Sending, buying and deleting always ask."
+    >
+      <Field label="Check in on its own">
+        <Toggle checked={c.enabled} onChange={(v) => set({ enabled: v })} />
+      </Field>
+      <Field label="Small things" hint={c.autonomy === 'act' ? 'Handles low-risk things itself and tells you after.' : 'Only suggests; nothing changes until you say so.'}>
+        <Segmented id="init-aut" value={c.autonomy} onChange={(v) => set({ autonomy: v })} options={[{ value: 'act', label: 'Handle them' }, { value: 'suggest', label: 'Only suggest' }]} />
+      </Field>
+      <Field label="How often" hint={st ? `${st.usedToday} of ${c.dailyBudget} check-ins used today${st.last ? `, last ${timeAgo(st.last)}` : ''}. Never during quiet hours.` : undefined}>
+        <div className="flex flex-wrap items-center gap-2 text-[13px] text-fg-2">
+          Every
+          <div className="w-20">
+            <Input type="number" min={1} max={24} value={c.everyHours} onChange={(e) => set({ everyHours: Math.max(1, Number(e.target.value) || 3) })} />
+          </div>
+          hours, at most
+          <div className="w-20">
+            <Input type="number" min={1} max={48} value={c.dailyBudget} onChange={(e) => set({ dailyBudget: Math.max(1, Number(e.target.value) || 8) })} />
+          </div>
+          a day
+        </div>
+      </Field>
+      <div className="flex gap-2">
+        <Button size="sm" variant="secondary" onClick={() => void runNow()}>
+          Check in now
+        </Button>
+        {st?.chat && (
+          <Button size="sm" variant="ghost" onClick={() => navigate(`/chat/${st.chat}`)}>
+            See past check-ins
+          </Button>
+        )}
+      </div>
+    </Section>
+  );
+}
 
 /** Quiet hours, the digest, and what you've tuned with Less / More / Never. */
 function AttentionSection({ draft, edit }: { draft: Settings; edit: Edit }) {
@@ -1051,6 +1107,7 @@ export function SettingsView({ section }: { section?: string }) {
                 {active === 'network' && <NetworkSection draft={draft} edit={edit} />}
                 {active === 'notifications' && (
                   <>
+                    <InitiativeSection draft={draft} edit={edit} />
                     <AttentionSection draft={draft} edit={edit} />
                     <NotificationsSection draft={draft} edit={edit} />
                     <SoundsSection />
