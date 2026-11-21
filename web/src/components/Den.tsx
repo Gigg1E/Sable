@@ -3,7 +3,8 @@ import { useEffect, useState } from 'react';
 import { useSableMood } from '../lib/mood';
 import { navigate } from '../lib/router';
 import { useStore } from '../lib/store';
-import { SableCharacter, type Mood } from './SableCharacter';
+import { Presence } from './Presence';
+import type { Mood } from './SableCharacter';
 
 function greeting() {
   const h = new Date().getHours();
@@ -84,7 +85,8 @@ export function Den() {
           className="relative block"
           data-den-sable
         >
-          <SableCharacter mood={mood} size={104} className="text-fg max-sm:!size-[80px]" />
+          <Presence mood={mood} size={128} className="max-sm:hidden" />
+          <Presence mood={mood} size={92} className="sm:hidden" />
         </motion.span>
       </button>
 

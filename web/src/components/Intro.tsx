@@ -1,6 +1,7 @@
 import { animate, motion, stagger, useAnimate, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../lib/store';
+import { Presence } from './Presence';
 import { SableCharacter, type Mood } from './SableCharacter';
 
 /**
@@ -16,7 +17,7 @@ import { SableCharacter, type Mood } from './SableCharacter';
  */
 
 const KEY = 'sable.intro.seen';
-const SIZE = 120;
+const SIZE = 132;
 const EASE = [0.2, 0.8, 0.2, 1] as const;
 
 function shouldPlay() {
@@ -106,6 +107,9 @@ export function Intro() {
           // 4a. Swap to the copy outside the clip and fly it onto the sidebar.
           void go('[data-i=full]', { opacity: 0 }, { duration: 0.12 });
           void go('[data-i=head]', { opacity: 1 }, { duration: 0.08 });
+          // On the way, the matrix dissolves into the outline head that lives in the sidebar.
+          void go('[data-i=hp]', { opacity: 0 }, { duration: 0.4, delay: 0.1 });
+          void go('[data-i=hh]', { opacity: 1 }, { duration: 0.4, delay: 0.1 });
           const to = target.getBoundingClientRect();
           const from = head.current.getBoundingClientRect();
           const scale = to.width / from.width;
@@ -152,13 +156,18 @@ export function Intro() {
           <div className="relative overflow-hidden pt-6" style={{ width: SIZE + 48, height: SIZE + 24 }}>
             <div data-i="sable" className="absolute bottom-0 left-6" style={{ transform: 'translateY(105%)' }}>
               <div data-i="full">
-                <SableCharacter mood={mood} size={SIZE} />
+                <Presence mood={mood} size={SIZE} />
               </div>
             </div>
           </div>
           {/* The same mark laid exactly over it, outside the clip, for the flight to the sidebar. */}
           <div ref={head} data-i="head" className="absolute" style={{ width: SIZE, height: SIZE, left: 24, top: 24, opacity: 0 }}>
-            <SableCharacter mood="idle" size={SIZE} />
+            <div data-i="hp" className="absolute inset-0">
+              <Presence mood="idle" size={SIZE} />
+            </div>
+            <div data-i="hh" className="absolute inset-0 text-fg" style={{ opacity: 0 }}>
+              <SableCharacter mood="idle" size={SIZE} />
+            </div>
           </div>
           <div data-i="ground" className="h-[2px] rounded-full bg-accent" style={{ width: SIZE + 48, opacity: 0, transform: "scaleX(0)" }} />
           <div data-i="name" className="voice mt-5 flex overflow-hidden pb-1 text-[36px] font-bold leading-none text-fg">

@@ -1,3 +1,4 @@
+import { Presence } from '../components/Presence';
 import { SableCharacter, type Mood } from '../components/SableCharacter';
 import { Page, TopBar } from '../components/ui';
 import { useSableMood } from '../lib/mood';
@@ -20,13 +21,16 @@ export function MeetSable() {
     <>
       <TopBar title="Meet Sable" />
       <Page width="md">
-        <p className="voice max-w-[52ch] text-[22px] font-semibold leading-snug">This is me. Watch my eyes and you’ll know what I’m up to.</p>
+        <p className="voice max-w-[52ch] text-[22px] font-semibold leading-snug">This is me. The light shows what I’m up to; the little face is how I sign my messages.</p>
         <p className="mt-2 max-w-[60ch] text-[13.5px] leading-relaxed text-fg-2">I show what I’m really doing in the sidebar, next to my replies and on Home. Right now I’m {MOODS.find((m) => m.mood === now)?.name.toLowerCase()}.</p>
         <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
           {MOODS.map((m) => (
             <div key={m.mood} className="flex flex-col items-center text-center">
-              <SableCharacter mood={m.mood} size={104} />
-              <div className="mt-2 text-[13.5px] font-medium">{m.name}</div>
+              <Presence mood={m.mood} size={104} />
+              <div className="mt-2 flex items-center gap-1.5 text-[13.5px] font-medium">
+                <SableCharacter mood={m.mood} size={20} className="text-fg" />
+                {m.name}
+              </div>
               <div className="mt-0.5 text-[12px] leading-snug text-fg-3">{m.when}</div>
             </div>
           ))}
