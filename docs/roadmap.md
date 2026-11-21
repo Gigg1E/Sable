@@ -6,6 +6,7 @@
 - [Core concepts](design/core-concepts.md): main brain, chats that wake themselves, reminders vs follow-ups, Spaces on Sable's engines, notification visuals, wake-ups, when to reach you
 - [Look and feel](design/look-and-feel.md): polished, not AI-generated; the intro animation
 - [Sable's presence](design/character.md): the outline mark and its moods
+- [Sable v2 engines](design/autonomy.md): signals, duties, one attention gate, initiative, learning (proposal)
 
 **Research:**
 - [Library](research/library.md)

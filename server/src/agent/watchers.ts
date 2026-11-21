@@ -437,7 +437,7 @@ async function fireEvent(w: WatcherRow, actions: WatchActions, ev: { title: stri
   if (actions.webhook) {
     void pushTo(actions.webhook, ev.title, ev.body, { watcher: { id: w.id, title: w.title }, ...ev.payload }).catch((err) => console.error(`[watcher ${w.id}] webhook`, errorMessage(err)));
   }
-  if (actions.prompt) wake(w, `${actions.prompt}\n\n${ev.details}${actions.notify ? '\n\n(Tell the user what happened with notify, briefly.)' : ''}`);
+  if (actions.prompt) wake(w, `${actions.prompt}\n\n${ev.details}${actions.notify ? '\n\n(If this matters to the user, tell them briefly with notify. If nothing actually changed or it is not worth their attention, finish with one line starting "Nothing new" and do not notify.)' : ''}`);
 }
 
 // ───────────────────────── Email and calendar sources ─────────────────────────

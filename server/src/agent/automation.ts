@@ -43,7 +43,8 @@ export function scheduleForConversation(conversationId: string): ScheduleInfo | 
 export function shouldNotifyAfterRun(conversationId: string, runId: string, answer: string): boolean {
   const agentNotified = consumeNotified(runId);
   const s = scheduleForConversation(conversationId);
-  if (!s) return !agentNotified;
+  // Not a routine (a watcher or webhook run): it only reaches the user when it has something to say.
+  if (!s) return !agentNotified && !saysNothingNew(answer);
   const mode = s.notify ?? defaultNotify(s.kind);
   const previous = s.last_result;
   run('UPDATE schedules SET last_result = ? WHERE id = ?', answer.slice(0, 2000), s.id);
