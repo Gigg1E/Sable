@@ -1,17 +1,36 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { Snowflake } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
+import { SableCharacter } from './SableCharacter';
 import { api } from '../lib/api';
 import { cx } from '../lib/format';
 import { onServerEvent, useStore } from '../lib/store';
 
+// One shared copy of the freeze state, so every character and switch agrees without refetching.
+let frozenNow = false;
+let frozenLoaded = false;
+const frozenSubs = new Set<() => void>();
+function setFrozenNow(v: boolean) {
+  frozenNow = v;
+  frozenSubs.forEach((f) => f());
+}
+function subscribeFrozen(cb: () => void) {
+  frozenSubs.add(cb);
+  if (!frozenLoaded) {
+    frozenLoaded = true;
+    void api.get<{ frozen: boolean }>('/safety').then((r) => setFrozenNow(r.frozen)).catch(() => (frozenLoaded = false));
+    onServerEvent((ev) => ev.type === 'safety.changed' && setFrozenNow(!!ev.frozen));
+  }
+  return () => frozenSubs.delete(cb);
+}
+export function useIsFrozen() {
+  return useSyncExternalStore(subscribeFrozen, () => frozenNow);
+}
+
 /** Whether Sable is frozen (observe only), kept live. */
 export function useFrozen() {
-  const [frozen, setFrozen] = useState(false);
-  useEffect(() => {
-    void api.get<{ frozen: boolean }>('/safety').then((r) => setFrozen(r.frozen)).catch(() => {});
-    return onServerEvent((ev) => ev.type === 'safety.changed' && setFrozen(!!ev.frozen));
-  }, []);
+  const frozen = useIsFrozen();
+  const setFrozen = setFrozenNow;
   const toast = useStore((s) => s.toast);
   const set = useCallback(
     async (on: boolean) => {
@@ -42,9 +61,7 @@ export function FrozenBanner() {
           className="shrink-0 overflow-hidden border-b border-tint/25 bg-tint-soft"
         >
           <div className="flex items-center gap-3 px-4 py-2 text-[13px]">
-            <motion.span initial={{ rotate: -90, scale: 0.6 }} animate={{ rotate: 0, scale: 1 }} transition={{ type: 'spring', stiffness: 260, damping: 18 }} className="text-tint">
-              <Snowflake className="size-4" />
-            </motion.span>
+            <SableCharacter variant="head" mood="frozen" size={26} className="-my-1" />
             <span className="min-w-0 flex-1 text-fg-2">
               <b className="font-medium text-fg">Frozen.</b> Sable can look things up but won't change, send or buy anything until you unfreeze it.
             </span>

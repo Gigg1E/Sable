@@ -23,6 +23,7 @@
     "workbox-routing": "^7.4.1"
   },
   "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.3.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "@radix-ui/react-dropdown-menu": "^2.2.1",

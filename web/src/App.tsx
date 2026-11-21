@@ -1,3 +1,4 @@
+import { MeetSable } from './views/MeetSable';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { MotionConfig } from 'motion/react';
 import { useEffect } from 'react';
@@ -34,6 +35,7 @@ function Routes() {
   if (path === '/activity') return { key: 'activity', el: <ActivityView /> };
   if (path === '/library') return { key: 'library', el: <LibraryView /> };
   if (path === '/people') return { key: 'people', el: <PeopleView /> };
+  if (path === '/meet') return { key: 'meet', el: <MeetSable /> };
   if (path === '/mail') return { key: 'mail', el: <MailView /> };
   if (path === '/memory') return { key: 'memory', el: <MemoryView /> };
   if (path === '/settings' || (m = match('/settings/:section', path))) return { key: 'settings', el: <SettingsView section={m?.section} /> };
@@ -73,7 +75,7 @@ export function App() {
       <Tooltip.Provider delayDuration={350} skipDelayDuration={150}>
       {auth === 'loading' && (
         <div className="flex h-dvh items-center justify-center bg-bg">
-          <Logo size={28} className="animate-pulse" />
+          <Logo size={44} mood="thinking" />
         </div>
       )}
       {(auth === 'setup' || auth === 'login') && <AuthScreen mode={auth} />}

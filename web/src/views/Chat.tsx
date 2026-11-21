@@ -5,6 +5,8 @@ import { useShallow } from 'zustand/react/shallow';
 import { ApprovalCard } from '../components/ApprovalCard';
 import { Composer, type ComposerHandle } from '../components/Composer';
 import { Logo } from '../components/Logo';
+import { Den } from '../components/Den';
+import { SableCharacter, type Mood } from '../components/SableCharacter';
 import { Markdown, StreamingMarkdown } from '../components/Markdown';
 import { WorkBlock, type Step } from '../components/WorkBlock';
 import { CardView, ChatId, FileGlyph, fmtBytes, ShownFiles } from '../components/Cards';
@@ -111,9 +113,9 @@ export function ChatHome({ into }: { into?: string } = {}) {
       <TopBar title="Home" />
       <Page width="md">
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
-          <h1 className="text-[22px] font-semibold tracking-[-0.02em]">What should {name} take on?</h1>
-          <p className="mt-1 text-[13.5px] text-fg-2">Describe an outcome. It plans the steps, asks before anything sensitive, and keeps working in the background.</p>
-          <div className="mt-5">
+          <h1 className="sr-only">Home: what should {name} take on?</h1>
+          <Den />
+          <div className="mt-4">
             <Composer ref={composer} onSend={into ? (text, attachments) => void api.post(`/conversations/${into}/messages`, { text, attachments }).catch((err) => useStore.getState().toast({ title: 'Could not send', body: (err as Error).message, tone: 'error' })) : startChat} autoFocus minRows={2} />
           </div>
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -264,10 +266,10 @@ function groupTurns(messages: Message[]): Turn[] {
   return out;
 }
 
-function TurnHeader({ who, time, agent }: { who: string; time?: number; agent?: boolean }) {
+function TurnHeader({ who, time, agent, mood }: { who: string; time?: number; agent?: boolean; mood?: Mood }) {
   return (
     <div className="mb-1.5 flex items-center gap-2">
-      {agent ? <Logo size={18} /> : <span className="flex size-[18px] items-center justify-center rounded-full bg-panel-3 text-[10px] font-semibold text-fg-2">Y</span>}
+      {agent ? <SableCharacter variant="head" mood={mood ?? 'idle'} size={22} className="-my-1" /> : <span className="flex size-[18px] items-center justify-center rounded-full bg-panel-3 text-[10px] font-semibold text-fg-2">Y</span>}
       <span className="text-[13px] font-medium">{who}</span>
       {time && <span className="text-[11.5px] tabular-nums text-fg-3">{new Date(time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}</span>}
     </div>
@@ -333,7 +335,7 @@ function AgentTurn({ messages, streaming, working, waiting, agentName }: { messa
   return (
     <ChatId.Provider value={messages[0]?.conversation_id ?? ''}>
     <ShownFiles.Provider value={shownFiles}>
-      <TurnHeader who={messages.find((m) => m.agent)?.agent ?? streaming?.agent ?? agentName} time={messages[0]?.created_at} agent />
+      <TurnHeader who={messages.find((m) => m.agent)?.agent ?? streaming?.agent ?? agentName} time={messages[0]?.created_at} agent mood={waiting ? 'waiting' : working ? (streaming?.text ? 'working' : 'thinking') : 'idle'} />
       <div className="pl-[26px]">
         {live.map((seg, i) => {
           const isLast = i === live.length - 1;

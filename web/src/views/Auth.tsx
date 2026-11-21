@@ -42,7 +42,7 @@ export function AuthScreen({ mode }: { mode: 'setup' | 'login' }) {
     <div className="relative flex min-h-dvh items-center justify-center bg-bg p-6">
       <div className="canvas-grid pointer-events-none absolute inset-x-0 top-0 h-[60vh]" />
       <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }} className="relative w-full max-w-[360px]">
-        <Logo size={32} target />
+        <Logo size={56} target />
         <h1 className="mt-6 text-[22px] font-semibold tracking-[-0.02em]">{mode === 'setup' ? 'Set up Sable' : 'Sign in to Sable'}</h1>
         <p className="mt-1.5 text-[13.5px] leading-relaxed text-fg-2">
           {mode === 'setup' ? 'Your agent runs on this server. Choose a password to protect it. You’ll use it on every device.' : 'Enter the password for this server.'}

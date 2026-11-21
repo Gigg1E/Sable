@@ -1,86 +1,123 @@
 @import 'tailwindcss';
 @import '@fontsource-variable/geist';
 @import '@fontsource-variable/geist-mono';
+@import '@fontsource-variable/bricolage-grotesque';
 
 @custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 /* ───────────── Tokens ─────────────
-   Warm graphite neutrals, one brass accent reserved for "needs you" and focus. */
+   Sable is a marten (docs/design/character.md). The palette is its world:
+   dark brown-black fur, an amber throat patch (the one accent: "needs you", focus, Sable's voice),
+   pine green for things that went well, snow for text. Light theme is snow by day. */
 :root {
-  --bg: #f7f8fa;
-  --bg-sunken: #eff1f5;
+  --bg: #f4f6f7;
+  --bg-sunken: #eaeef0;
   --panel: #ffffff;
-  --panel-2: #f2f4f8;
-  --panel-3: #e6eaf1;
-  --line: #e2e6ed;
-  --line-strong: #cfd6e0;
-  --fg: #151a23;
-  --fg-2: #545d6d;
-  --fg-3: #8a92a0;
-  --accent: #a26a14;
-  --accent-soft: rgba(162, 106, 20, 0.09);
-  --ok: #15803d;
-  --danger: #c2410c;
-  --info: #2563eb;
-  --side: #edf0f5;
-  --side-line: #dbe0e8;
+  --panel-2: #eff2f3;
+  --panel-3: #e1e6e8;
+  --line: #dfe4e6;
+  --line-strong: #c8d0d3;
+  --fg: #1b1916;
+  --fg-2: #54504a;
+  --fg-3: #8a857d;
+  --accent: #a86a1c;
+  --accent-soft: rgba(168, 106, 28, 0.1);
+  --ok: #2f6b55;
+  --danger: #b5401c;
+  --info: #2f5f8a;
+  --side: #e9edef;
+  --side-line: #d6dcdf;
   --side-active: #ffffff;
-  --tint: #2f5aa0;
-  --tint-soft: rgba(47, 90, 160, 0.08);
-  --shadow-1: 0 1px 2px rgba(16, 16, 20, 0.05);
-  --shadow-2: 0 1px 2px rgba(16, 16, 20, 0.04), 0 8px 24px -6px rgba(16, 16, 20, 0.1);
+  --tint: #2f6b55;
+  --tint-soft: rgba(47, 107, 85, 0.09);
+  --shadow-1: 0 1px 2px rgba(27, 25, 22, 0.05);
+  --shadow-2: 0 1px 2px rgba(27, 25, 22, 0.04), 0 10px 28px -8px rgba(27, 25, 22, 0.14);
+
+  /* The character */
+  --sable-fur: #2a221c;
+  --sable-fur-2: #3a2f26;
+  --sable-sheen: #8a6b50;
+  --sable-bib: #e0a54b;
+  --sable-ear: #e8c58e;
+  --sable-muzzle: #6b5442;
+  --sable-rim: transparent;
+  --sable-nose: #120d0a;
+  --sable-eye: #0d0a08;
+  --sable-glint: #fff8ec;
+  --sable-paw: #1d1713;
+  --sable-thought: #a86a1c;
+  --sable-frost: #4f8fb8;
+  --den-glow: rgba(224, 165, 75, 0.22);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
-    --bg: #10141b;
-    --bg-sunken: #0c1016;
-    --panel: #161b24;
-    --panel-2: #1c222d;
-    --panel-3: #252c39;
-    --line: #242b37;
-    --line-strong: #333c4b;
-    --fg: #e7eaf0;
-    --fg-2: #a4acba;
-    --fg-3: #6d7687;
-    --accent: #e3a650;
-    --accent-soft: rgba(227, 166, 80, 0.1);
-    --ok: #3fcf8e;
-    --danger: #f2705a;
-    --info: #6aa7ff;
-    --side: #0c1016;
-    --side-line: #212836;
-    --side-active: #1a202b;
-    --tint: #8fb3ec;
-    --tint-soft: rgba(143, 179, 236, 0.1);
-    --side: #0c1016;
-  --side-line: #212836;
-  --side-active: #1a202b;
-  --tint: #8fb3ec;
-  --tint-soft: rgba(143, 179, 236, 0.1);
-  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
-    --shadow-2: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+    --bg: #14110f;
+    --bg-sunken: #0f0d0b;
+    --panel: #1d1916;
+    --panel-2: #24201c;
+    --panel-3: #2f2924;
+    --line: #2a2420;
+    --line-strong: #3b342e;
+    --fg: #f1eee9;
+    --fg-2: #b3aca2;
+    --fg-3: #7a7369;
+    --accent: #e0a54b;
+    --accent-soft: rgba(224, 165, 75, 0.11);
+    --ok: #6fa48a;
+    --danger: #ec7458;
+    --info: #7fb0d6;
+    --side: #100e0c;
+    --side-line: #241f1b;
+    --side-active: #211c18;
+    --tint: #8cc0a6;
+    --tint-soft: rgba(111, 164, 138, 0.12);
+    --shadow-1: 0 1px 0 rgba(255, 240, 220, 0.025) inset;
+    --shadow-2: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 14px 36px -10px rgba(0, 0, 0, 0.7);
+    --sable-fur: #4a3a2e;
+    --sable-fur-2: #5a473a;
+    --sable-sheen: #c49d78;
+    --sable-muzzle: #7a6150;
+    --sable-rim: rgba(255, 226, 190, 0.22);
+    --sable-paw: #2a221c;
+    --sable-thought: #e0a54b;
+    --sable-frost: #9fd0f0;
+    --den-glow: rgba(224, 165, 75, 0.16);
     color-scheme: dark;
   }
 }
 :root[data-theme='dark'] {
-  --bg: #10141b;
-  --bg-sunken: #0c1016;
-  --panel: #161b24;
-  --panel-2: #1c222d;
-  --panel-3: #252c39;
-  --line: #242b37;
-  --line-strong: #333c4b;
-  --fg: #e7eaf0;
-  --fg-2: #a4acba;
-  --fg-3: #6d7687;
-  --accent: #e3a650;
-  --accent-soft: rgba(227, 166, 80, 0.1);
-  --ok: #3fcf8e;
-  --danger: #f2705a;
-  --info: #6aa7ff;
-  --shadow-1: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
-  --shadow-2: 0 0 0 1px rgba(0, 0, 0, 0.3), 0 12px 32px -8px rgba(0, 0, 0, 0.6);
+  --bg: #14110f;
+  --bg-sunken: #0f0d0b;
+  --panel: #1d1916;
+  --panel-2: #24201c;
+  --panel-3: #2f2924;
+  --line: #2a2420;
+  --line-strong: #3b342e;
+  --fg: #f1eee9;
+  --fg-2: #b3aca2;
+  --fg-3: #7a7369;
+  --accent: #e0a54b;
+  --accent-soft: rgba(224, 165, 75, 0.11);
+  --ok: #6fa48a;
+  --danger: #ec7458;
+  --info: #7fb0d6;
+  --side: #100e0c;
+  --side-line: #241f1b;
+  --side-active: #211c18;
+  --tint: #8cc0a6;
+  --tint-soft: rgba(111, 164, 138, 0.12);
+  --shadow-1: 0 1px 0 rgba(255, 240, 220, 0.025) inset;
+  --shadow-2: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 14px 36px -10px rgba(0, 0, 0, 0.7);
+  --sable-fur: #4a3a2e;
+  --sable-fur-2: #5a473a;
+  --sable-sheen: #c49d78;
+  --sable-muzzle: #7a6150;
+  --sable-rim: rgba(255, 226, 190, 0.22);
+  --sable-paw: #2a221c;
+  --sable-thought: #e0a54b;
+  --sable-frost: #9fd0f0;
+  --den-glow: rgba(224, 165, 75, 0.16);
   color-scheme: dark;
 }
 
@@ -107,6 +144,7 @@
   --color-info: var(--info);
   --font-sans: 'Geist Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-voice: 'Bricolage Grotesque Variable', 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
   --shadow-1: var(--shadow-1);
   --shadow-2: var(--shadow-2);
   --text-2xs: 11px;
@@ -396,4 +434,18 @@
 /* Coordinate labels sit next to draggable points; let the pointer through to the handle. */
 .graph-card .MafsView text {
   pointer-events: none;
+}
+
+/* Sable's voice: its own lines (the den greeting, empty states) are set in Bricolage. */
+.voice {
+  font-family: var(--font-voice);
+  font-variation-settings: 'opsz' 48;
+  letter-spacing: -0.02em;
+}
+/* The den: a warm pool of light behind the character. */
+.den-glow {
+  background: radial-gradient(closest-side, var(--den-glow), transparent);
+}
+.sable-frozen {
+  filter: saturate(0.4) brightness(1.05);
 }

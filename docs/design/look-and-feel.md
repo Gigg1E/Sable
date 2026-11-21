@@ -49,7 +49,15 @@ Shown when you open the app or site, at most once per session, and **under ~1.2 
 
 It's skippable by tapping, and skipped automatically on fast reloads and with reduce motion. Built with SVG stroke animation and shared-layout transitions (Motion), with no video files.
 
-**Built (v2, "go all out"):** `web/src/components/Intro.tsx`, about 2 seconds:
+**Built (v3, around Sable's mark, see [character](character.md)):** `web/src/components/Intro.tsx`, about 2.5 seconds:
+1. A warm glow rises and an amber horizon line draws out from the center.
+2. Sable rises from behind the line with a spring, then bounces happily.
+3. Its name rises letter by letter, then a time-of-day greeting.
+4. Desktop: Sable shrinks and flies onto the sidebar, where it lives. Phones: it ducks back down and the screen lifts like a curtain.
+
+A hard 4.2 s limit removes the overlay even if an animation fails.
+
+**v2 (replaced):** `web/src/components/Intro.tsx`, about 2 seconds:
 1. A brass ring sweeps around while the mark draws itself, with a soft glow rising behind it.
 2. The mark fills with a small spring.
 3. The name rises in letter by letter, a brass line sweeps under it, and a time-of-day greeting appears.

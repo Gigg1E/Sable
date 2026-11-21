@@ -16,6 +16,7 @@ import { play, setSoundPrefs, soundPrefs } from '../lib/sounds';
 import { getTheme, resolvedTheme, setTheme, type Theme } from '../lib/theme';
 import { CommandPalette } from './CommandPalette';
 import { Logo } from './Logo';
+import { useSableMood } from '../lib/mood';
 import { IconButton, Kbd, Sheet, ShellContext, StatusDot } from './ui';
 
 async function signOut() {
@@ -226,7 +227,7 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
   const approvals = useStore((s) => s.approvals);
   const unread = useStore((s) => s.unread);
   const waitingConvs = new Set(approvals.map((a) => a.conversation_id));
-  const anyRunning = Object.keys(runs).length > 0;
+  const mood = useSableMood();
 
   const agentNav = [
     { to: '/goals', label: 'Goals', icon: ListChecks },
@@ -244,8 +245,17 @@ function SidebarContent({ onNavigate, onSearch, onCollapse }: { onNavigate?: () 
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-12 items-center gap-2.5 px-3">
-        <Logo size={22} live={anyRunning} target />
-        <span className="flex-1 truncate text-[14px] font-semibold tracking-[-0.01em]">{name}</span>
+        <button
+          onClick={() => {
+            navigate('/meet');
+            onNavigate?.();
+          }}
+          title="Meet Sable"
+          className="-ml-1 flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1 py-1 text-left hover:bg-side-active/60"
+        >
+          <Logo size={26} mood={mood} target className="-my-1" />
+          <span className="voice truncate text-[16px] font-bold">{name}</span>
+        </button>
         {onCollapse && (
           <IconButton label="Hide sidebar" kbd="Ctrl \\" side="bottom" onClick={onCollapse}>
             <PanelLeftClose className="size-4" />

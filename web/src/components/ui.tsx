@@ -1,3 +1,4 @@
+import { SableCharacter } from './SableCharacter';
 import * as Tooltip from '@radix-ui/react-tooltip';
 import { AnimatePresence, motion } from 'motion/react';
 import { Check as CheckIcon, ChevronDown, Copy as CopyIcon, Loader2, Menu, PanelLeftOpen, X } from 'lucide-react';
@@ -263,8 +264,19 @@ export function SectionLabel({ children, right }: { children: ReactNode; right?:
 export function Empty({ icon, title, body, action }: { icon: ReactNode; title: string; body?: ReactNode; action?: ReactNode }) {
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-center rounded-lg border border-dashed border-line px-6 py-12 text-center">
-      <div className="mb-3 flex size-9 items-center justify-center rounded-md border border-line bg-panel text-fg-3 shadow-1">{icon}</div>
-      <h3 className="text-[13.5px] font-medium">{title}</h3>
+      {/* Sable sits next to what's missing, holding up the page's icon. */}
+      <div className="relative mb-3">
+        <SableCharacter size={76} mood="idle" />
+        <motion.div
+          initial={{ scale: 0, rotate: -20 }}
+          animate={{ scale: 1, rotate: 8 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.25 }}
+          className="absolute -right-4 bottom-1 flex size-8 items-center justify-center rounded-md border border-line bg-panel text-fg-2 shadow-2 [&_svg]:size-4"
+        >
+          {icon}
+        </motion.div>
+      </div>
+      <h3 className="voice text-[17px] font-semibold">{title}</h3>
       {body && <p className="mt-1 max-w-sm text-[13px] leading-relaxed text-fg-3">{body}</p>}
       {action && <div className="mt-4">{action}</div>}
     </motion.div>
