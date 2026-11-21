@@ -271,7 +271,7 @@ export function Empty({ icon, title, body, action }: { icon: ReactNode; title: s
           initial={{ scale: 0, rotate: -20 }}
           animate={{ scale: 1, rotate: 8 }}
           transition={{ type: 'spring', stiffness: 300, damping: 15, delay: 0.25 }}
-          className="absolute -right-4 bottom-1 flex size-8 items-center justify-center rounded-md border border-line bg-panel text-fg-2 shadow-2 [&_svg]:size-4"
+          className="absolute -right-4 bottom-1 flex size-8 items-center justify-center rounded-md border border-line-strong bg-bg text-fg-2 [&_svg]:size-4"
         >
           {icon}
         </motion.div>

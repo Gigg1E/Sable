@@ -1,10 +1,9 @@
-import { SableCharacter, setLook, useLook, type Look, type Mood } from '../components/SableCharacter';
-import { cx } from '../lib/format';
+import { SableCharacter, type Mood } from '../components/SableCharacter';
 import { Page, TopBar } from '../components/ui';
 import { useSableMood } from '../lib/mood';
 
 const MOODS: { mood: Mood; name: string; when: string }[] = [
-  { mood: 'idle', name: 'Around', when: 'Nothing running. A slow breath.' },
+  { mood: 'idle', name: 'Around', when: 'Nothing running. A slow breath, the odd blink.' },
   { mood: 'thinking', name: 'Thinking', when: 'Working out what to do.' },
   { mood: 'working', name: 'Working', when: 'Writing an answer or running tools.' },
   { mood: 'waiting', name: 'Needs you', when: 'Something is waiting for your approval.' },
@@ -16,31 +15,13 @@ const MOODS: { mood: Mood; name: string; when: string }[] = [
 /** Who Sable is, and what each of its moods means. */
 export function MeetSable() {
   const now = useSableMood();
-  const look = useLook();
-  const looks: { id: Look; name: string }[] = [
-    { id: 'orb', name: 'Orb' },
-    { id: 'head', name: 'Head' },
-  ];
+
   return (
     <>
       <TopBar title="Meet Sable" />
       <Page width="md">
-        <p className="voice max-w-[52ch] text-[22px] font-semibold leading-snug">This is me. I don’t need a face to tell you what I’m up to.</p>
+        <p className="voice max-w-[52ch] text-[22px] font-semibold leading-snug">This is me. Watch my eyes and you’ll know what I’m up to.</p>
         <p className="mt-2 max-w-[60ch] text-[13.5px] leading-relaxed text-fg-2">I show what I’m really doing in the sidebar, next to my replies and on Home. Right now I’m {MOODS.find((m) => m.mood === now)?.name.toLowerCase()}.</p>
-        <div role="radiogroup" aria-label="How Sable looks" className="mt-6 flex gap-2">
-          {looks.map((l) => (
-            <button
-              key={l.id}
-              role="radio"
-              aria-checked={look === l.id}
-              onClick={() => setLook(l.id)}
-              className={cx('flex items-center gap-2.5 rounded-xl border py-2 pl-2 pr-4 text-[13.5px] font-medium transition-colors', look === l.id ? 'border-accent bg-accent-soft' : 'border-line bg-panel hover:border-line-strong')}
-            >
-              <SableCharacter look={l.id} mood={now} size={36} />
-              {l.name}
-            </button>
-          ))}
-        </div>
         <div className="mt-8 grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 lg:grid-cols-4">
           {MOODS.map((m) => (
             <div key={m.mood} className="flex flex-col items-center text-center">

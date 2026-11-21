@@ -12,9 +12,9 @@
 :root {
   --bg: #f4f6f7;
   --bg-sunken: #eaeef0;
-  --panel: #ffffff;
-  --panel-2: #eff2f3;
-  --panel-3: #e1e6e8;
+  --panel: #f4f6f7;
+  --panel-2: #eaeef0;
+  --panel-3: #dde3e6;
   --line: #dfe4e6;
   --line-strong: #c8d0d3;
   --fg: #1b1916;
@@ -25,12 +25,12 @@
   --ok: #2f6b55;
   --danger: #b5401c;
   --info: #2f5f8a;
-  --side: #e9edef;
+  --side: #f4f6f7;
   --side-line: #d6dcdf;
-  --side-active: #ffffff;
+  --side-active: #e6ebed;
   --tint: #2f6b55;
   --tint-soft: rgba(47, 107, 85, 0.09);
-  --shadow-1: 0 1px 2px rgba(27, 25, 22, 0.05);
+  --shadow-1: none;
   --shadow-2: 0 1px 2px rgba(27, 25, 22, 0.04), 0 10px 28px -8px rgba(27, 25, 22, 0.14);
 
   /* The character */
@@ -54,9 +54,9 @@
   :root:not([data-theme='light']) {
     --bg: #14110f;
     --bg-sunken: #0f0d0b;
-    --panel: #1d1916;
-    --panel-2: #24201c;
-    --panel-3: #2f2924;
+    --panel: #14110f;
+    --panel-2: #1e1a17;
+    --panel-3: #2a2420;
     --line: #2a2420;
     --line-strong: #3b342e;
     --fg: #f1eee9;
@@ -67,12 +67,12 @@
     --ok: #6fa48a;
     --danger: #ec7458;
     --info: #7fb0d6;
-    --side: #100e0c;
+    --side: #14110f;
     --side-line: #241f1b;
-    --side-active: #211c18;
+    --side-active: #221d19;
     --tint: #8cc0a6;
     --tint-soft: rgba(111, 164, 138, 0.12);
-    --shadow-1: 0 1px 0 rgba(255, 240, 220, 0.025) inset;
+    --shadow-1: none;
     --shadow-2: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 14px 36px -10px rgba(0, 0, 0, 0.7);
     --sable-fur: #4a3a2e;
     --sable-fur-2: #5a473a;
@@ -89,9 +89,9 @@
 :root[data-theme='dark'] {
   --bg: #14110f;
   --bg-sunken: #0f0d0b;
-  --panel: #1d1916;
-  --panel-2: #24201c;
-  --panel-3: #2f2924;
+  --panel: #14110f;
+  --panel-2: #1e1a17;
+  --panel-3: #2a2420;
   --line: #2a2420;
   --line-strong: #3b342e;
   --fg: #f1eee9;
@@ -102,12 +102,12 @@
   --ok: #6fa48a;
   --danger: #ec7458;
   --info: #7fb0d6;
-  --side: #100e0c;
+  --side: #14110f;
   --side-line: #241f1b;
-  --side-active: #211c18;
+  --side-active: #221d19;
   --tint: #8cc0a6;
   --tint-soft: rgba(111, 164, 138, 0.12);
-  --shadow-1: 0 1px 0 rgba(255, 240, 220, 0.025) inset;
+  --shadow-1: none;
   --shadow-2: 0 0 0 1px rgba(0, 0, 0, 0.35), 0 14px 36px -10px rgba(0, 0, 0, 0.7);
   --sable-fur: #4a3a2e;
   --sable-fur-2: #5a473a;

@@ -146,7 +146,7 @@ export function Intro() {
     <div ref={scope} className="pointer-events-auto fixed inset-0 z-[100]" onClick={() => window.dispatchEvent(new KeyboardEvent('keydown'))} aria-hidden>
       <div data-i="veil" className="absolute inset-0 bg-bg" style={{ clipPath: 'inset(0% 0% 0% 0%)' }} />
       <div className="absolute inset-0 flex items-center justify-center">
-        <div data-i="glow" className="den-glow pointer-events-none absolute size-[560px] rounded-full" style={{ opacity: 0 }} />
+        <div data-i="glow" className="pointer-events-none absolute" style={{ opacity: 0 }} />
         <div className="relative flex flex-col items-center">
           {/* Sable, clipped at the ground line so it comes up out of the den. */}
           <div className="relative overflow-hidden pt-6" style={{ width: SIZE + 48, height: SIZE + 24 }}>

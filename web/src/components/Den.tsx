@@ -78,19 +78,13 @@ export function Den() {
     <div className="flex items-end gap-3 sm:gap-5">
       <button onClick={() => setPoked(true)} className="relative -mb-1 shrink-0 rounded-full focus-visible:outline-2 focus-visible:outline-accent" aria-label="Say hi to Sable">
         <motion.span
-          aria-hidden
-          className="den-glow pointer-events-none absolute -inset-8 rounded-full"
-          animate={{ opacity: mood === 'sleeping' ? 0.35 : mood === 'waiting' ? [0.7, 1, 0.7] : 0.8 }}
-          transition={{ duration: 2.4, repeat: mood === 'waiting' ? Infinity : 0 }}
-        />
-        <motion.span
           initial={{ y: 24, opacity: 0, scale: 0.9 }}
           animate={{ y: 0, opacity: 1, scale: 1 }}
           transition={{ type: 'spring', stiffness: 180, damping: 16, delay: 0.05 }}
           className="relative block"
           data-den-sable
         >
-          <SableCharacter mood={mood} size={120} className="max-sm:!size-[92px]" />
+          <SableCharacter mood={mood} size={104} className="text-fg max-sm:!size-[80px]" />
         </motion.span>
       </button>
 
@@ -99,10 +93,10 @@ export function Den() {
         animate={{ opacity: 1, scale: 1, x: 0 }}
         transition={{ type: 'spring', stiffness: 260, damping: 22, delay: 0.18 }}
         style={{ originX: 0, originY: 1 }}
-        className="relative mb-6 min-w-0 flex-1 rounded-2xl rounded-bl-md border border-line bg-panel px-4 py-3 shadow-2 sm:mb-8 sm:px-5 sm:py-4"
+        className="relative mb-6 min-w-0 flex-1 rounded-2xl rounded-bl-md border border-line-strong px-4 py-3 sm:mb-8 sm:px-5 sm:py-4"
         aria-live="polite"
       >
-        <span aria-hidden className="absolute -left-[7px] bottom-3 size-3 rotate-45 border-b border-l border-line bg-panel" />
+        <span aria-hidden className="absolute -left-[7px] bottom-3 size-3 rotate-45 border-b border-l border-line-strong bg-bg" />
         <p className="voice text-[19px] font-semibold leading-[1.3] text-fg sm:text-[23px]">
           <AnimatePresence mode="wait">
             <Spoken text={line.text} />

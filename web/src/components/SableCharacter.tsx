@@ -1,55 +1,28 @@
-import { AnimatePresence, motion, useReducedMotion, type Transition } from 'motion/react';
-import { useEffect, useId, useState, useSyncExternalStore } from 'react';
+import { motion, useReducedMotion, type Transition } from 'motion/react';
+import { useEffect, useId, useState } from 'react';
 import { cx } from '../lib/format';
 
 /**
- * Sable's presence (docs/design/character.md). Deliberately minimal, two looks:
- *   orb   a dark sphere with an amber light inside and a ring around it (symbolic, no face)
- *   head  a marten's head silhouette: two round ears and two glowing amber eyes, nothing else
+ * Sable's mark (docs/design/character.md): a head drawn as one outline, two round ears,
+ * and two amber eyes that carry every expression. No fills, no shading, no detail.
  *
- * Either way the mood reflects what Sable is really doing:
- *   idle      slow breath (head: the odd blink)
- *   thinking  a spark orbits (head: eyes look up)
- *   working   the ring spins in arcs (head: eyes narrow, small bob)
- *   waiting   the ring ripples outward: something needs your OK (head: ears up, eyes wide)
- *   happy     a little bounce (head: ^ ^ eyes)
- *   sleeping  dimmed, very slow breath (head: eyes closed)
- *   frozen    still, frost colored
+ *   idle      slow breath, the odd blink
+ *   thinking  eyes look up and aside
+ *   working   eyes narrow, small bob
+ *   waiting   ears up, head tilts, eyes wide: something needs your OK
+ *   happy     ^ ^ eyes and a hop
+ *   sleeping  eyes closed, head lowered, slow breath
+ *   frozen    still, frost-blue eyes
  */
 export type Mood = 'idle' | 'thinking' | 'working' | 'waiting' | 'happy' | 'sleeping' | 'frozen';
-export type Look = 'orb' | 'head';
-
-// The chosen look, shared by every instance and remembered on this device.
-const LOOK_KEY = 'sable.look';
-const subs = new Set<() => void>();
-function readLook(): Look {
-  try {
-    return localStorage.getItem(LOOK_KEY) === 'head' ? 'head' : 'orb';
-  } catch {
-    return 'orb';
-  }
-}
-let current: Look = readLook();
-export function setLook(l: Look) {
-  current = l;
-  try {
-    localStorage.setItem(LOOK_KEY, l);
-  } catch {
-    /* fine: just this session */
-  }
-  subs.forEach((f) => f());
-}
-export function useLook(): Look {
-  return useSyncExternalStore(
-    (cb) => {
-      subs.add(cb);
-      return () => subs.delete(cb);
-    },
-    () => current,
-  );
-}
 
 const loop = (duration: number, extra: Partial<Transition> = {}): Transition => ({ duration, repeat: Infinity, ease: 'easeInOut', ...extra });
+
+const HEAD = 'M50 31C68 31 81 43 81 60C81 76 67 86 50 86C33 86 19 76 19 60C19 43 32 31 50 31Z';
+const EARS = [
+  { x: 28, y: 35 },
+  { x: 72, y: 35 },
+];
 
 /** An irregular, natural blink. */
 function useBlink(active: boolean) {
@@ -73,154 +46,84 @@ function useBlink(active: boolean) {
 type Props = {
   mood?: Mood;
   size?: number;
-  look?: Look;
   className?: string;
   title?: string;
-  /** Older call sites pass this; both looks are a single mark now. */
+  /** Older call sites pass this; there is one mark now. */
   variant?: 'full' | 'head';
 };
 
 // Transform origins are fractions of each shape's own box (motion uses fill-box for SVG).
-export function SableCharacter({ mood = 'idle', size = 120, look, className, title }: Props) {
-  const chosen = useLook();
-  const which = look ?? chosen;
-  return (
-    <svg viewBox="0 0 100 100" width={size} height={size} className={cx('sable-char shrink-0 overflow-visible', mood === 'frozen' && 'sable-frozen', className)} role="img" aria-label={title ?? `Sable, ${mood}`}>
-      {which === 'orb' ? <Orb mood={mood} /> : <Head mood={mood} />}
-    </svg>
-  );
-}
-
-/* ───────────── The orb ───────────── */
-
-function Orb({ mood }: { mood: Mood }) {
+export function SableCharacter({ mood = 'idle', size = 120, className, title }: Props) {
   const reduce = useReducedMotion();
   const still = !!reduce || mood === 'frozen';
+  const blink = useBlink(!still && (mood === 'idle' || mood === 'waiting' || mood === 'thinking'));
   const uid = useId().replace(/:/g, '');
-  const light = mood === 'frozen' ? 'var(--sable-frost)' : 'var(--sable-bib)';
-  const dim = mood === 'sleeping';
+  // About 1.5px on screen when small, up to about 3px when large.
+  const line = Math.min(7, Math.max(2.6, 160 / size));
+  const eye = mood === 'frozen' ? 'var(--sable-frost)' : 'var(--accent)';
+  const earsUp = mood === 'waiting' || mood === 'happy';
+  const gaze = mood === 'thinking' ? { x: 4, y: -5 } : { x: 0, y: 0 };
+  const scaleY = blink ? 0.12 : mood === 'working' ? 0.35 : mood === 'waiting' ? 1.2 : 1;
 
   return (
-    <>
+    <svg viewBox="0 0 100 100" width={size} height={size} className={cx('sable-char shrink-0 overflow-visible', className)} role="img" aria-label={title ?? `Sable, ${mood}`}>
       <defs>
-        <radialGradient id={`core-${uid}`} cx="50%" cy="58%" r="55%">
-          <stop offset="0%" stopColor={light} stopOpacity={dim ? 0.3 : 0.95} />
-          <stop offset="45%" stopColor={light} stopOpacity={dim ? 0.1 : 0.35} />
-          <stop offset="100%" stopColor={light} stopOpacity="0" />
-        </radialGradient>
+        {/* The ears are circles; the head hides the part of them inside it, so the outline reads as one shape. */}
+        <mask id={`ears-${uid}`} maskUnits="userSpaceOnUse" x="-20" y="-20" width="140" height="140">
+          <rect x="-20" y="-20" width="140" height="140" fill="white" />
+          <path d={HEAD} fill="black" />
+        </mask>
       </defs>
-
-      {/* Waiting: ripples leave the ring, like a gentle knock. */}
-      {mood === 'waiting' &&
-        !still &&
-        [0, 1].map((i) => (
-          <motion.circle key={i} cx={50} cy={50} r={36} fill="none" stroke="var(--sable-bib)" strokeWidth={2.5} style={{ originX: 0.5, originY: 0.5 }} animate={{ scale: [1, 1.32], opacity: [0.7, 0] }} transition={loop(1.8, { delay: i * 0.9, ease: 'easeOut' })} />
-        ))}
-
-      {/* The ring: solid at rest, dotted while thinking, spinning arcs while working, faint asleep. */}
-      <motion.g style={{ originX: 0.5, originY: 0.5 }} animate={{ rotate: mood === 'working' && !still ? 360 : 0 }} transition={mood === 'working' && !still ? loop(1.4, { ease: 'linear' }) : { duration: 0.4 }}>
-        <motion.circle
-          cx={50}
-          cy={50}
-          r={36}
-          fill="none"
-          stroke={mood === 'frozen' ? 'var(--sable-frost)' : 'var(--sable-bib)'}
-          strokeWidth={3.2}
-          strokeLinecap="round"
-          animate={{ strokeDasharray: mood === 'working' ? '60 53' : mood === 'thinking' ? '2 9' : '226 0', opacity: dim ? 0.25 : mood === 'idle' ? 0.55 : 0.95 }}
-          transition={{ duration: 0.5 }}
-        />
-      </motion.g>
-
-      {/* The sphere and its inner light: breathes, bounces when happy. */}
       <motion.g
         style={{ originX: 0.5, originY: 1 }}
         animate={
           still
-            ? { y: 0, scale: 1, scaleY: 1, scaleX: 1 }
+            ? { y: 0, rotate: 0, scaleY: 1 }
             : mood === 'happy'
-              ? { y: [0, -7, 0, 0], scaleY: [1, 1.04, 0.94, 1], scaleX: [1, 0.97, 1.05, 1] }
-              : { scale: dim ? [1, 1.03, 1] : [1, 1.045, 1] }
+              ? { y: [0, -7, 0, 0], rotate: 0 }
+              : mood === 'working'
+                ? { y: [0, 1.8, 0], rotate: 0 }
+                : mood === 'sleeping'
+                  ? { y: 4, rotate: -6, scaleY: [1, 1.025, 1] }
+                  : mood === 'waiting'
+                    ? { y: 0, rotate: 7 }
+                    : { y: 0, rotate: 0, scaleY: [1, 1.02, 1] }
         }
-        transition={still ? { duration: 0.3 } : mood === 'happy' ? loop(1.3, { times: [0, 0.35, 0.6, 1] }) : loop(dim ? 4.5 : mood === 'working' ? 1.2 : 3.2)}
+        transition={
+          still ? { duration: 0.3 } : mood === 'happy' ? loop(1.3, { times: [0, 0.35, 0.6, 1] }) : mood === 'working' ? loop(0.7) : mood === 'waiting' ? { type: 'spring', stiffness: 220, damping: 14 } : loop(mood === 'sleeping' ? 4.5 : 3.4)
+        }
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={line}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       >
-        <circle cx={50} cy={50} r={25} fill="var(--sable-fur)" stroke="var(--sable-rim)" strokeWidth={1} />
-        <circle cx={50} cy={50} r={25} fill={`url(#core-${uid})`} />
-        <ellipse cx={42} cy={40} rx={7} ry={4.2} fill="var(--sable-sheen)" opacity={0.35} transform="rotate(-30 42 40)" />
-      </motion.g>
+        <g mask={`url(#ears-${uid})`}>
+          {EARS.map((e, i) => (
+            <motion.circle
+              key={e.x}
+              cx={e.x}
+              cy={e.y}
+              r={12}
+              style={{ originX: 0.5, originY: 1 }}
+              animate={earsUp ? { y: -4, rotate: i ? 12 : -12 } : { y: mood === 'sleeping' ? 3 : 0, rotate: 0 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 14 }}
+            />
+          ))}
+        </g>
+        <path d={HEAD} />
 
-      {/* Thinking: a spark circles the ring. */}
-      <AnimatePresence>
-        {mood === 'thinking' && !still && (
-          <motion.g key="spark" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-            <motion.circle cx={50} cy={14} r={4.6} fill="var(--sable-bib)" style={{ originX: '50px', originY: '50px', transformBox: 'view-box' }} animate={{ rotate: 360 }} transition={loop(1.6, { ease: 'linear' })} />
-          </motion.g>
+        {/* Eyes: the only color, and the whole expression. */}
+        {[39, 61].map((x) =>
+          mood === 'sleeping' ? (
+            <path key={x} d={`M${x - 5} 60Q${x} 64 ${x + 5} 60`} stroke={eye} strokeOpacity={0.7} strokeWidth={line * 0.8} />
+          ) : mood === 'happy' ? (
+            <motion.path key={x} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} d={`M${x - 5.5} 62Q${x} 54 ${x + 5.5} 62`} stroke={eye} strokeWidth={line * 0.9} />
+          ) : (
+            <motion.ellipse key={x} cx={x} cy={59} rx={4.4} ry={5.4} fill={eye} stroke="none" style={{ originX: 0.5, originY: 0.5 }} animate={{ x: gaze.x, y: gaze.y, scaleY }} transition={{ duration: blink ? 0.06 : 0.22 }} />
+          ),
         )}
-      </AnimatePresence>
-    </>
-  );
-}
-
-/* ───────────── The head ───────────── */
-
-const HEAD = 'M50 30C69 30 82 42 82 59C82 76 68 86 50 86C32 86 18 76 18 59C18 42 31 30 50 30Z';
-
-function Head({ mood }: { mood: Mood }) {
-  const reduce = useReducedMotion();
-  const still = !!reduce || mood === 'frozen';
-  const blink = useBlink(!still && (mood === 'idle' || mood === 'waiting' || mood === 'thinking'));
-  const eye = mood === 'frozen' ? 'var(--sable-frost)' : 'var(--sable-bib)';
-  const earsUp = mood === 'waiting' || mood === 'happy';
-  const gaze = mood === 'thinking' ? { x: 3, y: -4 } : { x: 0, y: 0 };
-  const scaleY = blink ? 0.1 : mood === 'working' ? 0.4 : mood === 'waiting' ? 1.15 : 1;
-
-  return (
-    <motion.g
-      style={{ originX: 0.5, originY: 1 }}
-      animate={
-        still
-          ? { y: 0, rotate: 0, scaleY: 1 }
-          : mood === 'happy'
-            ? { y: [0, -6, 0, 0], rotate: 0 }
-            : mood === 'working'
-              ? { y: [0, 1.6, 0], rotate: 0 }
-              : mood === 'sleeping'
-                ? { y: 4, rotate: -6, scaleY: [1, 1.025, 1] }
-                : mood === 'waiting'
-                  ? { y: 0, rotate: 7 }
-                  : { y: 0, rotate: 0, scaleY: [1, 1.02, 1] }
-      }
-      transition={
-        still ? { duration: 0.3 } : mood === 'happy' ? loop(1.3, { times: [0, 0.35, 0.6, 1] }) : mood === 'working' ? loop(0.7) : mood === 'waiting' ? { type: 'spring', stiffness: 220, damping: 14 } : loop(mood === 'sleeping' ? 4.5 : 3.4)
-      }
-    >
-      {/* Ears: round, set wide; they perk up when something needs you. */}
-      {[27, 73].map((x, i) => (
-        <motion.circle
-          key={x}
-          cx={x}
-          cy={34}
-          r={12}
-          fill="var(--sable-fur)"
-          stroke="var(--sable-rim)"
-          strokeWidth={1}
-          style={{ originX: 0.5, originY: 1 }}
-          animate={earsUp ? { y: -4, rotate: i ? 10 : -10 } : { y: mood === 'sleeping' ? 3 : 0, rotate: 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 14 }}
-        />
-      ))}
-      <path d={HEAD} fill="var(--sable-fur)" stroke="var(--sable-rim)" strokeWidth={1} />
-
-      {/* Eyes: two lights. They carry the whole expression. */}
-      {[38, 62].map((x) =>
-        mood === 'sleeping' ? (
-          <path key={x} d={`M${x - 5} 60Q${x} 63.5 ${x + 5} 60`} stroke={eye} strokeOpacity={0.6} strokeWidth={3} strokeLinecap="round" fill="none" />
-        ) : mood === 'happy' ? (
-          <motion.path key={x} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} d={`M${x - 5.5} 61Q${x} 54 ${x + 5.5} 61`} stroke={eye} strokeWidth={3.4} strokeLinecap="round" fill="none" />
-        ) : (
-          <motion.ellipse key={x} cx={x} cy={58} rx={5} ry={6} fill={eye} style={{ originX: 0.5, originY: 0.5 }} animate={{ x: gaze.x, y: gaze.y, scaleY }} transition={{ duration: blink ? 0.06 : 0.22 }} />
-        ),
-      )}
-    </motion.g>
+      </motion.g>
+    </svg>
   );
 }
