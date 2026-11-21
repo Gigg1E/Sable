@@ -1,3 +1,4 @@
+import { fmt, fmtDay } from '../clock.js';
 import * as cheerio from 'cheerio';
 import { all, get, run } from '../db.js';
 import { emit } from '../events.js';
@@ -509,7 +510,7 @@ async function checkCalendar(w: WatcherRow, actions: WatchActions): Promise<{ fi
   run('UPDATE watchers SET state = ? WHERE id = ?', JSON.stringify({ seen: [...seen].slice(-500), baseline: true }), w.id);
   if (firstRun || !fresh.length) return { fired: false, value: firstRun ? `Watching ${match.length} upcoming events` : undefined };
   for (const e of fresh.slice(0, 5)) {
-    const when = e.allDay ? e.start.toDateString() : e.start.toLocaleString();
+    const when = e.allDay ? fmtDay(+e.start) : fmt(+e.start);
     await fireEvent(w, actions, {
       title: `${w.title}: ${e.title}`,
       body: `${cfg.when === 'starting' ? 'Starts' : 'New event'} ${when}${e.location ? ` · ${e.location}` : ''}`,

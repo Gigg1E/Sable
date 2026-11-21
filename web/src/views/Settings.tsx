@@ -11,7 +11,7 @@ import { GoogleSection } from './GoogleAccounts';
 import { ConnectionsSection } from '../components/Connections';
 import { ShoppingSection } from './Shopping';
 import { SecuritySection } from './Security';
-import { api } from '../lib/api';
+import { api, deviceTz } from '../lib/api';
 import { cx } from '../lib/format';
 import { disablePush, enablePush, pushState } from '../lib/push';
 import { play, setSoundPrefs, soundPrefs } from '../lib/sounds';
@@ -247,6 +247,14 @@ type Edit = (fn: (d: Settings) => void) => void;
 
 // ───────────────────────── Sections ─────────────────────────
 
+function zones(): string[] {
+  try {
+    return (Intl as unknown as { supportedValuesOf(k: string): string[] }).supportedValuesOf('timeZone');
+  } catch {
+    return [];
+  }
+}
+
 function GeneralSection({ draft, edit }: { draft: Settings; edit: Edit }) {
   const [theme, setTheme] = useState(() => localStorage.getItem('sable-theme') ?? 'system');
   const [pw, setPw] = useState({ current: '', next: '' });
@@ -273,6 +281,16 @@ function GeneralSection({ draft, edit }: { draft: Settings; edit: Edit }) {
         <Field label="About you" hint="Anything your agent should always know: where you live, your work, your family, your preferences.">
           <Textarea value={draft.persona.about} onChange={(e) => edit((d) => void (d.persona.about = e.target.value))} placeholder="I live in Lisbon, work as a designer, and I'm vegetarian." />
         </Field>
+      </Section>
+      <Section title="Time zone" description="Reminders, routines and everything Sable says about time use this. Automatic follows the device you're using, so it moves with you when you travel.">
+        <Select value={draft.timezone ?? ''} onChange={(e) => edit((d) => void (d.timezone = e.target.value))}>
+          <option value="">Automatic: {deviceTz() || 'this device'}</option>
+          {zones().map((z) => (
+            <option key={z} value={z}>
+              {z.replace(/_/g, ' ')}
+            </option>
+          ))}
+        </Select>
       </Section>
       <Section title="Appearance">
         <Segmented id="theme" value={theme} onChange={applyTheme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />

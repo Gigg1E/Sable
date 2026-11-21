@@ -142,6 +142,8 @@ export interface Settings {
   helpers: { enabled: boolean; embedModel: string };
   /** Public base URL of this Sable server, used to build inbound webhook URLs. */
   publicUrl: string;
+  /** The user's time zone (IANA). Empty: follow the device the app runs on. */
+  timezone: string;
   shopping: {
     /** Shop catalog tools available to the agent. */
     enabled: boolean;
@@ -219,6 +221,7 @@ export function defaultSettings(): Settings {
     google: { clientId: '', clientSecret: '' },
     mail: { enabled: false, domain: '', addresses: [], inboundSecret: '', authservId: 'mx.cloudflare.net', allowlist: [], relay: { host: '', port: 587, secure: false, user: '', pass: '' }, dkimSelector: '', backupForward: '', sendPerHour: 20, sendPerDay: 60 },
     publicUrl: env.SABLE_PUBLIC_URL ?? '',
+    timezone: '',
     shopping: { enabled: true, purchases: false, maxOrder: 200, country: 'US', currency: 'USD' },
   };
 }

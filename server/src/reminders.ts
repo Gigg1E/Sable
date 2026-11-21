@@ -3,6 +3,7 @@ import { emit } from './events.js';
 import { notify } from './push.js';
 import { wakeChat } from './agent/runner.js';
 import { errorMessage, id, now } from './util.js';
+import { daysFromToday, fmt, fmtTime, parseLocal, parts } from './clock.js';
 
 /**
  * Reminders: one-off "remind me at 10pm about class". A time and a message, nothing else. When it's
@@ -25,7 +26,7 @@ export function listReminders(): Reminder[] {
   return all<Reminder>('SELECT * FROM reminders ORDER BY due_at');
 }
 
-/** "now", an ISO time, or minutes from now. Returns a ms timestamp or an error message. */
+/** A local date-time (user's zone; an explicit offset is respected), or minutes from now. Returns a ms timestamp or an error message. */
 export function parseDue(at?: unknown, inMinutes?: unknown): number | string {
   const mins = Number(inMinutes);
   if (inMinutes != null && inMinutes !== '' && Number.isFinite(mins)) {
@@ -33,9 +34,9 @@ export function parseDue(at?: unknown, inMinutes?: unknown): number | string {
     return now() + Math.round(mins * 60_000);
   }
   if (typeof at !== 'string' || !at.trim()) return 'Give the time as at (ISO date-time) or in_minutes.';
-  const t = Date.parse(at);
+  const t = parseLocal(at);
   if (!Number.isFinite(t)) return `"${at}" isn't a date-time I can read. Use ISO, e.g. 2026-11-20T22:00.`;
-  if (t < now() - 60_000) return `${new Date(t).toLocaleString()} is in the past. Ask the user for the right time.`;
+  if (t < now() - 60_000) return `${fmt(t)} is in the past for the user. Ask them for the right time.`;
   return t;
 }
 
@@ -62,13 +63,11 @@ export function deleteReminder(rid: string) {
 
 /** "Tonight 10:00 PM", "Tomorrow 9:00 AM", "Sat, Nov 22, 7:30 PM". */
 export function whenText(t: number) {
-  const d = new Date(t);
-  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
-  const diff = Math.round((day(d) - day(new Date())) / 86_400_000);
-  if (diff === 0) return `${d.getHours() >= 17 ? 'Tonight' : 'Today'} ${time}`;
+  const time = fmtTime(t);
+  const diff = daysFromToday(t);
+  if (diff === 0) return `${parts(t).h >= 17 ? 'Tonight' : 'Today'} ${time}`;
   if (diff === 1) return `Tomorrow ${time}`;
-  return d.toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  return fmt(t);
 }
 
 function fire(r: Reminder) {

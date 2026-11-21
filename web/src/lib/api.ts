@@ -4,13 +4,22 @@ export class ApiError extends Error {
   }
 }
 
+export function deviceTz() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  } catch {
+    return '';
+  }
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
   try {
     res = await fetch(`/api${path}`, {
       method,
       credentials: 'same-origin',
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+      // Your device's time zone, so reminders and routines follow you when you travel.
+      headers: { ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}), 'X-Sable-TZ': deviceTz() },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       // Never spin forever: a server that doesn't answer gets a clear message instead.
       signal: AbortSignal.timeout(30_000),

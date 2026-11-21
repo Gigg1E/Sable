@@ -1,3 +1,4 @@
+import { parseLocal, parts, wallToUtc, fmt as fmtLocal } from '../../clock.js';
 import { all, get, run } from '../../db.js';
 import { emit } from '../../events.js';
 import { notify } from '../../push.js';
@@ -463,24 +464,20 @@ export interface ScheduleSpec {
 /** Next fire time strictly after `from`, or null if the schedule is finished. */
 export function computeNextRun(kind: ScheduleKind, spec: ScheduleSpec, from = now()): number | null {
   if (kind === 'once') {
-    const t = Date.parse(spec.at ?? '');
+    const t = parseLocal(spec.at ?? '');
     return Number.isFinite(t) && t > from ? t : null;
   }
   // Checks more often than every 10 minutes are almost never what anyone wants (and cost model calls).
   if (kind === 'interval') return from + Math.max(10, Number(spec.every_minutes) || 60) * 60_000;
+  // Daily and weekly times are the user's wall-clock time, wherever they are.
   const [h, m] = (spec.time ?? '09:00').split(':').map(Number);
-  const d = new Date(from);
-  d.setSeconds(0, 0);
-  d.setHours(h || 0, m || 0);
-  if (kind === 'daily') {
-    if (d.getTime() <= from) d.setDate(d.getDate() + 1);
-    return d.getTime();
-  }
+  const p = parts(from);
+  const at = (addDays: number) => wallToUtc(p.y, p.mo, p.d + addDays, h || 0, m || 0);
+  if (kind === 'daily') return at(0) > from ? at(0) : at(1);
   const weekday = Number(spec.weekday ?? 1);
-  let add = (weekday - d.getDay() + 7) % 7;
-  if (add === 0 && d.getTime() <= from) add = 7;
-  d.setDate(d.getDate() + add);
-  return d.getTime();
+  let add = (weekday - p.dow + 7) % 7;
+  if (add === 0 && at(0) <= from) add = 7;
+  return at(add);
 }
 
 registerTool({
@@ -488,7 +485,7 @@ registerTool({
   label: 'Schedule task',
   group: 'Schedules',
   description:
-    'Set a routine: a time, a topic (title) and a prompt. NOT for plain one-off reminders ("remind me at 10 about class"): use reminder_set for those. At each run you receive the prompt in a fresh background chat and do it: tell the user something (a reminder or briefing) or do a job yourself (e.g. "email Sam the results at 8pm", "add the dentist appointment to my calendar"). Write the prompt with every detail the run will need. If something essential is missing (the time, who to email, the subject), ask the user BEFORE creating the routine. The user reviews and approves it; once approved, its runs act without asking again except for purchases and any tools listed in restrict (e.g. ["send"] to keep asking before sending email). kind: once (at = ISO date-time), interval (every_minutes ≥ 10; use 15-60 for checks), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are in the server\'s local time zone. notify: "always" for reminders and briefings the user wants every time (default for once/daily/weekly); "when_new" for checks ("tell me when X emails me"), which only notify when something new happened and never report that nothing changed (default for interval). To change an existing schedule use schedule_update, never create a second one.',
+    'Set a routine: a time, a topic (title) and a prompt. NOT for plain one-off reminders ("remind me at 10 about class"): use reminder_set for those. At each run you receive the prompt in a fresh background chat and do it: tell the user something (a reminder or briefing) or do a job yourself (e.g. "email Sam the results at 8pm", "add the dentist appointment to my calendar"). Write the prompt with every detail the run will need. If something essential is missing (the time, who to email, the subject), ask the user BEFORE creating the routine. The user reviews and approves it; once approved, its runs act without asking again except for purchases and any tools listed in restrict (e.g. ["send"] to keep asking before sending email). kind: once (at = ISO date-time), interval (every_minutes ≥ 10; use 15-60 for checks), daily (time = "HH:MM"), weekly (time + weekday 0=Sun..6=Sat). Times are the user\'s local time (at without an offset). notify: "always" for reminders and briefings the user wants every time (default for once/daily/weekly); "when_new" for checks ("tell me when X emails me"), which only notify when something new happened and never report that nothing changed (default for interval). To change an existing schedule use schedule_update, never create a second one.',
   parameters: {
     type: 'object',
     properties: {
@@ -513,7 +510,7 @@ registerTool({
     if (next == null) return { refuse: 'That time is in the past or invalid. Ask the user for a valid time.' };
     const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const when =
-      a.kind === 'once' ? new Date(next).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+      a.kind === 'once' ? fmtLocal(next)
       : a.kind === 'interval' ? `Every ${Math.max(10, Number(a.every_minutes) || 60)} minutes`
       : a.kind === 'daily' ? `Every day at ${a.time ?? '09:00'}`
       : `Every ${days[Number(a.weekday ?? 1)] ?? 'week'} at ${a.time ?? '09:00'}`;

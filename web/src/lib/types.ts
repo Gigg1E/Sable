@@ -152,6 +152,8 @@ export interface Settings {
   google?: { clientId: string; clientSecret: string };
   mail?: MailSettings;
   publicUrl: string;
+  /** IANA zone; empty = follow this device. */
+  timezone?: string;
   shopping: { enabled: boolean; purchases: boolean; maxOrder: number; country: string; currency: string; clientId?: string; clientSecret?: string };
 }
 

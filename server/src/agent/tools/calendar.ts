@@ -1,3 +1,4 @@
+import { fmtDay, fmtTime, parseLocal, parts, userTz, wallToUtc } from '../../clock.js';
 import ICAL from 'ical.js';
 import { agentFetch } from '../../net.js';
 import { getSettings, type CalendarFeed } from '../../settings.js';
@@ -156,8 +157,8 @@ export async function testFeed(feed: CalendarFeed) {
 function parseWhen(v: unknown, fallback: Date): Date {
   if (typeof v !== 'string' || !v.trim()) return fallback;
   const s = v.trim();
-  // A bare date means local midnight, not UTC midnight.
-  const d = /^\d{4}-\d{2}-\d{2}$/.test(s) ? new Date(`${s}T00:00:00`) : new Date(s);
+  // Dates and times without an offset are the user's wall clock (a bare date is their midnight).
+  const d = new Date(parseLocal(s));
   if (Number.isNaN(+d)) throw new Error(`Couldn't read the date "${s}". Use ISO format, e.g. 2026-11-20 or 2026-11-20T14:00.`);
   return d;
 }
@@ -171,9 +172,10 @@ function range(a: Record<string, unknown>, defaultDays: number) {
   return { from, to };
 }
 
-const dayFmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' });
-const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
-const tzName = () => Intl.DateTimeFormat().resolvedOptions().timeZone;
+// Everything is shown in the user's time zone.
+const dayFmt = { format: (d: Date | number) => fmtDay(+d) };
+const timeFmt = { format: (d: Date | number) => fmtTime(+d) };
+const tzName = userTz;
 
 function noFeeds() {
   return 'No calendars are connected. Tell the user they can Sign in with Google (Settings → Connectors → Google) or add an iCal feed (Settings → Connectors → Calendar feeds).';
@@ -188,7 +190,7 @@ export function syncCalendarTools() {
       label: 'Add calendar event',
       group: 'Calendar',
       description:
-        "Add an event to the user's Google Calendar. start/end are local date-times like 2026-11-21T15:00 (server time zone) or dates for all-day events. If the time or title is missing, ask the user first.",
+        "Add an event to the user's Google Calendar. start/end are local date-times like 2026-11-21T15:00 (the user's local time) or dates for all-day events. If the time or title is missing, ask the user first.",
       parameters: {
         type: 'object',
         properties: {
@@ -223,7 +225,7 @@ export function syncCalendarTools() {
     parameters: {
       type: 'object',
       properties: {
-        start: { type: 'string', description: 'ISO date or date-time, in the server time zone if no offset (default: now)' },
+        start: { type: 'string', description: 'ISO date or date-time, the user’s local time if no offset (default: now)' },
         end: { type: 'string', description: 'ISO date or date-time (default: start + 7 days)' },
         query: { type: 'string', description: 'Only events whose title, location or notes contain this text' },
         calendar: { type: 'string', description: 'Only calendars whose name contains this' },
@@ -243,7 +245,7 @@ export function syncCalendarTools() {
       for (const e of hits.slice(0, 250)) {
         const d = dayFmt.format(e.start);
         if (d !== day) lines.push(`\n${(day = d)}`);
-        const when = e.allDay ? 'all day' : `${timeFmt.format(e.start)}–${timeFmt.format(e.end)}${dayFmt.format(e.end) !== d && !(e.end.getHours() === 0 && e.end.getMinutes() === 0) ? ` (ends ${dayFmt.format(e.end)})` : ''}`;
+        const when = e.allDay ? 'all day' : `${timeFmt.format(e.start)}–${timeFmt.format(e.end)}${dayFmt.format(e.end) !== d && !(parts(+e.end).h === 0 && parts(+e.end).mi === 0) ? ` (ends ${dayFmt.format(e.end)})` : ''}`;
         lines.push(`- ${when} · ${e.title}${e.location ? ` · @ ${e.location}` : ''}${feeds > 1 ? ` [${e.calendar}]` : ''}${e.description ? `\n  notes: ${e.description}` : ''}`);
       }
       const head = `${hits.length} event${hits.length === 1 ? '' : 's'}${q ? ` matching “${a.query}”` : ''} between ${dayFmt.format(from)} ${timeFmt.format(from)} and ${dayFmt.format(to)} ${timeFmt.format(to)} (${tzName()})${hits.length > 250 ? ', first 250 shown' : ''}.`;
@@ -285,15 +287,15 @@ export function syncCalendarTools() {
       const [eh, em] = hm(a.dayEnd, '18:00');
       const busy = events.filter((e) => e.busy).map((e) => [+e.start, +e.end] as const);
       const lines: string[] = [];
-      const cursor = new Date(from);
-      cursor.setHours(0, 0, 0, 0);
-      for (let guard = 0; cursor < to && guard < 400; guard++, cursor.setDate(cursor.getDate() + 1)) {
-        const dow = cursor.getDay();
+      // Walk the user's calendar days.
+      const p0 = parts(+from);
+      for (let i = 0; i < 400; i++) {
+        const cursor = new Date(wallToUtc(p0.y, p0.mo, p0.d + i, 12, 0));
+        if (+wallToUtc(p0.y, p0.mo, p0.d + i, 0, 0) >= +to) break;
+        const dow = parts(+cursor).dow;
         if (!a.weekends && (dow === 0 || dow === 6)) continue;
-        const ds = new Date(cursor);
-        ds.setHours(sh, sm, 0, 0);
-        const de = new Date(cursor);
-        de.setHours(eh, em, 0, 0);
+        const ds = wallToUtc(p0.y, p0.mo, p0.d + i, sh, sm);
+        const de = wallToUtc(p0.y, p0.mo, p0.d + i, eh, em);
         let t = Math.max(+ds, +from);
         const stop = Math.min(+de, +to);
         if (t >= stop) continue;

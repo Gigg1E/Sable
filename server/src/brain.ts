@@ -1,3 +1,4 @@
+import { computeNextRun } from './agent/tools/personal.js';
 import { all, get, kvGet, kvSet, run } from './db.js';
 import { emit } from './events.js';
 import { getSettings } from './settings.js';
@@ -199,13 +200,7 @@ Don't message the user at night. If you did something, reply with one short line
 /** First start: add the morning rundown (into the main chat) and the night check as ordinary, editable routines. */
 function seedWakeups(mainId: string) {
   if (kvGet<boolean>('wakeups_seeded')) return;
-  const at = (hhmm: string) => {
-    const [h, m] = hhmm.split(':').map(Number);
-    const d = new Date();
-    d.setHours(h, m, 0, 0);
-    if (d.getTime() <= Date.now()) d.setDate(d.getDate() + 1);
-    return d.getTime();
-  };
+  const at = (hhmm: string) => computeNextRun('daily', { time: hhmm }) ?? Date.now();
   run(
     "INSERT INTO schedules (id, title, prompt, kind, spec, next_run, enabled, notify, autonomy, restrict_tools, conversation_id, created_at) VALUES (?, 'Morning rundown', ?, 'daily', ?, ?, 1, 'always', 'auto', ?, ?, ?)",
     id('sch_'), MORNING, JSON.stringify({ time: '07:30' }), at('07:30'), JSON.stringify(['send', 'buy', 'delete', 'checkout']), mainId, now(),

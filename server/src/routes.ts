@@ -1,3 +1,5 @@
+import { noteDeviceTz } from './clock.js';
+import { retimeSchedules } from './scheduler.js';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { activeRunFor, activeRuns, cancelRun, createConversation, HttpError, interject, messageJson, quickAnswer, reflex, startRun, type MessageRow } from './agent/runner.js';
 import { decideApproval, denyAllApprovals, pendingApprovals, policyFor } from './agent/sentinel.js';
@@ -140,6 +142,11 @@ export function apiRouter() {
   r.post('/auth/logout', h((req, res) => destroySession(req, res)));
 
   r.use(requireAuth);
+  // The app reports its device's time zone; when you travel, daily and weekly routines follow you.
+  r.use((req, _res, next) => {
+    if (noteDeviceTz(req.get('x-sable-tz'))) retimeSchedules();
+    next();
+  });
 
   r.post(
     '/auth/password',
@@ -802,7 +809,9 @@ export function apiRouter() {
     '/settings',
     h(async (req) => {
       const before = JSON.stringify(getSettings().mcpServers);
+      const tzBefore = getSettings().timezone;
       updateSettings(req.body as Settings);
+      if (getSettings().timezone !== tzBefore) retimeSchedules();
       if (JSON.stringify(getSettings().mcpServers) !== before) void reloadMcp();
       syncCalendarTools();
       syncEmailTools();

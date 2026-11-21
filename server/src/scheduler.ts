@@ -57,3 +57,12 @@ export function startScheduler() {
   setInterval(tick, 20_000).unref();
   setTimeout(tick, 3_000).unref();
 }
+
+/** After the user's time zone changes: move daily and weekly routines to the same wall-clock time there. */
+export function retimeSchedules() {
+  for (const s of all<{ id: string; kind: ScheduleKind; spec: string }>("SELECT id, kind, spec FROM schedules WHERE enabled = 1 AND kind IN ('daily', 'weekly')")) {
+    const next = computeNextRun(s.kind, parseJson<ScheduleSpec>(s.spec, {}));
+    if (next) run('UPDATE schedules SET next_run = ? WHERE id = ?', next, s.id);
+  }
+  emit({ type: 'schedule.changed' });
+}

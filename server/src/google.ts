@@ -1,3 +1,4 @@
+import { localIso, parseLocal, userTz } from './clock.js';
 import crypto from 'node:crypto';
 import { open, seal } from './connections.js';
 import { kvDel, kvGet, kvSet } from './db.js';
@@ -228,7 +229,7 @@ export async function createGoogleEvent(
   email: string,
   ev: { title: string; start: string; end?: string; allDay?: boolean; location?: string; description?: string; calendarId?: string; timeZone?: string },
 ) {
-  const tz = ev.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = ev.timeZone || userTz();
   const body = ev.allDay
     ? { summary: ev.title, location: ev.location, description: ev.description, start: { date: ev.start.slice(0, 10) }, end: { date: (ev.end ?? ev.start).slice(0, 10) } }
     : {
@@ -236,7 +237,7 @@ export async function createGoogleEvent(
         location: ev.location,
         description: ev.description,
         start: { dateTime: ev.start, timeZone: tz },
-        end: { dateTime: ev.end ?? new Date(Date.parse(ev.start) + 3600_000).toISOString(), timeZone: tz },
+        end: { dateTime: ev.end ?? localIso(parseLocal(ev.start) + 3600_000), timeZone: tz },
       };
   const r = await gcal(email, `/calendars/${encodeURIComponent(ev.calendarId || 'primary')}/events`, { method: 'POST', body: JSON.stringify(body) });
   return { id: r.id as string, link: r.htmlLink as string };
